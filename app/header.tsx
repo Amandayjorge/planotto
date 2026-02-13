@@ -93,7 +93,7 @@ export default function Header() {
         <div className="mobile-menu-overlay" onClick={() => setIsMobileMenuOpen(false)}>
           <div className="mobile-menu" onClick={(e) => e.stopPropagation()}>
             <nav>
-              {[...navItems].map((item) => (
+              {NAV_ITEMS.map((item) => (
                 <Link
                   key={item.path}
                   href={item.path}
@@ -111,7 +111,7 @@ export default function Header() {
         </div>
       )}
       <nav className="mobile-tab-bar">
-        {[...navItems].map((item) => (
+        {NAV_ITEMS.map((item) => (
           <Link
             key={`tab-${item.path}`}
             href={item.path}
