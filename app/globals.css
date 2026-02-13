@@ -2848,7 +2848,6 @@ body {
 
   .shopping-list__category-btn,
   .shopping-list__quick-btn,
-  .shopping-list__custom-days-btn,
   .shopping-list__add-manual-btn {
     flex: 1 1 calc(50% - 8px);
     min-width: 0;
@@ -2918,6 +2917,35 @@ body {
   background:
     radial-gradient(120% 120% at 100% 0%, rgba(143, 163, 138, 0.14) 0%, rgba(143, 163, 138, 0) 55%),
     var(--card-bg);
+}
+
+@media (max-width: 640px) {
+  .home-hero {
+    grid-template-columns: 1fr;
+    padding: 18px 16px;
+  }
+
+  .home-hero__media {
+    order: 2;
+    justify-content: flex-start;
+    align-items: flex-start;
+  }
+
+  .home-hero__image-wrap {
+    width: 160px;
+    height: auto;
+    border-radius: 16px;
+    box-shadow: none;
+  }
+
+  .home-hero__image {
+    width: 100%;
+    height: auto;
+  }
+
+  .home-hero__text {
+    order: 1;
+  }
 }
 
 .home-hero__title {
