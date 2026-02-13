@@ -748,9 +748,41 @@ function MenuPageContent() {
     }
   }, []);
 
+  const persistDayMealSlots = useCallback((slots: Record<string, string[]>) => {
+    setDayMealSlots(slots);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(DAY_MEAL_SLOTS_KEY, JSON.stringify(slots));
+    }
+  }, []);
+
   const getDayMeals = useCallback(
     (dayKey: string) => dayMealSlots[dayKey] || [...DEFAULT_DAY_MEALS],
     [dayMealSlots]
+  );
+
+  const setDayMealsForKey = useCallback(
+    (dayKey: string, meals: string[]) => {
+      const next = {
+        ...dayMealSlots,
+        [dayKey]: meals,
+      };
+      persistDayMealSlots(next);
+    },
+    [dayMealSlots, persistDayMealSlots]
+  );
+
+  const removeDaySlotItems = useCallback(
+    (dayKey: string, slotLabel: string) => {
+      setMealData((prev) => {
+        const next = { ...prev };
+        const slotKey = `${dayKey}-${slotLabel}`;
+        if (next[slotKey]) {
+          delete next[slotKey];
+        }
+        return next;
+      });
+    },
+    []
   );
 
   const setDayMealsForKey = useCallback(
@@ -776,7 +808,7 @@ function MenuPageContent() {
       }
       setDayMealsForKey(dayKey, nextSlots);
     },
-    [getDayMeals, removeDaySlotItems, setDayMealsForKey]
+    [getDayMeals, setDayMealsForKey, removeDaySlotItems]
   );
 
   const handleAddSlotToDay = useCallback(
