@@ -748,13 +748,6 @@ function MenuPageContent() {
     }
   }, []);
 
-  const persistDayMealSlots = useCallback((slots: Record<string, string[]>) => {
-    setDayMealSlots(slots);
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(DAY_MEAL_SLOTS_KEY, JSON.stringify(slots));
-    }
-  }, []);
-
   const getDayMeals = useCallback(
     (dayKey: string) => dayMealSlots[dayKey] || [...DEFAULT_DAY_MEALS],
     [dayMealSlots]
