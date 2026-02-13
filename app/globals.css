@@ -2821,6 +2821,56 @@ body {
   }
 }
 
+@media (max-width: 580px) {
+  .shopping-list__header,
+  .shopping-list__controls,
+  .shopping-list__progress,
+  .shopping-list__date-filter {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .shopping-list__date-filter {
+    gap: 4px;
+  }
+
+  .shopping-list__quick-buttons,
+  .shopping-list__category-filter,
+  .shopping-list__exports {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .shopping-list__category-btn,
+  .shopping-list__quick-btn,
+  .shopping-list__custom-days-btn,
+  .shopping-list__add-manual-btn {
+    flex: 1 1 calc(50% - 8px);
+    min-width: 0;
+    text-align: center;
+  }
+
+  .shopping-list__item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+
+  .shopping-list__amounts {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+
+  .shopping-list__purchased {
+    align-self: stretch;
+    justify-content: space-between;
+  }
+}
+
 /* Home page */
 .home {
   display: grid;
