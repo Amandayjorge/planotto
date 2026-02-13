@@ -31,6 +31,37 @@ const GUEST_REMINDER_PERIOD_ATTEMPTS_KEY = "guestReminderPeriodAttempts";
 const GUEST_REMINDER_PENDING_KEY = "guestReminderPending";
 const GUEST_REMINDER_VISITS_THRESHOLD = 3;
 const GUEST_REMINDER_RECIPES_THRESHOLD = 3;
+const MEAL_SLOTS_KEY = "mealSlots";
+interface MealSlot {
+  id: string;
+  label: string;
+  active: boolean;
+}
+const DEFAULT_MEAL_SLOTS: MealSlot[] = [
+  { id: "breakfast", label: "Завтрак", active: true },
+  { id: "lunch", label: "Обед", active: true },
+  { id: "dinner", label: "Ужин", active: true },
+];
+
+const loadMealSlotsFromStorage = (): MealSlot[] => {
+  if (typeof window === "undefined") return DEFAULT_MEAL_SLOTS;
+  const stored = window.localStorage.getItem(MEAL_SLOTS_KEY);
+  if (!stored) return DEFAULT_MEAL_SLOTS;
+  try {
+    const parsed = JSON.parse(stored);
+    if (!Array.isArray(parsed)) return DEFAULT_MEAL_SLOTS;
+    return parsed.filter(
+      (item): item is MealSlot =>
+        typeof item === "object" &&
+        item !== null &&
+        typeof item.id === "string" &&
+        typeof item.label === "string" &&
+        typeof item.active === "boolean"
+    );
+  } catch {
+    return DEFAULT_MEAL_SLOTS;
+  }
+};
 const DEFAULT_MEALS = ["Завтрак", "Обед", "Ужин"] as const;
 const MEAL_LIBRARY = ["Завтрак", "Обед", "Ужин", "Перекус", "Выпечка", "Суп", "Заготовки", "Ужин"] as const;
 
@@ -749,6 +780,17 @@ function MenuPageContent() {
   const [newItemPeopleCount, setNewItemPeopleCount] = useState(1);
   const [peopleInput, setPeopleInput] = useState("1");
 
+  const [mealSlots, setMealSlots] = useState<MealSlot[]>(() => loadMealSlotsFromStorage());
+  const [newSlotName, setNewSlotName] = useState("");
+  const activeMealSlots = useMemo(() => mealSlots.filter((slot) => slot.active), [mealSlots]);
+  const meals = activeMealSlots.map((slot) => slot.label);
+  const persistMealSlots = (nextSlots: MealSlot[]) => {
+    setMealSlots(nextSlots);
+    if (typeof window !== "undefined") {
+      localStorage.setItem(MEAL_SLOTS_KEY, JSON.stringify(nextSlots));
+    }
+  };
+
   const [recipeCategoryFilter, setRecipeCategoryFilter] = useState<string>("Все");
 
   const [openMoreMenu, setOpenMoreMenu] = useState<string | null>(null);
@@ -837,6 +879,71 @@ function MenuPageContent() {
     }
   };
   const isReadOnly = menuMode === "public";
+  const removeSlotMeals = useCallback(
+    (label: string) => {
+      setMealData((prev) => {
+        const next = { ...prev };
+        Object.keys(prev).forEach((key) => {
+          if (key.endsWith(`-${label}`)) {
+            delete next[key];
+          }
+        });
+        return next;
+      });
+    },
+    [setMealData]
+  );
+
+  const toggleMealSlot = (index: number) => {
+    const slot = mealSlots[index];
+    if (!slot) return;
+    if (slot.active) {
+      const confirmed =
+        typeof window === "undefined"
+          ? true
+          : window.confirm(
+              `Выключить приём "${slot.label}"? Все блюда в этом слоте будут удалены.`
+            );
+      if (!confirmed) return;
+      removeSlotMeals(slot.label);
+    }
+    const nextSlots = [...mealSlots];
+    nextSlots[index] = { ...slot, active: !slot.active };
+    persistMealSlots(nextSlots);
+  };
+
+  const moveMealSlot = (index: number, direction: -1 | 1) => {
+    const target = index + direction;
+    if (target < 0 || target >= mealSlots.length) return;
+    const next = [...mealSlots];
+    const [moved] = next.splice(index, 1);
+    next.splice(target, 0, moved);
+    persistMealSlots(next);
+  };
+
+  const handleAddMealSlot = () => {
+    const label = newSlotName.trim();
+    if (!label) {
+      setNewSlotName("");
+      return;
+    }
+    if (mealSlots.some((slot) => slot.label.toLowerCase() === label.toLowerCase())) {
+      setNewSlotName("");
+      return;
+    }
+    const sanitizedId = label
+      .toLowerCase()
+      .replace(/[^a-zа-яё0-9]+/gi, "_")
+      .replace(/__+/g, "_")
+      .replace(/^_+|_+$/g, "");
+    const nextSlot: MealSlot = {
+      id: `${sanitizedId || "slot"}-${Date.now()}`,
+      label,
+      active: true,
+    };
+    persistMealSlots([...mealSlots, nextSlot]);
+    setNewSlotName("");
+  };
 
   const closeDropdownMenu = () => {
     setOpenMoreMenu(null);
@@ -2189,6 +2296,79 @@ function MenuPageContent() {
             </button>
           </div>
         </div>
+      )}
+
+      {!isReadOnly && (
+        <section className="card meal-slot-settings">
+          <div className="meal-slot-settings__header">
+            <div>
+              <h2 className="h3">Приёмы пищи</h2>
+              <p className="muted" style={{ margin: "4px 0 0" }}>
+                Порядок, статус и название можно менять — календарь перестроится автоматически.
+              </p>
+            </div>
+            <div className="meal-slot-settings__add">
+              <input
+                type="text"
+                className="input"
+                placeholder="Новый приём пищи"
+                value={newSlotName}
+                onChange={(e) => setNewSlotName(e.target.value)}
+              />
+              <button type="button" className="btn btn-add" onClick={handleAddMealSlot}>
+                + Добавить приём пищи
+              </button>
+            </div>
+          </div>
+
+          <div className="meal-slot-settings__list">
+            {mealSlots.map((slot, index) => (
+              <div
+                key={slot.id}
+                className={`meal-slot-settings__row ${
+                  slot.active ? "" : "meal-slot-settings__row--inactive"
+                }`}
+              >
+                <div className="meal-slot-settings__label">{slot.label}</div>
+                <div className="meal-slot-settings__row-actions">
+                  <button type="button" className="btn btn-secondary" onClick={() => toggleMealSlot(index)}>
+                    {slot.active ? "Отключить" : "Включить"}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => moveMealSlot(index, -1)}
+                    disabled={index === 0}
+                  >
+                    ↑
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => moveMealSlot(index, 1)}
+                    disabled={index === mealSlots.length - 1}
+                  >
+                    ↓
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-danger"
+                    onClick={() => {
+                      if (typeof window === "undefined") return;
+                      const confirmed = window.confirm(`Удалить приём "${slot.label}"? Блюда из него удалятся.`);
+                      if (!confirmed) return;
+                      removeSlotMeals(slot.label);
+                      const next = mealSlots.filter((_, idx) => idx !== index);
+                      persistMealSlots(next);
+                    }}
+                  >
+                    Удалить
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
       )}
 
       {showGuestReminder && !showMenuAddedNotice && (
