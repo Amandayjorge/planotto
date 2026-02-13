@@ -1,0 +1,188 @@
+"use client";
+
+import { useSyncExternalStore } from "react";
+import Image from "next/image";
+import Link from "next/link";
+
+const RECIPES_STORAGE_KEY = "recipes";
+const MENU_STORAGE_PREFIX = "weeklyMenu:";
+const RANGE_STATE_KEY = "selectedMenuRange";
+const WEEK_START_KEY = "selectedWeekStart";
+
+interface StoredRangeState {
+  start?: string;
+  end?: string;
+}
+
+const isIsoDate = (value: string): boolean => /^\d{4}-\d{2}-\d{2}$/.test(value);
+
+const getMondayIso = (date: Date): string => {
+  const d = new Date(date);
+  const day = d.getDay();
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+  d.setDate(diff);
+  return d.toISOString().split("T")[0];
+};
+
+const parseJson = <T,>(raw: string | null): T | null => {
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return null;
+  }
+};
+
+const menuSnapshotHasItems = (raw: string | null): boolean => {
+  const parsed = parseJson<Record<string, unknown>>(raw);
+  if (!parsed || typeof parsed !== "object") return false;
+
+  return Object.values(parsed).some((value) => {
+    if (Array.isArray(value)) return value.length > 0;
+    return Boolean(value && typeof value === "object");
+  });
+};
+
+const hasAnyMenuSnapshots = (): boolean => {
+  for (let i = 0; i < localStorage.length; i += 1) {
+    const key = localStorage.key(i);
+    if (!key || !key.startsWith(MENU_STORAGE_PREFIX)) continue;
+    if (menuSnapshotHasItems(localStorage.getItem(key))) return true;
+  }
+  return false;
+};
+
+const hasCurrentPeriodMenu = (): boolean => {
+  const rangeState = parseJson<StoredRangeState>(localStorage.getItem(RANGE_STATE_KEY));
+  const rangeStart = typeof rangeState?.start === "string" ? rangeState.start : "";
+  const rangeEnd = typeof rangeState?.end === "string" ? rangeState.end : "";
+
+  if (isIsoDate(rangeStart) && isIsoDate(rangeEnd)) {
+    const rangeKey = `${rangeStart}__${rangeEnd}`;
+    if (menuSnapshotHasItems(localStorage.getItem(`${MENU_STORAGE_PREFIX}${rangeKey}`))) {
+      return true;
+    }
+  }
+
+  const storedWeekStart = localStorage.getItem(WEEK_START_KEY) || "";
+  if (isIsoDate(storedWeekStart) && menuSnapshotHasItems(localStorage.getItem(`${MENU_STORAGE_PREFIX}${storedWeekStart}`))) {
+    return true;
+  }
+
+  const currentMonday = getMondayIso(new Date());
+  if (menuSnapshotHasItems(localStorage.getItem(`${MENU_STORAGE_PREFIX}${currentMonday}`))) {
+    return true;
+  }
+
+  return false;
+};
+
+const hasRecipes = (): boolean => {
+  const parsed = parseJson<unknown[]>(localStorage.getItem(RECIPES_STORAGE_KEY));
+  return Array.isArray(parsed) && parsed.length > 0;
+};
+
+const hasStartedPlanning = (): boolean => {
+  return hasRecipes() || hasCurrentPeriodMenu() || hasAnyMenuSnapshots();
+};
+
+export default function Home() {
+  const startedPlanning = useSyncExternalStore(
+    (onStoreChange) => {
+      if (typeof window === "undefined") return () => undefined;
+
+      const handleStorage = () => onStoreChange();
+      const handleFocus = () => onStoreChange();
+      const handleVisibilityChange = () => {
+        if (document.visibilityState === "visible") onStoreChange();
+      };
+
+      window.addEventListener("storage", handleStorage);
+      window.addEventListener("focus", handleFocus);
+      document.addEventListener("visibilitychange", handleVisibilityChange);
+
+      return () => {
+        window.removeEventListener("storage", handleStorage);
+        window.removeEventListener("focus", handleFocus);
+        document.removeEventListener("visibilitychange", handleVisibilityChange);
+      };
+    },
+    () => {
+      if (typeof window === "undefined") return false;
+      return hasStartedPlanning();
+    },
+    () => false
+  );
+
+  const primaryCtaHref = startedPlanning ? "/menu" : "/menu?first=1";
+  const primaryCtaText = startedPlanning ? "Продолжить планирование" : "Начать планирование бесплатно";
+
+  return (
+    <section className="home card">
+      <div className="home-hero">
+        <div className="home-hero__text">
+          <h1 className="home-hero__title">Сервис для планирования еды и покупок</h1>
+          <p className="home-hero__description">Экономит время и помогает избегать лишних покупок.</p>
+
+          <div className="home-hero__actions">
+            <Link className="btn btn-primary" href={primaryCtaHref}>
+              {primaryCtaText}
+            </Link>
+          </div>
+
+          <Link className="home-hero__how-link" href="#how-it-works">
+            ↘ Как это работает
+          </Link>
+        </div>
+
+        <div className="home-hero__media">
+          <div className="home-hero__image-wrap">
+            <Image
+              src="/mascot/pages/home.png"
+              alt="Маскот Planotto"
+              width={520}
+              height={520}
+              priority
+              className="home-hero__image"
+            />
+          </div>
+        </div>
+      </div>
+
+      <div id="how-it-works" className="home-flow">
+        <h2 className="home-flow__title">Как это работает</h2>
+        <div className="home-flow__steps">
+          <article className="home-flow__step">
+            <div className="home-flow__step-num">1</div>
+            <h3>Добавь рецепты</h3>
+            <p>Сохрани 2-3 любимых блюда.</p>
+          </article>
+          <article className="home-flow__step">
+            <div className="home-flow__step-num">2</div>
+            <h3>Составь меню</h3>
+            <p>Распредели блюда по дням.</p>
+          </article>
+          <article className="home-flow__step">
+            <div className="home-flow__step-num">3</div>
+            <h3>Получи список покупок</h3>
+            <p>Он сформируется автоматически.</p>
+          </article>
+        </div>
+      </div>
+
+      <div className="home-example">
+        <h2 className="home-example__title">Пример одного дня</h2>
+        <div className="home-example__grid">
+          <article className="home-example__card">
+            <div className="home-example__label">Ужин</div>
+            <div className="home-example__value">Паста с тунцом</div>
+          </article>
+          <article className="home-example__card">
+            <div className="home-example__label">Список покупок</div>
+            <div className="home-example__value">Паста, тунец, помидоры</div>
+          </article>
+        </div>
+      </div>
+    </section>
+  );
+}

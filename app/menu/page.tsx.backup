@@ -1,0 +1,965 @@
+"use client";
+
+import { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
+import { createPortal } from "react-dom";
+
+const MENU_STORAGE_KEY = 'weeklyMenu';
+const RECIPES_STORAGE_KEY = 'recipes';
+const CELL_PEOPLE_COUNT_KEY = 'cellPeopleCount';
+const WEEK_START_KEY = 'selectedWeekStart';
+
+const INGREDIENT_UNITS = ['г', 'кг', 'мл', 'л', 'шт', 'ч.л.', 'ст.л.', 'по вкусу'];
+const DEFAULT_UNIT = 'г';
+const RECIPE_CATEGORIES = ['Завтрак', 'Обед', 'Ужин', 'Десерт', 'Дополнительно'];
+
+// Helper function to format ingredient display
+const formatIngredient = (ingredient: Ingredient): string => {
+  if (ingredient.unit === 'по вкусу') {
+    return `${ingredient.name} — по вкусу`;
+  }
+  return `${ingredient.amount} ${ingredient.unit} ${ingredient.name}`;
+};
+
+// Helper functions for week management
+const getMonday = (date: Date): Date => {
+  const d = new Date(date);
+  const day = d.getDay();
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+  return new Date(d.setDate(diff));
+};
+
+const formatDate = (date: Date): string => {
+  return date.toISOString().split('T')[0]; // YYYY-MM-DD
+};
+
+const formatDisplayDate = (date: Date): string => {
+  return date.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' });
+};
+
+const getWeekRange = (weekStart: Date): string => {
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekEnd.getDate() + 6);
+  return `${formatDisplayDate(weekStart)}–${formatDisplayDate(weekEnd)}`;
+};
+
+interface Ingredient {
+  name: string;
+  amount: number;
+  unit: string;
+}
+
+interface MenuItem {
+  id: string;
+  type: "recipe" | "text";
+  recipeId?: string;
+  value?: string;
+  includeInShopping?: boolean;
+  ingredients?: Ingredient[];
+  cooked?: boolean;
+}
+
+interface Recipe {
+  id: string;
+  title: string;
+  categories?: string[];
+}
+
+export default function MenuPage() {
+  const days = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
+  const meals = ["Завтрак", "Обед", "Ужин"];
+  
+  const [mealData, setMealData] = useState<Record<string, MenuItem[]>>({});
+  const [recipes, setRecipes] = useState<Recipe[]>([]);
+  const [hasLoaded, setHasLoaded] = useState(false);
+  const [cellPeopleCount, setCellPeopleCount] = useState<Record<string, number>>({});
+  const [weekStart, setWeekStart] = useState<string>(() => formatDate(getMonday(new Date())));
+  const [addingItemCell, setAddingItemCell] = useState<string | null>(null);
+  const modalRef = useRef<HTMLDivElement>(null);
+  const [newItemType, setNewItemType] = useState<"recipe" | "text">("recipe");
+  const [newItemText, setNewItemText] = useState("");
+  const [newItemRecipeId, setNewItemRecipeId] = useState("");
+  const [newItemIncludeInShopping, setNewItemIncludeInShopping] = useState(true);
+  const [newItemIngredients, setNewItemIngredients] = useState<Ingredient[]>([{ name: "", amount: 0, unit: DEFAULT_UNIT }]);
+  const [newItemPeopleCount, setNewItemPeopleCount] = useState(1);
+  const [peopleInput, setPeopleInput] = useState("1");
+  const [recipeCategoryFilter, setRecipeCategoryFilter] = useState<string>("Все");
+  const [openMoreMenu, setOpenMoreMenu] = useState<string | null>(null); // Format: "cellKey-index"
+  const [menuAnchor, setMenuAnchor] = useState<{itemId: string, rect: DOMRect} | null>(null);
+  const [editingItem, setEditingItem] = useState<{cellKey: string, index: number} | null>(null);
+  const [movingItem, setMovingItem] = useState<{cellKey: string, index: number} | null>(null);
+  const [moveTargetDay, setMoveTargetDay] = useState<string>("");
+  const [moveTargetMeal, setMoveTargetMeal] = useState<string>("");
+  const router = useRouter();
+
+  // Get storage keys for current week
+  const getMenuStorageKey = () => `${MENU_STORAGE_KEY}:${weekStart}`;
+  const getCellPeopleCountKey = () => `${CELL_PEOPLE_COUNT_KEY}:${weekStart}`;
+
+  // Week navigation functions
+  const goToPreviousWeek = () => {
+    const currentDate = new Date(weekStart);
+    currentDate.setDate(currentDate.getDate() - 7);
+    setWeekStart(formatDate(currentDate));
+  };
+
+  const goToNextWeek = () => {
+    const currentDate = new Date(weekStart);
+    currentDate.setDate(currentDate.getDate() + 7);
+    setWeekStart(formatDate(currentDate));
+  };
+
+  // Save week start to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem(WEEK_START_KEY, weekStart);
+  }, [weekStart]);
+
+  // Load data from localStorage on mount
+  useEffect(() => {
+    // Load selected week start
+    const storedWeekStart = localStorage.getItem(WEEK_START_KEY);
+    if (storedWeekStart) {
+      setWeekStart(storedWeekStart);
+    }
+
+    const storedMenu = localStorage.getItem(getMenuStorageKey());
+    if (storedMenu) {
+      try {
+        const parsedMenu = JSON.parse(storedMenu);
+        // Convert single items to arrays for backward compatibility
+        const convertedMenu: Record<string, MenuItem[]> = {};
+        for (const [key, value] of Object.entries(parsedMenu)) {
+          const items = ensureArray(value as any);
+          // Apply backward compatibility to each item
+          convertedMenu[key] = items.map(item => ensureTextItemCompatibility(item));
+        }
+        setMealData(convertedMenu);
+      } catch (error) {
+        console.error("Failed to load menu data:", error);
+      }
+    }
+
+    const storedRecipes = localStorage.getItem(RECIPES_STORAGE_KEY);
+    if (storedRecipes) {
+      try {
+        const parsedRecipes = JSON.parse(storedRecipes);
+        console.log("Loading recipes from localStorage:", parsedRecipes);
+        setRecipes(parsedRecipes);
+      } catch (error) {
+        console.error("Failed to load recipes:", error);
+      }
+    } else {
+      console.log("No recipes found in localStorage");
+    }
+
+    const storedCellPeopleCount = localStorage.getItem(getCellPeopleCountKey());
+    if (storedCellPeopleCount) {
+      try {
+        const parsedCellPeopleCount = JSON.parse(storedCellPeopleCount);
+        setCellPeopleCount(parsedCellPeopleCount);
+      } catch (error) {
+        console.error("Failed to load cell people count:", error);
+      }
+    }
+    setHasLoaded(true);
+  }, [weekStart]); // Reload data when week changes
+
+  // Save data to localStorage whenever mealData changes (but only after initial load)
+  useEffect(() => {
+    if (!hasLoaded) return;
+    localStorage.setItem(getMenuStorageKey(), JSON.stringify(mealData));
+  }, [mealData, hasLoaded, weekStart]);
+
+  // Save cell people count to localStorage whenever it changes
+  useEffect(() => {
+    if (!hasLoaded) return;
+    localStorage.setItem(getCellPeopleCountKey(), JSON.stringify(cellPeopleCount));
+  }, [cellPeopleCount, hasLoaded, weekStart]);
+
+  const [cookedStatus, setCookedStatus] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    if (!hasLoaded) return;
+    localStorage.setItem(`cookedStatus:${weekStart}`, JSON.stringify(cookedStatus));
+  }, [cookedStatus, hasLoaded, weekStart]);
+
+  useEffect(() => {
+    const storedCookedStatus = localStorage.getItem(`cookedStatus:${weekStart}`);
+    if (storedCookedStatus) {
+      try {
+        const parsedCookedStatus = JSON.parse(storedCookedStatus);
+        setCookedStatus(parsedCookedStatus);
+      } catch (error) {
+        console.error("Failed to load cooked status:", error);
+      }
+    }
+  }, [weekStart]);
+
+  const getCellKey = (day: string, meal: string) => `${day}-${meal}`;
+
+  // Helper function to check if a specific day is in the past
+  const isDayInPast = (dayIndex: number): boolean => {
+    const currentDate = new Date(weekStart);
+    currentDate.setDate(currentDate.getDate() + dayIndex - 1); // Subtract 1 to get correct day
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // Set to start of day for comparison
+    currentDate.setHours(0, 0, 0, 0);
+    return currentDate < today;
+  };
+
+  // Helper function to get default cooked status based on date and saved override
+  const getDefaultCookedStatus = (dayIndex: number, itemId?: string): boolean => {
+    // If there's an explicit saved override for this item, use it
+    if (itemId && cookedStatus[itemId] !== undefined) {
+      return cookedStatus[itemId];
+    }
+    // Otherwise, default based on whether day is in the past
+    return isDayInPast(dayIndex);
+  };
+
+  // Backward compatibility helper: ensure menu cell data is always an array
+  const ensureArray = (items: MenuItem | MenuItem[] | undefined): MenuItem[] => {
+    if (!items) return [];
+    if (Array.isArray(items)) return items;
+    return [items];
+  };
+
+  // Backward compatibility helper: ensure text items have required fields
+  const ensureTextItemCompatibility = (item: MenuItem): MenuItem => {
+    if (item.type === "text") {
+      return {
+        ...item,
+        includeInShopping: item.includeInShopping ?? true,
+        ingredients: item.ingredients || [],
+        cooked: item.cooked ?? false
+      };
+    }
+    return item;
+  };
+
+  const getDisplayText = (items: MenuItem[] | undefined): string => {
+    if (!items || items.length === 0) return "";
+    // For now, display the first item to maintain current behavior
+    const item = items[0];
+    if (item.type === "recipe" && item.recipeId) {
+      const recipe = recipes.find(r => r.id === item.recipeId);
+      return recipe ? recipe.title : "";
+    }
+    return item.value || "";
+  };
+
+  const isManualEntry = (items: MenuItem[] | undefined): boolean => {
+    if (!items || items.length === 0) return false;
+    // For now, check the first item to maintain current behavior
+    return items[0].type === "text";
+  };
+
+  const clearCell = (e: React.MouseEvent, key: string) => {
+    e.stopPropagation();
+    setMealData(prev => {
+      const newData = { ...prev };
+      delete newData[key];
+      return newData;
+    });
+  };
+
+  const clearWeek = () => {
+    if (confirm("Вы уверены, что хотите очистить меню на всю неделю?")) {
+      setMealData({});
+      localStorage.removeItem(getMenuStorageKey());
+    }
+  };
+
+  const getEffectivePeopleCount = (key: string) => {
+    return cellPeopleCount[key] || 1;
+  };
+
+  const updateCellPeopleCount = (key: string, count: number) => {
+    setCellPeopleCount(prev => {
+      const updated = { ...prev };
+      if (count <= 0) {
+        delete updated[key];
+      } else {
+        updated[key] = count;
+      }
+      return updated;
+    });
+  };
+
+  const generateShoppingList = () => {
+    // Store meal data and people counts in sessionStorage for shopping list page
+    const dishNames = Object.values(mealData).map(item => getDisplayText(item)).filter(name => name.trim() !== "");
+    sessionStorage.setItem('menuDishes', JSON.stringify(dishNames));
+    sessionStorage.setItem('cellPeopleCount', JSON.stringify(cellPeopleCount));
+    router.push('/shopping-list');
+  };
+
+  // Functions for handling multiple items
+  const handleAddItemClick = (key: string) => {
+    setAddingItemCell(key);
+    setNewItemType("recipe");
+    setNewItemText("");
+    setNewItemRecipeId("");
+    setNewItemIncludeInShopping(true);
+    setNewItemIngredients([{ name: "", amount: 0, unit: DEFAULT_UNIT }]);
+    setNewItemPeopleCount(getEffectivePeopleCount(key));
+    setPeopleInput(getEffectivePeopleCount(key).toString()); // Reset string input
+    setRecipeCategoryFilter("Все");
+  };
+
+  const handleAddItemConfirm = () => {
+    if (!addingItemCell) return;
+
+    // Parse and clamp people count on submit
+    const parsedPeopleCount = parseInt(peopleInput) || 1;
+    const clampedPeopleCount = Math.max(1, parsedPeopleCount);
+    setNewItemPeopleCount(clampedPeopleCount);
+    setPeopleInput(clampedPeopleCount.toString());
+
+    // Save the people count for this cell
+    updateCellPeopleCount(addingItemCell, clampedPeopleCount);
+
+    const newItem: MenuItem = newItemType === "recipe" 
+      ? { type: "recipe", recipeId: newItemRecipeId, cooked: false, id: crypto.randomUUID() }
+      : { 
+          type: "text", 
+          value: newItemText.trim(),
+          includeInShopping: newItemIncludeInShopping,
+          ingredients: newItemIncludeInShopping 
+            ? newItemIngredients.filter(ing => ing.name.trim() && (ing.unit === 'по вкусу' || ing.amount > 0))
+            : [],
+          cooked: false,
+          id: crypto.randomUUID()
+        };
+
+    if (newItemType === 'recipe' && !newItemRecipeId) return;
+    if (newItemType === 'text' && !newItemText.trim()) return;
+
+    if (editingItem) {
+      // Edit mode: update existing item
+      setMealData(prev => ({
+        ...prev,
+        [addingItemCell]: prev[addingItemCell]?.map((item, index) => 
+          index === editingItem.index ? newItem : item
+        ) || [newItem]
+      }));
+      setEditingItem(null);
+    } else {
+      // Add mode: add new item
+      setMealData(prev => ({
+        ...prev,
+        [addingItemCell]: [...(prev[addingItemCell] || []), newItem]
+      }));
+    }
+
+    setAddingItemCell(null);
+    setNewItemText('');
+    setNewItemRecipeId('');
+    setNewItemIncludeInShopping(true);
+    setNewItemIngredients([{ name: '', amount: 0, unit: DEFAULT_UNIT }]);
+    setNewItemPeopleCount(1);
+  };
+
+  const handleRemoveItem = (cellKey: string, itemIndex: number) => {
+    setMealData((prev) => {
+      const currentItems = prev[cellKey] || [];
+      const newItems = currentItems.filter((_, index) => index !== itemIndex);
+
+      if (newItems.length === 0) {
+        const newData = { ...prev };
+        delete newData[cellKey];
+        return newData;
+      }
+
+      return {
+        ...prev,
+        [cellKey]: newItems,
+      };
+    });
+  };
+
+  const handleAddItemCancel = () => {
+    setAddingItemCell(null);
+    setEditingItem(null);
+    setNewItemText('');
+    setNewItemRecipeId('');
+    setNewItemIncludeInShopping(true);
+    setNewItemIngredients([{ name: '', amount: 0, unit: DEFAULT_UNIT }]);
+    setNewItemPeopleCount(1);
+    setPeopleInput("1"); // Reset string input
+  };
+
+  const handleMoreMenuToggle = (e: React.MouseEvent, menuKey: string, itemId: string) => {
+    e.stopPropagation();
+    const target = e.currentTarget as HTMLElement;
+    const rect = target.getBoundingClientRect();
+    
+    if (openMoreMenu === menuKey) {
+      setOpenMoreMenu(null);
+      setMenuAnchor(null);
+    } else {
+      setOpenMoreMenu(menuKey);
+      setMenuAnchor({ itemId, rect });
+    }
+  };
+
+  const handleDeleteItem = (cellKey: string, itemIndex: number) => {
+    if (confirm('Вы уверены, что хотите удалить этот элемент?')) {
+      handleRemoveItem(cellKey, itemIndex);
+    }
+    setOpenMoreMenu(null);
+  };
+
+  const handleEditItem = (cellKey: string, itemIndex: number) => {
+    const item = mealData[cellKey]?.[itemIndex];
+    if (!item) return;
+
+    // Set editing state
+    setEditingItem({ cellKey, index: itemIndex });
+    setAddingItemCell(cellKey);
+
+    // Populate form with item data
+    if (item.type === 'recipe') {
+      setNewItemType('recipe');
+      setNewItemRecipeId(item.recipeId || '');
+    } else {
+      setNewItemType('text');
+      setNewItemText(item.value || '');
+      setNewItemIncludeInShopping(item.includeInShopping ?? true);
+      setNewItemIngredients(item.ingredients || [{ name: '', amount: 0, unit: DEFAULT_UNIT }]);
+    }
+
+    setNewItemPeopleCount(getEffectivePeopleCount(cellKey));
+    setPeopleInput(getEffectivePeopleCount(cellKey).toString());
+    setRecipeCategoryFilter("Все");
+    setOpenMoreMenu(null);
+  };
+
+  const handleIngredientChange = (index: number, field: keyof Ingredient, value: string | number) => {
+    setNewItemIngredients((prev) => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], [field]: value };
+      return updated;
+    });
+  };
+
+  const addIngredientField = () => {
+    setNewItemIngredients((prev) => [...prev, { name: '', amount: 0, unit: DEFAULT_UNIT }]);
+  };
+
+  const removeIngredientField = (index: number) => {
+    setNewItemIngredients((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  // Move functionality handlers
+  const handleMoveClick = (cellKey: string, itemIndex: number) => {
+    setMovingItem({ cellKey, index: itemIndex });
+    setMoveTargetDay("");
+    setMoveTargetMeal("");
+    setOpenMoreMenu(null);
+  };
+
+  const handleMoveConfirm = () => {
+    if (!movingItem || !moveTargetDay || !moveTargetMeal) return;
+
+    const fromKey = movingItem.cellKey;
+    const fromIndex = movingItem.index;
+    const toKey = getCellKey(moveTargetDay, moveTargetMeal);
+
+    setMealData(prev => {
+      const newData = { ...prev };
+      const fromItems = prev[fromKey] || [];
+      const toItems = prev[toKey] || [];
+
+      // Get the item to move
+      const itemToMove = fromItems[fromIndex];
+      if (!itemToMove) return prev;
+
+      // Remove from source
+      const newFromItems = fromItems.filter((_, index) => index !== fromIndex);
+
+      // Add to destination
+      const newToItems = [...toItems, itemToMove];
+
+      // Update the data
+      if (newFromItems.length === 0) {
+        delete newData[fromKey];
+      } else {
+        newData[fromKey] = newFromItems;
+      }
+      newData[toKey] = newToItems;
+
+      return newData;
+    });
+
+    // Reset move state
+    setMovingItem(null);
+    setMoveTargetDay("");
+    setMoveTargetMeal("");
+  };
+
+  const handleMoveCancel = () => {
+    setMovingItem(null);
+    setMoveTargetDay("");
+    setMoveTargetMeal("");
+  };
+
+  // Helper function to filter recipes by category
+  const getFilteredRecipes = () => {
+    if (recipeCategoryFilter === "Все") {
+      return recipes;
+    }
+    if (recipeCategoryFilter === "Без категории") {
+      return recipes.filter(recipe => !recipe.categories || recipe.categories.length === 0);
+    }
+    return recipes.filter(recipe => recipe.categories?.includes(recipeCategoryFilter));
+  };
+
+  // Handle outside clicks to close more menu and move selector
+  useEffect(() => {
+    const handleOutsideClick = (event: PointerEvent) => {
+      if (openMoreMenu || movingItem) {
+        const target = event.target as Node;
+        // Check if click is outside any more menu or move selector
+        const isInsideMenu = target && (
+          (target as Element).closest('.menu-grid__item-menu') ||
+          (target as Element).closest('.menu-grid__item-more') ||
+          (target as Element).closest('.menu-grid__move-selector')
+        );
+        if (!isInsideMenu) {
+          setOpenMoreMenu(null);
+          if (movingItem) {
+            handleMoveCancel();
+          }
+        }
+      }
+    };
+
+    if (openMoreMenu || movingItem) {
+      document.addEventListener('pointerdown', handleOutsideClick, true);
+    }
+
+    return () => {
+      document.removeEventListener('pointerdown', handleOutsideClick, true);
+    };
+  }, [openMoreMenu, movingItem]);
+
+  // Portal component for dropdown menu
+  const DropdownMenu = () => {
+    if (!menuAnchor) return null;
+
+    const { itemId, rect } = menuAnchor;
+    const dropdownWidth = 150;
+    
+    // Calculate position to avoid overflow
+    let left = rect.right - dropdownWidth;
+    let top = rect.bottom + 6;
+    
+    // Flip horizontally if would overflow right
+    if (left < 0) {
+      left = rect.left;
+    }
+    
+    // Flip vertically if would overflow bottom
+    if (top + 200 > window.innerHeight) {
+      top = rect.top - 200 - 6;
+    }
+
+    return createPortal(
+      <div
+        className="menu-grid__item-menu-portal"
+        style={{
+          position: 'fixed',
+          left: `${left}px`,
+          top: `${top}px`,
+          zIndex: 9999,
+          background: 'white',
+          border: '1px solid #ddd',
+          borderRadius: '4px',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+          minWidth: `${dropdownWidth}px`
+        }}
+      >
+        <button
+          onClick={() => handleEditItem(menuAnchor.itemId.split('-')[0], parseInt(menuAnchor.itemId.split('-')[1]))}
+          className="menu-grid__item-menu-edit"
+        >
+          Редактировать
+        </button>
+        <button
+          onClick={() => handleMoveClick(menuAnchor.itemId.split('-')[0], parseInt(menuAnchor.itemId.split('-')[1]))}
+          className="menu-grid__item-menu-move"
+        >
+          Перенести
+        </button>
+        <button
+          onClick={() => handleDeleteItem(menuAnchor.itemId.split('-')[0], parseInt(menuAnchor.itemId.split('-')[1]))}
+          className="menu-grid__item-menu-delete"
+        >
+          Удалить
+        </button>
+      </div>,
+      document.body
+    );
+  };
+
+  return (
+    <section className="card">
+      <div className="menu-header">
+        <h1 className="h1">Меню на неделю</h1>
+        <div className="week-navigation">
+          <button className="week-nav-btn" onClick={goToPreviousWeek}>
+            ← Предыдущая неделя
+          </button>
+          <span className="week-range">Неделя: {getWeekRange(new Date(weekStart))}</span>
+          <button className="week-nav-btn" onClick={goToNextWeek}>
+            Следующая неделя →
+          </button>
+        </div>
+      </div>
+      <p className="muted" style={{ marginBottom: '16px', fontSize: '14px' }}>
+        💡 Только рецепты с ингредиентами добавляются в список покупок. Текстовые записи игнорируются.
+      </p>
+
+      <div className="menu-grid-scroll">
+        <div className="menu-grid">
+        <div className="menu-grid__header">
+          <div className="menu-grid__empty"></div>
+          {days.map((day, dayIndex) => {
+            const currentDate = new Date(weekStart);
+            currentDate.setDate(currentDate.getDate() + dayIndex);
+            return (
+              <div key={day} className="menu-grid__day-header">
+                {day} {formatDisplayDate(currentDate)}
+              </div>
+            );
+          })}
+        </div>
+
+        {meals.map((meal) => (
+          <div key={meal} className="menu-grid__row">
+            <div className="menu-grid__meal-label">{meal}</div>
+            {days.map((day, dayIndex) => {
+              const key = getCellKey(day, meal);
+              const item = mealData[key];
+              const displayText = getDisplayText(item);
+
+              return (
+                <div
+                  key={key}
+                  className="menu-grid__cell"
+                  data-cell-key={key}
+                >
+                  <div className="menu-grid__cell-content">
+                    <div className="menu-grid__items">
+                      {item && item.length > 0 ? (
+                        item.map((menuItem, index) => {
+                          const menuKey = `${key}-${index}`;
+                          return (
+                            <div key={index} className="menu-grid__item">
+                              <span className="menu-grid__item-text">
+                                {menuItem.type === 'recipe' && menuItem.recipeId
+                                  ? recipes.find((r) => r.id === menuItem.recipeId)?.title || ''
+                                  : menuItem.value || ''}
+                              </span>
+                              <label className="menu-grid__cooked-label">
+                                <input
+                                  type="checkbox"
+                                  checked={getDefaultCookedStatus(dayIndex, menuItem.id)}
+                                  onChange={(e) => {
+                                    const updatedItems = [...(mealData[key] || [])];
+                                    updatedItems[index] = {
+                                      ...updatedItems[index],
+                                      cooked: e.target.checked
+                                    };
+                                    setMealData(prev => ({
+                                      ...prev,
+                                      [key]: updatedItems
+                                    }));
+                                    // Save cooked status override
+                                    setCookedStatus(prev => ({
+                                      ...prev,
+                                      [menuItem.id]: e.target.checked
+                                    }));
+                                  }}
+                                  className="menu-grid__cooked-checkbox"
+                                />
+                                Приготовлено
+                              </label>
+                              <button
+                                className="menu-grid__item-more"
+                                onClick={(e) => handleMoreMenuToggle(e, menuKey, menuItem.id)}
+                                title="Действия"
+                              >
+                                ⋯
+                              </button>
+                              {openMoreMenu === menuKey && (
+                                <div className="menu-grid__item-menu">
+                                  <button
+                                    onClick={() => handleEditItem(key, index)}
+                                    className="menu-grid__item-menu-edit"
+                                  >
+                                    Редактировать
+                                  </button>
+                                  <button
+                                    onClick={() => handleMoveClick(key, index)}
+                                    className="menu-grid__item-menu-move"
+                                  >
+                                    Перенести
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteItem(key, index)}
+                                    className="menu-grid__item-menu-delete"
+                                  >
+                                    Удалить
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <span className="menu-grid__placeholder">Добавить блюдо</span>
+                      )
+                    </div>
+
+                    {(item && item.length > 0) && (
+                      <div className="menu-grid__cell-badges">
+                        <span className="menu-grid__people-badge">
+                          {getEffectivePeopleCount(key)} чел
+                        </span>
+                        {item.some((mi) => mi.type === 'text') && (
+                          <span className="menu-grid__manual-badge">без рецепта</span>
+                        )
+                      </div>
+                    )}
+
+                    <div className="menu-grid__cell-actions">
+                      <button
+                        className="menu-grid__add"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleAddItemClick(key);
+                        }}
+                        title="Добавить блюдо"
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          </div>
+        </div>
+      </div>
+
+      <DropdownMenu />
+      
+      <div className="menu-actions">
+        <button
+          className="menu-actions__generate-btn"
+          onClick={generateShoppingList}
+          disabled={Object.values(mealData).filter((item) => getDisplayText(item).trim() !== '').length === 0}
+{{ ... }
+        >
+          Сформировать список покупок
+        </button>
+
+        <button
+          className="menu-actions__clear-btn"
+          onClick={clearWeek}
+          disabled={Object.keys(mealData).length === 0}
+        >
+          Очистить неделю
+        </button>
+      </div>
+
+      {/* Add Item Dialog */}
+      {addingItemCell && (
+        <div 
+          className="menu-dialog-overlay"
+        >
+          <div 
+            ref={modalRef} 
+            className="menu-dialog"
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <h3>{editingItem ? 'Редактировать блюдо' : 'Добавить блюдо'}</h3>
+
+            <div className="menu-dialog__type-selector">
+              <label>
+                <input
+                  type="radio"
+                  name="itemType"
+                  value="recipe"
+                  checked={newItemType === 'recipe'}
+                  onChange={(e) => setNewItemType(e.target.value as 'recipe' | 'text')}
+                />
+                Рецепт
+              </label>
+              <label>
+                <input
+                  type="radio"
+                  name="itemType"
+                  value="text"
+                  checked={newItemType === 'text'}
+                  onChange={(e) => setNewItemType(e.target.value as 'recipe' | 'text')}
+                />
+                Текст
+              </label>
+            </div>
+
+            <div className="menu-dialog__people-count">
+              <label>
+                Сколько человек?
+                <input
+                  type="number"
+                  value={peopleInput}
+                  onChange={(e) => setPeopleInput(e.target.value)}
+                  className="menu-dialog__people-input"
+                  min="1"
+                  step="1"
+                />
+              </label>
+            </div>
+
+            {newItemType === 'recipe' ? (
+              <div className="menu-dialog__recipe-selector">
+                <div className="menu-dialog__category-filter">
+                  <label>
+                    Категория:
+                    <select
+                      value={recipeCategoryFilter}
+                      onChange={(e) => setRecipeCategoryFilter(e.target.value)}
+                      className="menu-dialog__select"
+                    >
+                      <option value="Все">Все</option>
+                      {RECIPE_CATEGORIES.map(category => (
+                        <option key={category} value={category}>{category}</option>
+                      ))}
+                      <option value="Без категории">Без категории</option>
+                    </select>
+                  </label>
+                </div>
+                <select
+                  value={newItemRecipeId}
+                  onChange={(e) => setNewItemRecipeId(e.target.value)}
+                  className="menu-dialog__select"
+                >
+                  <option value="">Выбрать рецепт...</option>
+                  {getFilteredRecipes().map((recipe) => (
+                    <option key={recipe.id} value={recipe.id}>
+                      {recipe.title}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              <div className="menu-dialog__text-input">
+                <input
+                  type="text"
+                  value={newItemText}
+                  onChange={(e) => setNewItemText(e.target.value)}
+                  placeholder="Введите текст..."
+                  className="menu-dialog__input"
+                  autoFocus
+                />
+
+                <div className="menu-dialog__shopping-option">
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={newItemIncludeInShopping}
+                      onChange={(e) => setNewItemIncludeInShopping(e.target.checked)}
+                    />
+                    Добавить в список покупок
+                  </label>
+                </div>
+
+                {newItemIncludeInShopping && (
+                  <div className="menu-dialog__ingredients">
+                    <h4>Ингредиенты:</h4>
+                    {newItemIngredients.map((ingredient, index) => (
+                      <div key={index} className="menu-dialog__ingredient-row">
+                        <input
+                          type="text"
+                          value={ingredient.name}
+                          onChange={(e) => handleIngredientChange(index, 'name', e.target.value)}
+                          placeholder="Название"
+                          className="menu-dialog__ingredient-name"
+                        />
+                        <input
+                          type="number"
+                          value={ingredient.amount || ''}
+                          onChange={(e) => handleIngredientChange(index, 'amount', parseFloat(e.target.value) || 0)}
+                          placeholder="Кол-во"
+                          className="menu-dialog__ingredient-amount"
+                          min="0"
+                          step="0.1"
+                        />
+                        {INGREDIENT_UNITS.includes(ingredient.unit) ? (
+                          <select
+                            value={ingredient.unit}
+                            onChange={(e) => handleIngredientChange(index, 'unit', e.target.value)}
+                            className="menu-dialog__ingredient-unit"
+                          >
+                            {INGREDIENT_UNITS.map((unit) => (
+                              <option key={unit} value={unit}>
+                                {unit}
+                              </option>
+                            ))}
+                            <option value="Другое">Другое</option>
+                          </select>
+                        ) : (
+                          <input
+                            type="text"
+                            value={ingredient.unit}
+                            onChange={(e) => handleIngredientChange(index, 'unit', e.target.value)}
+                            placeholder="Ед. изм."
+                            className="menu-dialog__ingredient-unit"
+                          />
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => removeIngredientField(index)}
+                          className="menu-dialog__ingredient-remove"
+                          title="Удалить ингредиент"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={addIngredientField}
+                      className="menu-dialog__add-ingredient"
+                    >
+                      + Добавить ингредиент
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="menu-dialog__actions">
+              <button
+                onClick={handleAddItemConfirm}
+                disabled={
+                  (newItemType === 'recipe' && !newItemRecipeId) ||
+                  (newItemType === 'text' && !newItemText.trim())
+                }
+                className="menu-dialog__confirm"
+              >
+                Добавить
+              </button>
+              <button onClick={handleAddItemCancel} className="menu-dialog__cancel">
+                Отмена
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
