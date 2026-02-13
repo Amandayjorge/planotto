@@ -2871,6 +2871,33 @@ body {
     align-self: stretch;
     justify-content: space-between;
   }
+
+  .shopping-list__progress {
+    width: 100%;
+    gap: 6px;
+    overflow-x: auto;
+  }
+
+  .shopping-list__progress-item {
+    min-width: 0;
+    padding: 4px 8px;
+    border: 0;
+    background: rgba(143, 163, 138, 0.08);
+    box-shadow: none;
+    display: inline-flex;
+    gap: 6px;
+    align-items: baseline;
+  }
+
+  .shopping-list__progress-number {
+    font-size: 14px;
+  }
+
+  .shopping-list__progress-label {
+    font-size: 11px;
+    letter-spacing: 0;
+    text-transform: none;
+  }
 }
 
 /* Home page */
