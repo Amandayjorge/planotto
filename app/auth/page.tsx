@@ -285,12 +285,6 @@ export default function AuthPage() {
     <section className="card" style={{ maxWidth: "560px", margin: "0 auto" }}>
       <h1 className="h1">Аккаунт</h1>
 
-      {!isSupabaseConfigured() && (
-        <p className="muted" style={{ marginBottom: "14px" }}>
-          Добавьте в `.env.local` переменные `NEXT_PUBLIC_SUPABASE_URL` и `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
-        </p>
-      )}
-
       {userEmail ? (
         <div style={{ display: "grid", gap: "14px" }}>
           <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
