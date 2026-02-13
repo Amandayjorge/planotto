@@ -33,8 +33,6 @@ const GUEST_REMINDER_VISITS_THRESHOLD = 3;
 const GUEST_REMINDER_RECIPES_THRESHOLD = 3;
 const DAY_MEAL_SLOTS_KEY = "dayMealSlots";
 const DEFAULT_DAY_MEALS = ["Завтрак", "Обед", "Ужин"] as const;
-const MEAL_LIBRARY = ["Завтрак", "Обед", "Ужин", "Перекус", "Выпечка", "Суп", "Заготовки", "Ужин"] as const;
-
 const loadDayMealSlotsFromStorage = (): Record<string, string[]> => {
   if (typeof window === "undefined") return {};
   try {
