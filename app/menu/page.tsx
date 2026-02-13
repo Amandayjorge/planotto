@@ -753,20 +753,6 @@ function MenuPageContent() {
     [dayMealSlots]
   );
 
-  const setDayMealsForKey = useCallback(
-    (dayKey: string, meals: string[]) => {
-      const next = {
-        ...dayMealSlots,
-        [dayKey]: meals,
-      };
-      persistDayMealSlots(next);
-    },
-    [dayMealSlots, persistDayMealSlots]
-  );
-
-
-  const setDayMealsForKey = useCallback(
-    (dayKey: string, meals: string[]) => {
       const next = {
         ...dayMealSlots,
         [dayKey]: meals,
