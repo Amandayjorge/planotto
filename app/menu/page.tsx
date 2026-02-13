@@ -752,7 +752,13 @@ const AddEditDialog = memo(({
 AddEditDialog.displayName = "AddEditDialog";
 
 function MenuPageContent() {
-  const meals = ["Завтрак", "Обед", "Ужин"];
+  const [mealSlots, setMealSlots] = useState<MealSlot[]>(() => loadMealSlotsFromStorage());
+  const [newSlotName, setNewSlotName] = useState("");
+  const activeMealSlots = useMemo(() => mealSlots.filter((slot) => slot.active), [mealSlots]);
+  const meals = useMemo(
+    () => (activeMealSlots.length > 0 ? activeMealSlots.map((slot) => slot.label) : DEFAULT_MEALS),
+    [activeMealSlots]
+  );
   const initialRangeStart = formatDate(getMonday(new Date()));
   const initialRangeEnd = formatDate(addDays(getMonday(new Date()), 6));
 
@@ -779,17 +785,6 @@ function MenuPageContent() {
   ]);
   const [newItemPeopleCount, setNewItemPeopleCount] = useState(1);
   const [peopleInput, setPeopleInput] = useState("1");
-
-  const [mealSlots, setMealSlots] = useState<MealSlot[]>(() => loadMealSlotsFromStorage());
-  const [newSlotName, setNewSlotName] = useState("");
-  const activeMealSlots = useMemo(() => mealSlots.filter((slot) => slot.active), [mealSlots]);
-  const meals = activeMealSlots.map((slot) => slot.label);
-  const persistMealSlots = (nextSlots: MealSlot[]) => {
-    setMealSlots(nextSlots);
-    if (typeof window !== "undefined") {
-      localStorage.setItem(MEAL_SLOTS_KEY, JSON.stringify(nextSlots));
-    }
-  };
 
   const [recipeCategoryFilter, setRecipeCategoryFilter] = useState<string>("Все");
 
