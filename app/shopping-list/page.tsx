@@ -771,10 +771,6 @@ export default function ShoppingListPage() {
           <span className="shopping-list__dish-name">{item.name}</span>
 
           <div className="shopping-list__amounts">
-            <span className="shopping-list__required">
-              Нужно: {formatAmount(item.totalAmount)} {item.unit}
-            </span>
-
             <span
               className={`shopping-list__buy ${
                 haveEnough ? "shopping-list__buy--enough" : ""
