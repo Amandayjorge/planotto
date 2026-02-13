@@ -753,6 +753,8 @@ function MenuPageContent() {
     [dayMealSlots]
   );
 
+  const setDayMealsForKey = useCallback(
+    (dayKey: string, meals: string[]) => {
       const next = {
         ...dayMealSlots,
         [dayKey]: meals,
