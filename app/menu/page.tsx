@@ -764,19 +764,6 @@ function MenuPageContent() {
     [dayMealSlots, persistDayMealSlots]
   );
 
-  const removeDaySlotItems = useCallback(
-    (dayKey: string, slotLabel: string) => {
-      setMealData((prev) => {
-        const next = { ...prev };
-        const slotKey = `${dayKey}-${slotLabel}`;
-        if (next[slotKey]) {
-          delete next[slotKey];
-        }
-        return next;
-      });
-    },
-    []
-  );
 
   const setDayMealsForKey = useCallback(
     (dayKey: string, meals: string[]) => {
