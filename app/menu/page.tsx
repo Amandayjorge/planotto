@@ -765,6 +765,7 @@ function MenuPageContent() {
   );
 
 
+
   const toggleDaySlot = useCallback(
     (dayKey: string, slotLabel: string) => {
       const current = getDayMeals(dayKey);
