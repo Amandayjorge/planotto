@@ -6,10 +6,18 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
 const SHOPPING_HIGHLIGHT_KEY = "planottoHighlightShoppingNav";
+const NAV_ITEMS = [
+  { path: "/recipes", label: "Рецепты" },
+  { path: "/menu", label: "Меню" },
+  { path: "/pantry", label: "Кладовка" },
+  { path: "/shopping-list", label: "Покупки" },
+  { path: "/auth", label: "Аккаунт" },
+];
 
 export default function Header() {
   const pathname = usePathname();
   const [highlightShopping, setHighlightShopping] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     const updateHighlight = () => {
@@ -56,33 +64,64 @@ export default function Header() {
         </Link>
 
         <nav className="nav">
-          <Link href="/recipes" className={linkClass("/recipes")}>
-            Рецепты
-          </Link>
-
-          <Link href="/menu" className={linkClass("/menu")}>
-            Меню
-          </Link>
-
-          <Link href="/pantry" className={linkClass("/pantry")}>
-            Кладовка
-          </Link>
-
-          <Link
-            href="/shopping-list"
-            className={`${linkClass("/shopping-list")}${
-              highlightShopping && pathname !== "/shopping-list" ? " nav__link--highlight" : ""
-            }`}
-            onClick={clearShoppingHighlight}
-          >
-            Покупки
-          </Link>
-
-          <Link href="/auth" className={linkClass("/auth")}>
-            Аккаунт
-          </Link>
+          {NAV_ITEMS.map((item) => (
+            <Link
+              key={item.path}
+              href={item.path}
+              className={`${linkClass(item.path)}${
+                item.path === "/shopping-list" && highlightShopping && pathname !== "/shopping-list"
+                  ? " nav__link--highlight"
+                  : ""
+              }`}
+              onClick={() => item.path === "/shopping-list" && clearShoppingHighlight()}
+            >
+              {item.label}
+            </Link>
+          ))}
         </nav>
+        <button
+          className="header__menu-btn"
+          onClick={() => setIsMobileMenuOpen((prev) => !prev)}
+          type="button"
+          aria-label="Открыть меню"
+        >
+          <span className="header__menu-icon" />
+        </button>
       </div>
+
+      {isMobileMenuOpen && (
+        <div className="mobile-menu-overlay" onClick={() => setIsMobileMenuOpen(false)}>
+          <div className="mobile-menu" onClick={(e) => e.stopPropagation()}>
+            <nav>
+              {[...navItems].map((item) => (
+                <Link
+                  key={item.path}
+                  href={item.path}
+                  className={linkClass(item.path)}
+                  onClick={() => {
+                    setIsMobileMenuOpen(false);
+                    if (item.path === "/shopping-list") clearShoppingHighlight();
+                  }}
+                >
+                  {item.label}
+                </Link>
+              ))}
+            </nav>
+          </div>
+        </div>
+      )}
+      <nav className="mobile-tab-bar">
+        {[...navItems].map((item) => (
+          <Link
+            key={`tab-${item.path}`}
+            href={item.path}
+            className={linkClass(item.path)}
+            onClick={() => item.path === "/shopping-list" && clearShoppingHighlight()}
+          >
+            {item.label}
+          </Link>
+        ))}
+      </nav>
     </header>
   );
 }
