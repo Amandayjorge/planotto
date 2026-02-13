@@ -759,6 +759,7 @@ function MenuPageContent() {
   const [movingItem, setMovingItem] = useState<{ cellKey: string; index: number } | null>(null);
   const [moveTargetDay, setMoveTargetDay] = useState<string>("");
   const [moveTargetMeal, setMoveTargetMeal] = useState<string>("");
+  const dialogMouseDownRef = useRef(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1822,12 +1823,20 @@ function MenuPageContent() {
   };
 
   useEffect(() => {
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Element | null;
+      dialogMouseDownRef.current = Boolean(target && target.closest(".menu-dialog"));
+    };
+
     const handleOutsideClick = (event: MouseEvent) => {
       const target = event.target as Element | null;
       if (!target) return;
 
       // На случай перехода Next.js
-      if (target.closest("a") || target.closest('[role="link"]')) return;
+      if (target.closest("a") || target.closest('[role="link"]')) {
+        dialogMouseDownRef.current = false;
+        return;
+      }
 
       const clickedInside =
         target.closest(".menu-grid__item-menu-portal") ||
@@ -1835,6 +1844,13 @@ function MenuPageContent() {
         target.closest(".menu-dialog") ||
         target.closest(".move-dialog") ||
         target.closest(".pantry-dialog");
+
+      if (dialogMouseDownRef.current && !clickedInside) {
+        dialogMouseDownRef.current = false;
+        return;
+      }
+
+      dialogMouseDownRef.current = false;
 
       if (clickedInside) return;
 
@@ -1850,11 +1866,13 @@ function MenuPageContent() {
     };
 
     if (openMoreMenu || movingItem || addingItemCell || showPantryDialog) {
+      document.addEventListener("pointerdown", handlePointerDown, true);
       document.addEventListener("click", handleOutsideClick, false);
       document.addEventListener("keydown", handleEscapeKey, true);
     }
 
     return () => {
+      document.removeEventListener("pointerdown", handlePointerDown, true);
       document.removeEventListener("click", handleOutsideClick, false);
       document.removeEventListener("keydown", handleEscapeKey, true);
     };
