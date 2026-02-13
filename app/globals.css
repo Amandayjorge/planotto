@@ -2677,60 +2677,6 @@ body {
   color: var(--text-primary);
 }
 
-.meal-slot-settings {
-  margin-bottom: 20px;
-  border-radius: 14px;
-}
-
-.meal-slot-settings__header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 20px;
-  flex-wrap: wrap;
-}
-
-.meal-slot-settings__add {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  flex-wrap: wrap;
-  width: min(420px, 100%);
-}
-
-.meal-slot-settings__list {
-  margin-top: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.meal-slot-settings__row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 10px 12px;
-  border-radius: 10px;
-  background: var(--background-secondary);
-  border: 1px solid var(--border-default);
-}
-
-.meal-slot-settings__row--inactive {
-  opacity: 0.7;
-  border-style: dashed;
-}
-
-.meal-slot-settings__label {
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.meal-slot-settings__row-actions {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-}
 
 @media (max-width: 720px) {
   .menu-first-onboarding__mascot {
@@ -2794,6 +2740,41 @@ body {
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+.menu-day-card__slot-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.menu-day-card__slot-pill {
+  border: 1px solid rgba(143, 163, 138, 0.8);
+  background: transparent;
+  color: var(--text-primary);
+  padding: 4px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: background 0.2s ease;
+}
+
+.menu-day-card__slot-pill:hover {
+  background: rgba(143, 163, 138, 0.12);
+}
+
+.menu-day-card__slot-add {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex: 1;
+  min-width: 200px;
+}
+
+.menu-day-card__slot-input {
+  flex: 1;
+  height: 34px;
 }
 
 .menu-day-card__header {

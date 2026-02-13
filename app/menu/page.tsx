@@ -31,39 +31,28 @@ const GUEST_REMINDER_PERIOD_ATTEMPTS_KEY = "guestReminderPeriodAttempts";
 const GUEST_REMINDER_PENDING_KEY = "guestReminderPending";
 const GUEST_REMINDER_VISITS_THRESHOLD = 3;
 const GUEST_REMINDER_RECIPES_THRESHOLD = 3;
-const MEAL_SLOTS_KEY = "mealSlots";
-interface MealSlot {
-  id: string;
-  label: string;
-  active: boolean;
-}
-const DEFAULT_MEAL_SLOTS: MealSlot[] = [
-  { id: "breakfast", label: "Завтрак", active: true },
-  { id: "lunch", label: "Обед", active: true },
-  { id: "dinner", label: "Ужин", active: true },
-];
+const DAY_MEAL_SLOTS_KEY = "dayMealSlots";
+const DEFAULT_DAY_MEALS = ["Завтрак", "Обед", "Ужин"] as const;
+const MEAL_LIBRARY = ["Завтрак", "Обед", "Ужин", "Перекус", "Выпечка", "Суп", "Заготовки", "Ужин"] as const;
 
-const loadMealSlotsFromStorage = (): MealSlot[] => {
-  if (typeof window === "undefined") return DEFAULT_MEAL_SLOTS;
-  const stored = window.localStorage.getItem(MEAL_SLOTS_KEY);
-  if (!stored) return DEFAULT_MEAL_SLOTS;
+const loadDayMealSlotsFromStorage = (): Record<string, string[]> => {
+  if (typeof window === "undefined") return {};
   try {
-    const parsed = JSON.parse(stored);
-    if (!Array.isArray(parsed)) return DEFAULT_MEAL_SLOTS;
-    return parsed.filter(
-      (item): item is MealSlot =>
-        typeof item === "object" &&
-        item !== null &&
-        typeof item.id === "string" &&
-        typeof item.label === "string" &&
-        typeof item.active === "boolean"
-    );
+    const raw = window.localStorage.getItem(DAY_MEAL_SLOTS_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return {};
+    return Object.entries(parsed).reduce<Record<string, string[]>>((acc, [key, value]) => {
+      if (Array.isArray(value)) {
+        acc[key] = value.filter((slot): slot is string => typeof slot === "string");
+      }
+      return acc;
+    }, {});
   } catch {
-    return DEFAULT_MEAL_SLOTS;
+    return {};
   }
 };
-const DEFAULT_MEALS = ["Завтрак", "Обед", "Ужин"] as const;
-const MEAL_LIBRARY = ["Завтрак", "Обед", "Ужин", "Перекус", "Выпечка", "Суп", "Заготовки", "Ужин"] as const;
+const MEAL_LIBRARY = [...DEFAULT_DAY_MEALS, "Суп", "Заготовки", "Выпечка"] as const;
 
 const INGREDIENT_UNITS = ["г", "кг", "мл", "л", "шт", "ч.л.", "ст.л.", "по вкусу"];
 const DEFAULT_UNIT = "г";
@@ -752,17 +741,79 @@ const AddEditDialog = memo(({
 AddEditDialog.displayName = "AddEditDialog";
 
 function MenuPageContent() {
-  const [mealSlots, setMealSlots] = useState<MealSlot[]>(() => loadMealSlotsFromStorage());
-  const [newSlotName, setNewSlotName] = useState("");
-  const activeMealSlots = useMemo(() => mealSlots.filter((slot) => slot.active), [mealSlots]);
-  const meals = useMemo(
-    () => (activeMealSlots.length > 0 ? activeMealSlots.map((slot) => slot.label) : DEFAULT_MEALS),
-    [activeMealSlots]
+  const [dayMealSlots, setDayMealSlots] = useState<Record<string, string[]>>(() => loadDayMealSlotsFromStorage());
+  const [daySlotInputs, setDaySlotInputs] = useState<Record<string, string>>({});
+  const persistDayMealSlots = useCallback((slots: Record<string, string[]>) => {
+    setDayMealSlots(slots);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(DAY_MEAL_SLOTS_KEY, JSON.stringify(slots));
+    }
+  }, []);
+
+  const getDayMeals = useCallback(
+    (dayKey: string) => dayMealSlots[dayKey] || [...DEFAULT_DAY_MEALS],
+    [dayMealSlots]
+  );
+
+  const setDayMealsForKey = useCallback(
+    (dayKey: string, meals: string[]) => {
+      const next = {
+        ...dayMealSlots,
+        [dayKey]: meals,
+      };
+      persistDayMealSlots(next);
+    },
+    [dayMealSlots, persistDayMealSlots]
+  );
+
+  const toggleDaySlot = useCallback(
+    (dayKey: string, slotLabel: string) => {
+      const current = getDayMeals(dayKey);
+      const exists = current.includes(slotLabel);
+      const nextSlots = exists
+        ? current.filter((slot) => slot !== slotLabel)
+        : [...current, slotLabel];
+      if (exists) {
+        removeDaySlotItems(dayKey, slotLabel);
+      }
+      setDayMealsForKey(dayKey, nextSlots);
+    },
+    [getDayMeals, removeDaySlotItems, setDayMealsForKey]
+  );
+
+  const handleAddSlotToDay = useCallback(
+    (dayKey: string) => {
+      const raw = (daySlotInputs[dayKey] || "").trim();
+      if (!raw) return;
+      const normalized = raw.replace(/\s+/g, " ").replace(/(^\s+|\s+$)/g, "");
+      const current = getDayMeals(dayKey);
+      if (current.includes(normalized)) {
+        setDaySlotInputs((prev) => ({ ...prev, [dayKey]: "" }));
+        return;
+      }
+      const next = [...current, normalized];
+      setDayMealsForKey(dayKey, next);
+      setDaySlotInputs((prev) => ({ ...prev, [dayKey]: "" }));
+    },
+    [daySlotInputs, getDayMeals, setDayMealsForKey]
   );
   const initialRangeStart = formatDate(getMonday(new Date()));
   const initialRangeEnd = formatDate(addDays(getMonday(new Date()), 6));
 
   const [mealData, setMealData] = useState<Record<string, MenuItem[]>>({});
+  const removeDaySlotItems = useCallback(
+    (dayKey: string, slotLabel: string) => {
+      setMealData((prev) => {
+        const next = { ...prev };
+        const slotKey = `${dayKey}-${slotLabel}`;
+        if (next[slotKey]) {
+          delete next[slotKey];
+        }
+        return next;
+      });
+    },
+    [setMealData]
+  );
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [hasLoaded, setHasLoaded] = useState(false);
 
@@ -889,56 +940,6 @@ function MenuPageContent() {
     [setMealData]
   );
 
-  const toggleMealSlot = (index: number) => {
-    const slot = mealSlots[index];
-    if (!slot) return;
-    if (slot.active) {
-      const confirmed =
-        typeof window === "undefined"
-          ? true
-          : window.confirm(
-              `Выключить приём "${slot.label}"? Все блюда в этом слоте будут удалены.`
-            );
-      if (!confirmed) return;
-      removeSlotMeals(slot.label);
-    }
-    const nextSlots = [...mealSlots];
-    nextSlots[index] = { ...slot, active: !slot.active };
-    persistMealSlots(nextSlots);
-  };
-
-  const moveMealSlot = (index: number, direction: -1 | 1) => {
-    const target = index + direction;
-    if (target < 0 || target >= mealSlots.length) return;
-    const next = [...mealSlots];
-    const [moved] = next.splice(index, 1);
-    next.splice(target, 0, moved);
-    persistMealSlots(next);
-  };
-
-  const handleAddMealSlot = () => {
-    const label = newSlotName.trim();
-    if (!label) {
-      setNewSlotName("");
-      return;
-    }
-    if (mealSlots.some((slot) => slot.label.toLowerCase() === label.toLowerCase())) {
-      setNewSlotName("");
-      return;
-    }
-    const sanitizedId = label
-      .toLowerCase()
-      .replace(/[^a-zа-яё0-9]+/gi, "_")
-      .replace(/__+/g, "_")
-      .replace(/^_+|_+$/g, "");
-    const nextSlot: MealSlot = {
-      id: `${sanitizedId || "slot"}-${Date.now()}`,
-      label,
-      active: true,
-    };
-    persistMealSlots([...mealSlots, nextSlot]);
-    setNewSlotName("");
-  };
 
   const closeDropdownMenu = () => {
     setOpenMoreMenu(null);
@@ -2293,78 +2294,6 @@ function MenuPageContent() {
         </div>
       )}
 
-      {!isReadOnly && (
-        <section className="card meal-slot-settings">
-          <div className="meal-slot-settings__header">
-            <div>
-              <h2 className="h3">Приёмы пищи</h2>
-              <p className="muted" style={{ margin: "4px 0 0" }}>
-                Порядок, статус и название можно менять — календарь перестроится автоматически.
-              </p>
-            </div>
-            <div className="meal-slot-settings__add">
-              <input
-                type="text"
-                className="input"
-                placeholder="Новый приём пищи"
-                value={newSlotName}
-                onChange={(e) => setNewSlotName(e.target.value)}
-              />
-              <button type="button" className="btn btn-add" onClick={handleAddMealSlot}>
-                + Добавить приём пищи
-              </button>
-            </div>
-          </div>
-
-          <div className="meal-slot-settings__list">
-            {mealSlots.map((slot, index) => (
-              <div
-                key={slot.id}
-                className={`meal-slot-settings__row ${
-                  slot.active ? "" : "meal-slot-settings__row--inactive"
-                }`}
-              >
-                <div className="meal-slot-settings__label">{slot.label}</div>
-                <div className="meal-slot-settings__row-actions">
-                  <button type="button" className="btn btn-secondary" onClick={() => toggleMealSlot(index)}>
-                    {slot.active ? "Отключить" : "Включить"}
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    onClick={() => moveMealSlot(index, -1)}
-                    disabled={index === 0}
-                  >
-                    ↑
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    onClick={() => moveMealSlot(index, 1)}
-                    disabled={index === mealSlots.length - 1}
-                  >
-                    ↓
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-danger"
-                    onClick={() => {
-                      if (typeof window === "undefined") return;
-                      const confirmed = window.confirm(`Удалить приём "${slot.label}"? Блюда из него удалятся.`);
-                      if (!confirmed) return;
-                      removeSlotMeals(slot.label);
-                      const next = mealSlots.filter((_, idx) => idx !== index);
-                      persistMealSlots(next);
-                    }}
-                  >
-                    Удалить
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
 
       {showGuestReminder && !showMenuAddedNotice && (
         <div
@@ -2577,6 +2506,7 @@ function MenuPageContent() {
 
       <div className="menu-board">
         {dayEntries.map((dayEntry) => {
+          const dayMeals = getDayMeals(dayEntry.dateKey);
           return (
             <article key={dayEntry.dateKey} className="menu-day-card">
               <header className="menu-day-card__header">
@@ -2584,8 +2514,44 @@ function MenuPageContent() {
                 <span className="menu-day-card__date">{dayEntry.displayDate}</span>
               </header>
 
+              <div className="menu-day-card__slot-controls">
+                {getDayMeals(dayEntry.dateKey).map((slot) => (
+                  <button
+                    key={`${dayEntry.dateKey}-${slot}`}
+                    type="button"
+                    className="menu-day-card__slot-pill"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleDaySlot(dayEntry.dateKey, slot);
+                    }}
+                  >
+                    {slot}
+                  </button>
+                ))}
+                <div className="menu-day-card__slot-add">
+                  <input
+                    className="menu-day-card__slot-input"
+                    value={daySlotInputs[dayEntry.dateKey] || ""}
+                    onChange={(e) =>
+                      setDaySlotInputs((prev) => ({ ...prev, [dayEntry.dateKey]: e.target.value }))
+                    }
+                    placeholder="Новый слот"
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleAddSlotToDay(dayEntry.dateKey);
+                    }}
+                  >
+                    Добавить
+                  </button>
+                </div>
+              </div>
+
               <div className="menu-day-card__meals">
-                {meals.map((meal) => {
+                {dayMeals.map((meal) => {
                   const key = getCellKey(dayEntry.dateKey, meal);
                   const items = mealData[key] || [];
 
