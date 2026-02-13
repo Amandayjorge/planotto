@@ -799,7 +799,6 @@ export default function ShoppingListPage() {
           </button>
         </div>
 
-        {haveEnough && <span className="shopping-list__status">✓ Есть дома</span>}
       </div>
     );
   };
