@@ -110,18 +110,6 @@ export default function Header() {
           </div>
         </div>
       )}
-      <nav className="mobile-tab-bar">
-        {NAV_ITEMS.map((item) => (
-          <Link
-            key={`tab-${item.path}`}
-            href={item.path}
-            className={linkClass(item.path)}
-            onClick={() => item.path === "/shopping-list" && clearShoppingHighlight()}
-          >
-            {item.label}
-          </Link>
-        ))}
-      </nav>
     </header>
   );
 }
