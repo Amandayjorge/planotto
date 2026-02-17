@@ -18,7 +18,6 @@ export default function Header() {
   const pathname = usePathname();
   const [highlightShopping, setHighlightShopping] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [isCompactNav, setIsCompactNav] = useState(false);
 
   useEffect(() => {
     const updateHighlight = () => {
@@ -35,27 +34,25 @@ export default function Header() {
   }, []);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const viewportMedia = window.matchMedia("(max-width: 860px)");
-    const coarseMedia = window.matchMedia("(pointer: coarse)");
-    const syncCompactMode = () => {
-      setIsCompactNav(viewportMedia.matches || coarseMedia.matches);
-    };
-    syncCompactMode();
-    viewportMedia.addEventListener("change", syncCompactMode);
-    coarseMedia.addEventListener("change", syncCompactMode);
-    return () => {
-      viewportMedia.removeEventListener("change", syncCompactMode);
-      coarseMedia.removeEventListener("change", syncCompactMode);
-    };
-  }, []);
-
-  useEffect(() => {
     setIsMobileMenuOpen(false);
   }, [pathname]);
 
+  useEffect(() => {
+    if (!isMobileMenuOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsMobileMenuOpen(false);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [isMobileMenuOpen]);
+
   const linkClass = (path: string) =>
     pathname === path ? "nav__link nav__link--active" : "nav__link";
+
+  const mobileLinkClass = (path: string) =>
+    pathname === path ? "mobile-menu__link mobile-menu__link--active" : "mobile-menu__link";
 
   const clearShoppingHighlight = () => {
     if (typeof window === "undefined") return;
@@ -84,44 +81,53 @@ export default function Header() {
           </div>
         </Link>
 
-        {!isCompactNav ? (
-          <nav className="nav">
-            {NAV_ITEMS.map((item) => (
-              <Link
-                key={item.path}
-                href={item.path}
-                className={`${linkClass(item.path)}${
-                  item.path === "/shopping-list" && highlightShopping && pathname !== "/shopping-list"
-                    ? " nav__link--highlight"
-                    : ""
-                }`}
-                onClick={() => item.path === "/shopping-list" && clearShoppingHighlight()}
-              >
-                {item.label}
-              </Link>
-            ))}
-          </nav>
-        ) : null}
+        <nav className="nav">
+          {NAV_ITEMS.map((item) => (
+            <Link
+              key={item.path}
+              href={item.path}
+              className={`${linkClass(item.path)}${
+                item.path === "/shopping-list" && highlightShopping && pathname !== "/shopping-list"
+                  ? " nav__link--highlight"
+                  : ""
+              }`}
+              onClick={() => item.path === "/shopping-list" && clearShoppingHighlight()}
+            >
+              {item.label}
+            </Link>
+          ))}
+        </nav>
         <button
           className="header__menu-btn"
           onClick={() => setIsMobileMenuOpen((prev) => !prev)}
           type="button"
           aria-label="Открыть меню"
-          style={{ display: isCompactNav ? "inline-flex" : "none" }}
         >
           <span className="header__menu-icon" />
         </button>
       </div>
 
-      {isCompactNav && isMobileMenuOpen && (
+      {isMobileMenuOpen && (
         <div className="mobile-menu-overlay" onClick={() => setIsMobileMenuOpen(false)}>
-          <div className="mobile-menu" onClick={(e) => e.stopPropagation()}>
-            <nav>
+          <div className="mobile-menu" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Навигация">
+            <div className="mobile-menu__header">
+              <span className="mobile-menu__title">Навигация</span>
+              <button
+                type="button"
+                className="mobile-menu__close"
+                onClick={() => setIsMobileMenuOpen(false)}
+                aria-label="Закрыть меню"
+                title="Закрыть"
+              >
+                ×
+              </button>
+            </div>
+            <nav className="mobile-menu__nav">
               {NAV_ITEMS.map((item) => (
                 <Link
                   key={item.path}
                   href={item.path}
-                  className={linkClass(item.path)}
+                  className={mobileLinkClass(item.path)}
                   onClick={() => {
                     setIsMobileMenuOpen(false);
                     if (item.path === "/shopping-list") clearShoppingHighlight();

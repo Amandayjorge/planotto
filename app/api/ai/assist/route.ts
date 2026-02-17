@@ -21,6 +21,7 @@ const DEFAULT_MODEL = process.env.OPENROUTER_MODEL || "openai/gpt-4o-mini";
 const VISION_MODEL = process.env.OPENROUTER_VISION_MODEL || "openai/gpt-4o-mini";
 const FOOD_IMAGE_URL = "https://loremflickr.com";
 const FAL_OCR_ENDPOINT = process.env.FAL_OCR_ENDPOINT || "https://queue.fal.run/fal-ai/got-ocr/v2";
+const FAL_IMAGE_ENDPOINT = process.env.FAL_IMAGE_ENDPOINT || "https://queue.fal.run/fal-ai/flux/schnell";
 const FAL_OCR_POLL_ATTEMPTS = 20;
 const FAL_OCR_POLL_DELAY_MS = 1200;
 const FUSIONBRAIN_BASE_URL = process.env.FUSIONBRAIN_BASE_URL || "https://api-key.fusionbrain.ai/key/api/v1";
@@ -545,6 +546,108 @@ const requestFusionBrainModelId = async (credentials: FusionBrainCredentials): P
   if (!Array.isArray(data) || data.length === 0) return null;
   const firstId = Number(data[0]?.id);
   return Number.isFinite(firstId) ? firstId : null;
+};
+
+const extractFalImageUrl = (payload: unknown): string => {
+  if (!payload) return "";
+  if (typeof payload === "string") {
+    const text = payload.trim();
+    return /^https?:\/\//i.test(text) ? text : "";
+  }
+  if (Array.isArray(payload)) {
+    for (const item of payload) {
+      const found = extractFalImageUrl(item);
+      if (found) return found;
+    }
+    return "";
+  }
+  if (typeof payload === "object") {
+    const record = payload as Record<string, unknown>;
+    const direct =
+      safeString(record.url) ||
+      safeString(record.image_url) ||
+      safeString(record.imageUrl) ||
+      safeString(record.contentUrl);
+    if (/^https?:\/\//i.test(direct)) return direct;
+    const nestedCandidates = [
+      record.images,
+      record.image,
+      record.output,
+      record.outputs,
+      record.result,
+      record.data,
+      record.response,
+    ];
+    for (const candidate of nestedCandidates) {
+      const found = extractFalImageUrl(candidate);
+      if (found) return found;
+    }
+  }
+  return "";
+};
+
+const generateImageWithFal = async (
+  prompt: string
+): Promise<{ imageUrl: string | null; error: string | null }> => {
+  const falKey = getFalKey();
+  if (!falKey) {
+    return { imageUrl: null, error: "FAL key missing" };
+  }
+
+  const enqueue = await falFetchJson(
+    FAL_IMAGE_ENDPOINT,
+    {
+      method: "POST",
+      body: {
+        input: {
+          prompt,
+          image_size: "square_hd",
+          num_images: 1,
+        },
+      },
+    },
+    falKey
+  );
+
+  if (!enqueue.ok) {
+    return { imageUrl: null, error: `FAL image status ${enqueue.status}` };
+  }
+
+  const enqueueData = (enqueue.json || {}) as Record<string, unknown>;
+  const immediate = extractFalImageUrl(enqueueData);
+  if (immediate) {
+    return { imageUrl: immediate, error: null };
+  }
+
+  const statusUrl = safeString(enqueueData.status_url);
+  const responseUrl = safeString(enqueueData.response_url);
+  const pollUrl = statusUrl || responseUrl;
+  if (!pollUrl) {
+    return { imageUrl: null, error: "FAL image missing poll url" };
+  }
+
+  for (let attempt = 0; attempt < FAL_OCR_POLL_ATTEMPTS; attempt += 1) {
+    const poll = await falFetchJson(
+      pollUrl,
+      { method: "GET" },
+      falKey
+    );
+    if (poll.ok) {
+      const payload = (poll.json || {}) as Record<string, unknown>;
+      const status = safeString(payload.status).toUpperCase();
+      if (!status || status === "COMPLETED" || status === "DONE") {
+        const url =
+          extractFalImageUrl(payload.response ?? payload.output ?? payload.result ?? payload);
+        if (url) return { imageUrl: url, error: null };
+      }
+      if (status === "FAILED" || status === "ERROR") {
+        return { imageUrl: null, error: "FAL image generation failed" };
+      }
+    }
+    await sleep(FAL_OCR_POLL_DELAY_MS);
+  }
+
+  return { imageUrl: null, error: "FAL image timeout" };
 };
 
 const generateImageWithFusionBrain = async (
@@ -1203,7 +1306,7 @@ const runFalOcrForRecipeImport = async (
       method: "POST",
       body: {
         input: {
-          image_urls: imageDataUrls,
+          input_image_urls: imageDataUrls,
           language: "ru",
           multi_page: true,
         },
@@ -1363,6 +1466,15 @@ export async function POST(request: Request) {
     if (action === "recipe_image") {
       const fallback = fallbackImage(payload);
       try {
+        const generatedByFal = await generateImageWithFal(fallback.prompt);
+        if (generatedByFal.imageUrl) {
+          return NextResponse.json({
+            prompt: fallback.prompt,
+            imageUrl: generatedByFal.imageUrl,
+            message: "Фото сгенерировано.",
+          });
+        }
+
         const generated = await generateImageWithFusionBrain(fallback.prompt);
         if (generated.imageUrl) {
           return NextResponse.json({
@@ -1373,9 +1485,7 @@ export async function POST(request: Request) {
         }
         return NextResponse.json({
           ...fallback,
-          message: generated.error
-            ? `Не удалось сгенерировать фото по ключу: ${generated.error} Использую запасной вариант.`
-            : fallback.message,
+          message: "Не удалось сгенерировать фото автоматически. Используем запасной вариант.",
         });
       } catch {
         return NextResponse.json({

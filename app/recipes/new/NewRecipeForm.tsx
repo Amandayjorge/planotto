@@ -75,6 +75,25 @@ const hasImportedContent = (draft: ImportedRecipeDraft | null): boolean => {
   return (draft.ingredients || []).some((item) => item.name?.trim().length > 0);
 };
 
+const sanitizeImportIssue = (issue: string): string => {
+  const value = issue.trim();
+  if (!value) return "";
+  const normalized = value.toLowerCase();
+  if (
+    normalized.includes("openrouter") ||
+    normalized.includes("fal_key") ||
+    normalized.includes("api_key") ||
+    normalized.includes("env") ||
+    normalized.includes(".env")
+  ) {
+    return "Импорт по фото временно недоступен. Попробуйте позже или заполните вручную.";
+  }
+  return value;
+};
+
+const sanitizeImportIssues = (issues: string[]): string[] =>
+  Array.from(new Set(issues.map((issue) => sanitizeImportIssue(issue)).filter(Boolean)));
+
 interface NewRecipeFormProps {
   initialFirstCreate?: boolean;
 }
@@ -114,6 +133,7 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
   const [importStatus, setImportStatus] = useState<ImportStatus>("idle");
   const [importStatusMessage, setImportStatusMessage] = useState("");
   const [reviewHints, setReviewHints] = useState<ReviewHintsMap>({});
+  const photoInputRef = useRef<HTMLInputElement | null>(null);
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
   const stepOneRef = useRef<HTMLDivElement | null>(null);
   const hasCoreInput = title.trim().length > 0 || ingredients.some((item) => item.name.trim().length > 0);
@@ -338,6 +358,25 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
     });
   };
 
+  const clearImportPhotos = () => {
+    setImportPhotoDataUrls([]);
+    setImportPhotoNames([]);
+    setImportIssues([]);
+    setImportStatus("idle");
+    setImportStatusMessage("");
+    if (photoInputRef.current) {
+      photoInputRef.current.value = "";
+    }
+    if (cameraInputRef.current) {
+      cameraInputRef.current.value = "";
+    }
+  };
+
+  const removeImportPhotoAt = (index: number) => {
+    setImportPhotoDataUrls((prev) => prev.filter((_, i) => i !== index));
+    setImportPhotoNames((prev) => prev.filter((_, i) => i !== index));
+  };
+
   const handleImportByUrl = async () => {
     const normalizedUrl = normalizeImportUrl(importUrl);
     if (!importUrl.trim()) {
@@ -369,7 +408,7 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
         knownProducts: productSuggestions,
       });
       applyImportedDraft(data.recipe);
-      setImportIssues(Array.isArray(data.issues) ? data.issues : []);
+      setImportIssues(sanitizeImportIssues(Array.isArray(data.issues) ? data.issues : []));
       if (hasImportedContent(data.recipe)) {
         setImportStatus("success");
         setImportStatusMessage("Импортировано. Проверьте и сохраните.");
@@ -447,7 +486,7 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
         knownProducts: productSuggestions,
       });
       applyImportedDraft(data.recipe);
-      setImportIssues(Array.isArray(data.issues) ? data.issues : []);
+      setImportIssues(sanitizeImportIssues(Array.isArray(data.issues) ? data.issues : []));
       if (hasImportedContent(data.recipe)) {
         setImportStatus("success");
         setImportStatusMessage("Рецепт распознан, проверьте и сохраните.");
@@ -645,6 +684,7 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
             {importMode === "photo" ? (
               <div style={{ display: "grid", gap: "8px" }}>
                 <input
+                  ref={photoInputRef}
                   type="file"
                   accept="image/*"
                   multiple
@@ -667,20 +707,32 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
                     <button
                       className="btn"
                       type="button"
-                      onClick={() => {
-                        setImportPhotoDataUrls([]);
-                        setImportPhotoNames([]);
-                      }}
+                      onClick={clearImportPhotos}
                     >
                       Очистить фото
                     </button>
                   ) : null}
                 </div>
                 {importPhotoDataUrls.length > 0 ? (
-                  <p className="muted" style={{ margin: 0 }}>
-                    Фото для распознавания: {importPhotoDataUrls.length}
-                    {importPhotoNames.length > 0 ? ` (${importPhotoNames.join(", ")})` : ""}
-                  </p>
+                  <div style={{ display: "grid", gap: "6px" }}>
+                    <p className="muted" style={{ margin: 0 }}>
+                      Фото для распознавания: {importPhotoDataUrls.length}
+                    </p>
+                    <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                      {importPhotoNames.map((name, index) => (
+                        <button
+                          key={`${name}-${index}`}
+                          type="button"
+                          className="btn"
+                          onClick={() => removeImportPhotoAt(index)}
+                          style={{ padding: "4px 8px", fontSize: "12px" }}
+                          title="Удалить фото"
+                        >
+                          {name || `Фото ${index + 1}`} ×
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 ) : null}
                 <button className="btn btn-primary" onClick={handleImportByPhoto} disabled={aiAction === "import_photo"}>
                   {aiAction === "import_photo" ? "Распознаю..." : "Распознать"}
@@ -734,8 +786,8 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
           </div>
         {ingredients.map((ingredient, index) => (
           <div key={index} style={{ marginBottom: "10px" }}>
-            <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-              <div style={{ flex: 1 }}>
+            <div className="recipe-new-ingredient-row">
+              <div className="recipe-new-ingredient-row__name">
                 <ProductAutocompleteInput
                   value={ingredient.name}
                   onChange={(nextValue) => updateIngredient(index, "name", nextValue)}
@@ -743,6 +795,7 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
                   placeholder="Название"
                 />
               </div>
+              <div className="recipe-new-ingredient-row__meta">
               <input
                 type="number"
                 value={ingredient.amount}
@@ -751,13 +804,13 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
                 min="0"
                 placeholder="Кол-во"
                 className="input"
-                style={{ width: "110px" }}
+                style={{ width: "100%" }}
               />
               <select
                 value={ingredient.unit}
                 onChange={(e) => updateIngredient(index, "unit", e.target.value)}
                 className="input"
-                style={{ width: "120px" }}
+                style={{ width: "100%" }}
               >
                 {UNITS.map((unit) => (
                   <option key={unit} value={unit}>
@@ -765,9 +818,10 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
                   </option>
                 ))}
               </select>
-              <button className="btn btn-danger" onClick={() => removeIngredient(index)}>
+              <button className="btn btn-danger recipe-new-ingredient-row__delete" onClick={() => removeIngredient(index)}>
                 Удалить
               </button>
+              </div>
             </div>
             {reviewHints[index] ? (
               <p className="muted" style={{ marginTop: "6px", marginBottom: "0" }}>

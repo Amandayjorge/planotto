@@ -145,6 +145,7 @@ export default function HouseAssistant() {
     pathname.startsWith("/recipes/new") ||
     (pathname.startsWith("/recipes/") && pathname !== "/recipes");
   const [collapsed, setCollapsed] = useState(() => shouldPreferCollapsed);
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
   const [avatarSrc, setAvatarSrc] = useState<string>(() => loadAssistantAvatarSetting());
   const [menuAiMessage, setMenuAiMessage] = useState("");
   const [menuAiLoading, setMenuAiLoading] = useState(false);
@@ -175,6 +176,15 @@ export default function HouseAssistant() {
     return typedWindow.SpeechRecognition || typedWindow.webkitSpeechRecognition;
   }, []);
   const voiceSupported = Boolean(speechRecognitionCtor);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const media = window.matchMedia("(max-width: 720px)");
+    const sync = () => setIsMobileViewport(media.matches);
+    sync();
+    media.addEventListener("change", sync);
+    return () => media.removeEventListener("change", sync);
+  }, []);
 
   useEffect(() => {
     try {
@@ -501,7 +511,16 @@ export default function HouseAssistant() {
   }
 
   return (
-    <aside className={`house-assistant ${shouldPreferCollapsed ? "house-assistant--subtle" : ""}`} aria-live="polite">
+    <>
+      {isMobileViewport ? (
+        <button
+          type="button"
+          className="house-assistant__backdrop"
+          onClick={() => setCollapsed(true)}
+          aria-label="Закрыть помощника"
+        />
+      ) : null}
+      <aside className={`house-assistant ${shouldPreferCollapsed ? "house-assistant--subtle" : ""}`} aria-live="polite">
       <button
         className="house-assistant__close"
         onClick={() => setCollapsed(true)}
@@ -667,5 +686,6 @@ export default function HouseAssistant() {
         ) : null}
       </div>
     </aside>
+    </>
   );
 }

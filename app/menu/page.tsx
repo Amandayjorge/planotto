@@ -25,6 +25,7 @@ const RANGE_STATE_KEY = "selectedMenuRange";
 const WEEK_START_KEY = "selectedWeekStart";
 const PANTRY_STORAGE_KEY = "pantry";
 const MENU_FIRST_VISIT_ONBOARDING_KEY = "menuFirstVisitOnboardingSeen";
+const MENU_INLINE_HINT_DISMISSED_KEY = "menuInlineHintDismissed";
 const RECIPES_FIRST_FLOW_KEY = "recipesFirstFlowActive";
 const GUEST_REMINDER_VISITS_KEY = "guestReminderVisits";
 const GUEST_REMINDER_PERIOD_ATTEMPTS_KEY = "guestReminderPeriodAttempts";
@@ -992,11 +993,22 @@ function MenuPageContent() {
 
   const handleOnboardingTryWithoutRecipes = () => {
     setShowFirstVisitOnboarding(false);
-    setShowCalendarInlineHint(true);
+    const inlineDismissed = localStorage.getItem(MENU_INLINE_HINT_DISMISSED_KEY) === "1";
+    setShowCalendarInlineHint(!inlineDismissed);
     setForcedOnboardingFlow(false);
     localStorage.setItem(MENU_FIRST_VISIT_ONBOARDING_KEY, "1");
     router.replace("/menu");
   };
+
+  const dismissCalendarInlineHint = useCallback(() => {
+    setShowCalendarInlineHint(false);
+    if (typeof window === "undefined") return;
+    try {
+      localStorage.setItem(MENU_INLINE_HINT_DISMISSED_KEY, "1");
+    } catch {
+      // ignore local storage errors
+    }
+  }, []);
 
   const applyPeriodPreset = (preset: PeriodPreset) => {
     const baseStart = parseDateSafe(weekStart) || getMonday(new Date());
@@ -1555,6 +1567,12 @@ function MenuPageContent() {
     if (recipes.length > 0 && !forcedOnboardingFlow) {
       setShowCalendarInlineHint(false);
       setShowFirstVisitOnboarding(false);
+      return;
+    }
+    if (typeof window === "undefined") return;
+    const inlineDismissed = localStorage.getItem(MENU_INLINE_HINT_DISMISSED_KEY) === "1";
+    if (inlineDismissed) {
+      setShowCalendarInlineHint(false);
     }
   }, [forceFirstFromQuery, forcedOnboardingFlow, recipes.length]);
 
@@ -2499,7 +2517,7 @@ function MenuPageContent() {
       {showCalendarInlineHint && recipes.length === 0 && (
         <div className="menu-inline-onboarding-hint">
           Подсказка: нажмите <strong>+</strong> в любом дне, чтобы добавить блюдо в меню.
-          <button type="button" className="menu-inline-onboarding-hint__close" onClick={() => setShowCalendarInlineHint(false)}>
+          <button type="button" className="menu-inline-onboarding-hint__close" onClick={dismissCalendarInlineHint}>
             Понятно
           </button>
         </div>
@@ -2529,26 +2547,6 @@ function MenuPageContent() {
                     {slot}
                   </button>
                 ))}
-                <div className="menu-day-card__slot-add">
-                  <input
-                    className="menu-day-card__slot-input"
-                    value={daySlotInputs[dayEntry.dateKey] || ""}
-                    onChange={(e) =>
-                      setDaySlotInputs((prev) => ({ ...prev, [dayEntry.dateKey]: e.target.value }))
-                    }
-                    placeholder="Новый слот"
-                  />
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleAddSlotToDay(dayEntry.dateKey);
-                    }}
-                  >
-                    Добавить
-                  </button>
-                </div>
               </div>
 
               <div className="menu-day-card__meals">
