@@ -374,10 +374,10 @@ const extractOpenRouterErrorMessage = (raw: string): string => {
 };
 
 const mapOpenRouterError = (status: number): string => {
-  if (status === 401 || status === 403) return "Ключ ИИ не принят. Проверьте OPENROUTER_API_KEY.";
-  if (status === 429) return "Сервис ИИ перегружен. Повторите попытку через минуту.";
-  if (status === 400 || status === 422) return "Сервис ИИ не принял формат запроса с фото.";
-  return "Сервис ИИ временно недоступен.";
+  if (status === 429) return "Сервис распознавания перегружен. Попробуйте позже.";
+  if (status === 400 || status === 422) return "Не удалось обработать фото для распознавания.";
+  if (status === 401 || status === 403) return "Сервис распознавания временно недоступен.";
+  return "Сервис распознавания временно недоступен.";
 };
 
 const callOpenRouterWithDetails = async (
@@ -388,7 +388,8 @@ const callOpenRouterWithDetails = async (
 ): Promise<OpenRouterResult> => {
   const key = getOpenRouterKey();
   if (!key) {
-    return { json: null, error: "Не найден ключ ИИ. Добавьте OPENROUTER_API_KEY в .env.local." };
+    console.error("[ai/assist] OPENROUTER_API_KEY is missing");
+    return { json: null, error: "Сервис распознавания временно недоступен." };
   }
 
   const userContent =
@@ -421,7 +422,13 @@ const callOpenRouterWithDetails = async (
   if (!response.ok) {
     const details = extractOpenRouterErrorMessage(rawText);
     const mapped = mapOpenRouterError(response.status);
-    return { json: null, error: details ? `${mapped} (${details})` : mapped };
+    console.error("[ai/assist] OpenRouter request failed", {
+      status: response.status,
+      details,
+      model,
+      hasImages: imageDataUrls.length > 0,
+    });
+    return { json: null, error: mapped };
   }
   let data: {
     choices?: Array<{ message?: { content?: string } }>;
@@ -431,7 +438,7 @@ const callOpenRouterWithDetails = async (
       choices?: Array<{ message?: { content?: string } }>;
     };
   } catch {
-    return { json: null, error: "Сервис ИИ вернул некорректный ответ." };
+    return { json: null, error: "Сервис распознавания вернул некорректный ответ." };
   }
   return { json: extractJsonBlock(data.choices?.[0]?.message?.content || ""), error: null };
 };
@@ -787,6 +794,13 @@ const toRecipeResponse = (
   issues,
 });
 
+const BASE_OCR_FALLBACK_ISSUE = "Используем базовое распознавание. Результат может быть неполным.";
+
+const normalizeImportIssues = (issues: string[]): string[] => {
+  const cleaned = issues.map((issue) => safeString(issue)).filter(Boolean);
+  return Array.from(new Set(cleaned));
+};
+
 const runFalOcrForRecipeImport = async (
   imageDataUrls: string[],
   knownProducts: string[]
@@ -796,7 +810,7 @@ const runFalOcrForRecipeImport = async (
     return {
       parsed: null,
       message: "",
-      issues: ["FAL_KEY не задан — использую запасной OCR."],
+      issues: [BASE_OCR_FALLBACK_ISSUE],
     };
   }
 
@@ -819,7 +833,7 @@ const runFalOcrForRecipeImport = async (
     return {
       parsed: null,
       message: "",
-      issues: [`fal OCR недоступен (${enqueue.status}) — использую запасной OCR.`],
+      issues: [BASE_OCR_FALLBACK_ISSUE, "Сервис распознавания фото временно недоступен. Используем базовый режим."],
     };
   }
 
@@ -851,7 +865,7 @@ const runFalOcrForRecipeImport = async (
           return {
             parsed: null,
             message: "",
-            issues: ["fal OCR сообщил ошибку. Использую запасной OCR."],
+            issues: [BASE_OCR_FALLBACK_ISSUE, "Не удалось распознать часть фото. Используем базовый режим."],
           };
         }
       }
@@ -864,7 +878,7 @@ const runFalOcrForRecipeImport = async (
     return {
       parsed: null,
       message: "",
-      issues: ["fal OCR не вернул читаемый текст. Использую запасной OCR."],
+      issues: [BASE_OCR_FALLBACK_ISSUE, "Текст с фото распознан не полностью. Продолжайте вручную при необходимости."],
     };
   }
 
@@ -899,7 +913,7 @@ const runFalOcrForRecipeImport = async (
   return {
     parsed: null,
     message: "",
-    issues: ["Не удалось структурировать OCR-текст. Использую запасной OCR."],
+    issues: [BASE_OCR_FALLBACK_ISSUE, "Не удалось полностью структурировать текст. Часть данных заполните вручную."],
   };
 };
 
@@ -1047,7 +1061,7 @@ export async function POST(request: Request) {
               falResult.parsed,
               "Импортированный рецепт по фото",
               falResult.message || "Импорт выполнен через OCR. Проверьте перед сохранением.",
-              falResult.issues
+              normalizeImportIssues(falResult.issues)
             )
           );
         }
@@ -1067,7 +1081,7 @@ export async function POST(request: Request) {
           VISION_MODEL
         );
         if (combinedResult.error) {
-          photoIssues.push(combinedResult.error);
+          photoIssues.push(BASE_OCR_FALLBACK_ISSUE);
         } else {
           if (combinedResult.json?.message) {
             const message = safeString((combinedResult.json as Record<string, unknown>).message);
@@ -1093,7 +1107,7 @@ export async function POST(request: Request) {
               VISION_MODEL
             );
             if (result.error) {
-              photoIssues.push(`Фото ${i + 1}: ${result.error}`);
+              photoIssues.push(BASE_OCR_FALLBACK_ISSUE);
               continue;
             }
             if (result.json?.message) {
@@ -1117,9 +1131,10 @@ export async function POST(request: Request) {
 
         if (!hasUsefulContent) {
           const fallback = fallbackImportedDraft(source, payload);
+          const fallbackIssues = normalizeImportIssues([...(fallback.issues || []), ...photoIssues]);
           return NextResponse.json({
             ...fallback,
-            issues: [...(fallback.issues || []), ...photoIssues],
+            issues: fallbackIssues,
           });
         }
 
@@ -1131,7 +1146,7 @@ export async function POST(request: Request) {
               (limitedPhotos.length > 1
                 ? "Импорт выполнен по нескольким фото. Проверьте порядок шагов."
                 : "Импорт выполнен. Проверьте перед сохранением."),
-            photoIssues
+            normalizeImportIssues(photoIssues)
           )
         );
       }

@@ -34,8 +34,46 @@ const FIRST_RECIPE_SUCCESS_PENDING_KEY = "recipes:first-success-pending";
 const FIRST_RECIPE_CREATE_FLOW_KEY = "recipes:first-create-flow";
 
 type IngredientHintsMap = Record<number, string[]>;
-type ImportMode = "manual" | "url" | "photo";
+type ImportMode = "url" | "photo";
 type ReviewHintsMap = Record<number, boolean>;
+type ImportStatus = "idle" | "loading" | "success" | "error";
+
+const SUPPORTED_IMPORT_DOMAINS = [
+  "russianfood.com",
+  "eda.ru",
+  "povarenok.ru",
+  "gotovim.ru",
+  "gastronom.ru",
+] as const;
+
+const normalizeImportUrl = (raw: string): string | null => {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  const withProtocol = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  try {
+    const parsed = new URL(withProtocol);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return null;
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+};
+
+const isSupportedImportUrl = (normalizedUrl: string): boolean => {
+  try {
+    const host = new URL(normalizedUrl).hostname.toLowerCase();
+    return SUPPORTED_IMPORT_DOMAINS.some((domain) => host === domain || host.endsWith(`.${domain}`));
+  } catch {
+    return false;
+  }
+};
+
+const hasImportedContent = (draft: ImportedRecipeDraft | null): boolean => {
+  if (!draft) return false;
+  if (draft.title?.trim()) return true;
+  if (draft.instructions?.trim()) return true;
+  return (draft.ingredients || []).some((item) => item.name?.trim().length > 0);
+};
 
 interface NewRecipeFormProps {
   initialFirstCreate?: boolean;
@@ -68,13 +106,16 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
   const [showImportTools, setShowImportTools] = useState(false);
   const [showAiTools, setShowAiTools] = useState(false);
   const [showAdvancedFields, setShowAdvancedFields] = useState(false);
-  const [importMode, setImportMode] = useState<ImportMode>("manual");
+  const [importMode, setImportMode] = useState<ImportMode>("url");
   const [importUrl, setImportUrl] = useState("");
   const [importPhotoDataUrls, setImportPhotoDataUrls] = useState<string[]>([]);
   const [importPhotoNames, setImportPhotoNames] = useState<string[]>([]);
   const [importIssues, setImportIssues] = useState<string[]>([]);
+  const [importStatus, setImportStatus] = useState<ImportStatus>("idle");
+  const [importStatusMessage, setImportStatusMessage] = useState("");
   const [reviewHints, setReviewHints] = useState<ReviewHintsMap>({});
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
+  const stepOneRef = useRef<HTMLDivElement | null>(null);
   const hasCoreInput = title.trim().length > 0 || ingredients.some((item) => item.name.trim().length > 0);
 
   const optimizeImageFile = (file: File): Promise<string> =>
@@ -291,25 +332,56 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
     if (tags.length > 0) setSelectedTags(tags);
   };
 
+  const scrollToStepOne = () => {
+    requestAnimationFrame(() => {
+      stepOneRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  };
+
   const handleImportByUrl = async () => {
-    const normalizedUrl = recipeLink.trim() || importUrl.trim();
+    const normalizedUrl = normalizeImportUrl(importUrl);
+    if (!importUrl.trim()) {
+      setImportStatus("error");
+      setImportStatusMessage("Вставьте ссылку на рецепт.");
+      setImportIssues([]);
+      return;
+    }
     if (!normalizedUrl) {
-      setAiMessage("Вставьте ссылку для импорта.");
+      setImportStatus("error");
+      setImportStatusMessage("Введите корректную ссылку.");
+      setImportIssues([]);
+      return;
+    }
+    if (!isSupportedImportUrl(normalizedUrl)) {
+      setImportStatus("error");
+      setImportStatusMessage("Эта ссылка не поддерживается.");
+      setImportIssues([]);
       return;
     }
 
     try {
       setAiAction("import_url");
+      setImportStatus("loading");
+      setImportStatusMessage("Импортирую...");
+      setImportIssues([]);
       const data = await importRecipeByUrl({
         url: normalizedUrl,
         knownProducts: productSuggestions,
       });
       applyImportedDraft(data.recipe);
       setImportIssues(Array.isArray(data.issues) ? data.issues : []);
-      setAiMessage(data.message || "Импорт выполнен. Проверьте поля перед сохранением.");
+      if (hasImportedContent(data.recipe)) {
+        setImportStatus("success");
+        setImportStatusMessage("Импортировано. Проверьте и сохраните.");
+        scrollToStepOne();
+      } else {
+        setImportStatus("error");
+        setImportStatusMessage("Не удалось импортировать рецепт по ссылке. Попробуйте другую ссылку или заполните вручную.");
+      }
     } catch (error) {
-      const text = error instanceof Error ? error.message : "Не удалось импортировать рецепт по ссылке.";
-      setAiMessage(text);
+      console.error("[recipes/new] import by URL failed", error);
+      setImportStatus("error");
+      setImportStatusMessage("Не удалось импортировать рецепт по ссылке. Попробуйте другую ссылку или заполните вручную.");
     } finally {
       setAiAction(null);
     }
@@ -320,15 +392,19 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
     if (files.length === 0) return;
     const imageFiles = files.filter((file) => file.type.startsWith("image/")).slice(0, MAX_IMPORT_PHOTOS);
     if (imageFiles.length === 0) {
-      setAiMessage("Выберите фото рецепта.");
+      setImportStatus("error");
+      setImportStatusMessage("Выберите фото рецепта.");
       return;
     }
 
-    setAiMessage("Готовлю фото для распознавания...");
+    setImportStatus("idle");
+    setImportStatusMessage("");
+    setImportIssues([]);
     Promise.all(imageFiles.map((file) => optimizeImageFile(file))).then((images) => {
       setImportPhotoDataUrls(images.filter(Boolean));
       setImportPhotoNames(imageFiles.map((file) => file.name));
-      setAiMessage(`Загружено фото: ${imageFiles.length}. Нажмите «Распознать».`);
+      setImportStatus("idle");
+      setImportStatusMessage(`Загружено фото: ${imageFiles.length}. Нажмите «Распознать».`);
     });
   };
 
@@ -337,37 +413,53 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
     if (files.length === 0) return;
     const imageFiles = files.filter((file) => file.type.startsWith("image/"));
     if (imageFiles.length === 0) {
-      setAiMessage("Не удалось получить фото с камеры.");
+      setImportStatus("error");
+      setImportStatusMessage("Не удалось получить фото с камеры.");
       return;
     }
 
-    setAiMessage("Готовлю фото с камеры...");
+    setImportStatus("idle");
+    setImportStatusMessage("");
+    setImportIssues([]);
     Promise.all(imageFiles.map((file) => optimizeImageFile(file))).then((images) => {
       setImportPhotoDataUrls((prev) => [...prev, ...images].slice(0, MAX_IMPORT_PHOTOS));
       setImportPhotoNames((prev) => [...prev, ...imageFiles.map((file) => file.name)].slice(0, MAX_IMPORT_PHOTOS));
-      setAiMessage("Фото с камеры добавлено. Нажмите «Распознать».");
+      setImportStatus("idle");
+      setImportStatusMessage("Фото с камеры добавлено. Нажмите «Распознать».");
     });
   };
 
   const handleImportByPhoto = async () => {
     if (importPhotoDataUrls.length === 0) {
-      setAiMessage("Сначала загрузите хотя бы одно фото рецепта.");
+      setImportStatus("error");
+      setImportStatusMessage("Сначала загрузите хотя бы одно фото рецепта.");
+      setImportIssues([]);
       return;
     }
 
     try {
       setAiAction("import_photo");
-      setAiMessage("Распознаю фото рецепта...");
+      setImportStatus("loading");
+      setImportStatusMessage("Распознаю...");
+      setImportIssues([]);
       const data = await importRecipeByPhoto({
         imageDataUrls: importPhotoDataUrls,
         knownProducts: productSuggestions,
       });
       applyImportedDraft(data.recipe);
       setImportIssues(Array.isArray(data.issues) ? data.issues : []);
-      setAiMessage(data.message || "Текст распознан. Проверьте поля перед сохранением.");
+      if (hasImportedContent(data.recipe)) {
+        setImportStatus("success");
+        setImportStatusMessage("Рецепт распознан, проверьте и сохраните.");
+        scrollToStepOne();
+      } else {
+        setImportStatus("error");
+        setImportStatusMessage("Не удалось распознать фото. Попробуйте другое фото или заполните вручную.");
+      }
     } catch (error) {
-      const text = error instanceof Error ? error.message : "Не удалось распознать фото рецепта.";
-      setAiMessage(text);
+      console.error("[recipes/new] import by photo failed", error);
+      setImportStatus("error");
+      setImportStatusMessage("Не удалось распознать фото. Попробуйте другое фото или заполните вручную.");
     } finally {
       setAiAction(null);
     }
@@ -520,13 +612,6 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
           <div style={{ marginTop: "10px" }}>
             <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "10px" }}>
               <button
-                className={`btn ${importMode === "manual" ? "btn-primary" : ""}`}
-                onClick={() => setImportMode("manual")}
-                type="button"
-              >
-                Вручную
-              </button>
-              <button
                 className={`btn ${importMode === "url" ? "btn-primary" : ""}`}
                 onClick={() => setImportMode("url")}
                 type="button"
@@ -552,7 +637,7 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
                   placeholder="Вставьте ссылку на рецепт"
                 />
                 <button className="btn btn-primary" onClick={handleImportByUrl} disabled={aiAction === "import_url"}>
-                  {aiAction === "import_url" ? "Импорт..." : "Импортировать"}
+                  {aiAction === "import_url" ? "Импортирую..." : "Импортировать"}
                 </button>
               </div>
             ) : null}
@@ -600,12 +685,24 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
                 <button className="btn btn-primary" onClick={handleImportByPhoto} disabled={aiAction === "import_photo"}>
                   {aiAction === "import_photo" ? "Распознаю..." : "Распознать"}
                 </button>
-                {aiAction === "import_photo" ? (
-                  <p className="muted" style={{ margin: 0 }}>
-                    Отто обрабатывает фото. Это может занять до 20 секунд.
-                  </p>
-                ) : null}
               </div>
+            ) : null}
+
+            {importStatusMessage ? (
+              <p
+                style={{
+                  marginTop: "8px",
+                  marginBottom: 0,
+                  color:
+                    importStatus === "error"
+                      ? "var(--danger)"
+                      : importStatus === "success"
+                        ? "var(--accent)"
+                        : "var(--text-secondary)",
+                }}
+              >
+                {importStatusMessage}
+              </p>
             ) : null}
 
             {importIssues.length > 0 ? (
@@ -624,7 +721,7 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
         ) : null}
       </div>
 
-      <div className="card" style={{ marginBottom: "14px", padding: "14px" }}>
+      <div ref={stepOneRef} className="card" style={{ marginBottom: "14px", padding: "14px" }}>
         <h3 style={{ margin: "0 0 10px 0" }}>Шаг 1. Основное</h3>
         <div style={{ marginBottom: "16px" }}>
           <label style={{ display: "block", marginBottom: "8px", fontWeight: "bold", fontSize: "18px" }}>Название</label>
