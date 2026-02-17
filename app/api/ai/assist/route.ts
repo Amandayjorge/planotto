@@ -35,6 +35,13 @@ const buildGeneratedRecipeImageUrl = (prompt: string): string => {
 };
 
 const UNITS = ["г", "кг", "мл", "л", "шт", "ч.л.", "ст.л.", "по вкусу"] as const;
+const SUPPORTED_IMPORT_DOMAINS = [
+  "russianfood.com",
+  "eda.ru",
+  "povarenok.ru",
+  "gotovim.ru",
+  "gastronom.ru",
+] as const;
 
 const safeString = (value: unknown): string => (typeof value === "string" ? value.trim() : "");
 const safeStringArray = (value: unknown): string[] =>
@@ -45,6 +52,270 @@ const safeImageDataUrlArray = (value: unknown): string[] =>
         .map((item) => safeString(item))
         .filter((item) => item.startsWith("data:image/"))
     : [];
+
+const normalizeImportUrl = (raw: unknown): string | null => {
+  const value = safeString(raw);
+  if (!value) return null;
+  const withProtocol = /^https?:\/\//i.test(value) ? value : `https://${value}`;
+  try {
+    const parsed = new URL(withProtocol);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return null;
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+};
+
+const isSupportedImportUrl = (url: string): boolean => {
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    return SUPPORTED_IMPORT_DOMAINS.some((domain) => host === domain || host.endsWith(`.${domain}`));
+  } catch {
+    return false;
+  }
+};
+
+const decodeHtmlEntities = (value: string): string =>
+  value
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&quot;/gi, "\"")
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">");
+
+const stripHtmlTags = (value: string): string =>
+  decodeHtmlEntities(value.replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim();
+
+const parseIsoDurationToMinutes = (value: unknown): number | null => {
+  const text = safeString(value).toUpperCase();
+  if (!text) return null;
+  const match = text.match(
+    /^P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?$/
+  );
+  if (!match) return null;
+  const days = Number(match[1] || 0);
+  const hours = Number(match[2] || 0);
+  const minutes = Number(match[3] || 0);
+  const seconds = Number(match[4] || 0);
+  const total = days * 24 * 60 + hours * 60 + minutes + (seconds >= 30 ? 1 : 0);
+  return total > 0 ? total : null;
+};
+
+const flattenInstructionTexts = (value: unknown, output: string[]): void => {
+  if (value == null) return;
+  if (typeof value === "string") {
+    const text = stripHtmlTags(value);
+    if (text) output.push(text);
+    return;
+  }
+  if (Array.isArray(value)) {
+    value.forEach((item) => flattenInstructionTexts(item, output));
+    return;
+  }
+  if (typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    const text = stripHtmlTags(safeString(record.text) || safeString(record.name));
+    if (text) output.push(text);
+    if ("itemListElement" in record) flattenInstructionTexts(record.itemListElement, output);
+    if ("steps" in record) flattenInstructionTexts(record.steps, output);
+  }
+};
+
+const normalizeInstructionText = (value: unknown): string => {
+  const chunks: string[] = [];
+  flattenInstructionTexts(value, chunks);
+  return Array.from(new Set(chunks)).join("\n").trim();
+};
+
+const normalizeIngredientLines = (value: unknown): string[] => {
+  const lines: string[] = [];
+  const pushLine = (line: string) => {
+    const text = stripHtmlTags(line);
+    if (text) lines.push(text);
+  };
+
+  if (typeof value === "string") {
+    value
+      .split(/\r?\n|;/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .forEach(pushLine);
+  } else if (Array.isArray(value)) {
+    value.forEach((item) => {
+      if (typeof item === "string") pushLine(item);
+      else if (item && typeof item === "object") {
+        const record = item as Record<string, unknown>;
+        const candidate = safeString(record.name) || safeString(record.text);
+        if (candidate) pushLine(candidate);
+      }
+    });
+  }
+
+  return Array.from(new Set(lines));
+};
+
+const toIngredientItems = (lines: string[]): ParsedRecipeLike["ingredients"] =>
+  lines
+    .map((line) => {
+      const cleanedName = cleanupIngredientName(line) || line;
+      const amount = parseAmountValue(line);
+      const unit = normalizeUnit(detectUnitFromText(line));
+      return {
+        name: cleanedName,
+        amount,
+        unit:
+          amount === 0 && (cleanedName.toLowerCase().includes("соль") || cleanedName.toLowerCase().includes("перец"))
+            ? "по вкусу"
+            : unit,
+        needsReview: true,
+      };
+    })
+    .filter((item) => item.name.length > 0);
+
+const pickImageUrl = (value: unknown): string => {
+  if (typeof value === "string") return safeString(value);
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const candidate = pickImageUrl(item);
+      if (candidate) return candidate;
+    }
+    return "";
+  }
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    return safeString(record.url) || safeString(record.contentUrl) || "";
+  }
+  return "";
+};
+
+const splitKeywordTags = (...values: unknown[]): string[] =>
+  values
+    .flatMap((value) => {
+      if (Array.isArray(value)) return value.map((item) => safeString(item));
+      return safeString(value).split(",");
+    })
+    .map((item) => stripHtmlTags(item).trim())
+    .filter(Boolean);
+
+const hasRecipeType = (value: unknown): boolean => {
+  if (typeof value === "string") return value.toLowerCase() === "recipe";
+  if (Array.isArray(value)) return value.some((item) => hasRecipeType(item));
+  return false;
+};
+
+const collectRecipeSchemas = (value: unknown, output: Record<string, unknown>[]): void => {
+  if (value == null) return;
+  if (Array.isArray(value)) {
+    value.forEach((item) => collectRecipeSchemas(item, output));
+    return;
+  }
+  if (typeof value !== "object") return;
+  const record = value as Record<string, unknown>;
+  if (hasRecipeType(record["@type"])) {
+    output.push(record);
+  }
+  Object.values(record).forEach((item) => collectRecipeSchemas(item, output));
+};
+
+const parseRecipeSchema = (schema: Record<string, unknown>): ParsedRecipeLike | null => {
+  const title = stripHtmlTags(safeString(schema.name) || safeString(schema.headline));
+  const shortDescription = stripHtmlTags(safeString(schema.description));
+  const instructions = normalizeInstructionText(schema.recipeInstructions);
+  const ingredientLines = normalizeIngredientLines(schema.recipeIngredient ?? schema.ingredients);
+  const ingredients = toIngredientItems(ingredientLines);
+  const servings = parseAmountValue(schema.recipeYield);
+  const totalTime =
+    parseIsoDurationToMinutes(schema.totalTime) ??
+    (() => {
+      const prep = parseIsoDurationToMinutes(schema.prepTime) ?? 0;
+      const cook = parseIsoDurationToMinutes(schema.cookTime) ?? 0;
+      return prep + cook > 0 ? prep + cook : null;
+    })();
+  const image = pickImageUrl(schema.image);
+  const tags = Array.from(new Set(splitKeywordTags(schema.keywords, schema.recipeCategory, schema.recipeCuisine)));
+
+  const hasContent = Boolean(title || shortDescription || instructions || ingredients.length > 0);
+  if (!hasContent) return null;
+
+  return {
+    title,
+    shortDescription,
+    instructions,
+    servings: servings > 0 ? servings : null,
+    timeMinutes: totalTime,
+    image,
+    tags,
+    ingredients,
+  };
+};
+
+const parseRecipeFromHtml = (html: string): ParsedRecipeLike | null => {
+  const scripts = Array.from(
+    html.matchAll(/<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)
+  );
+  const schemas: Record<string, unknown>[] = [];
+
+  for (const script of scripts) {
+    const raw = safeString(script[1]);
+    if (!raw) continue;
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      collectRecipeSchemas(parsed, schemas);
+    } catch {
+      // skip invalid JSON-LD blocks
+    }
+  }
+
+  const parsedRecipes = schemas
+    .map((schema) => parseRecipeSchema(schema))
+    .filter((item): item is ParsedRecipeLike => Boolean(item));
+  if (parsedRecipes.length === 0) return null;
+
+  parsedRecipes.sort((a, b) => {
+    const scoreA = a.ingredients.length + (a.instructions ? 6 : 0) + (a.title ? 3 : 0) + (a.image ? 1 : 0);
+    const scoreB = b.ingredients.length + (b.instructions ? 6 : 0) + (b.title ? 3 : 0) + (b.image ? 1 : 0);
+    return scoreB - scoreA;
+  });
+
+  return parsedRecipes[0] || null;
+};
+
+const htmlToText = (html: string): string =>
+  decodeHtmlEntities(
+    html
+      .replace(/<script[\s\S]*?<\/script>/gi, " ")
+      .replace(/<style[\s\S]*?<\/style>/gi, " ")
+      .replace(/<noscript[\s\S]*?<\/noscript>/gi, " ")
+      .replace(/<br\s*\/?>/gi, "\n")
+      .replace(/<\/(p|div|li|h1|h2|h3|h4|h5|h6)>/gi, "\n")
+      .replace(/<[^>]+>/g, " ")
+  )
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+
+const fetchRecipePageHtml = async (url: string): Promise<string | null> => {
+  try {
+    const response = await fetch(url, {
+      method: "GET",
+      redirect: "follow",
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        Accept: "text/html,application/xhtml+xml",
+      },
+      cache: "no-store",
+    });
+    if (!response.ok) return null;
+    const contentType = safeString(response.headers.get("content-type"));
+    if (contentType && !contentType.toLowerCase().includes("html")) return null;
+    return await response.text();
+  } catch (error) {
+    console.error("[ai/assist] failed to fetch recipe URL", { url, error });
+    return null;
+  }
+};
 
 const getFalKey = (): string => {
   const key = process.env.FAL_KEY || process.env.FAL_API_KEY || "";
@@ -1031,20 +1302,88 @@ export async function POST(request: Request) {
         source === "photo"
           ? (photoItems.length > 0 ? photoItems : singlePhoto ? [singlePhoto] : [])
           : [];
+      if (source === "url") {
+        const normalizedUrl = normalizeImportUrl(payload.url);
+        if (!normalizedUrl) {
+          return NextResponse.json({
+            recipe: null,
+            message: "Введите корректную ссылку на рецепт.",
+            issues: [],
+          });
+        }
+        if (!isSupportedImportUrl(normalizedUrl)) {
+          return NextResponse.json({
+            recipe: null,
+            message: "Эта ссылка не поддерживается.",
+            issues: [],
+          });
+        }
+
+        const html = await fetchRecipePageHtml(normalizedUrl);
+        if (!html) {
+          return NextResponse.json({
+            recipe: null,
+            message: "Не удалось открыть страницу рецепта. Проверьте ссылку и попробуйте снова.",
+            issues: [],
+          });
+        }
+
+        const parsedFromHtml = parseRecipeFromHtml(html);
+        if (parsedFromHtml) {
+          return NextResponse.json(
+            toRecipeResponse(
+              parsedFromHtml,
+              "Импортированный рецепт",
+              "Импортировано. Проверьте и сохраните.",
+              []
+            )
+          );
+        }
+
+        const system =
+          "Ты извлекаешь рецепт из текста страницы. Верни только JSON: " +
+          "{\"recipe\":{\"title\":\"\",\"shortDescription\":\"\",\"instructions\":\"\",\"servings\":null,\"timeMinutes\":null,\"image\":\"\",\"tags\":[],\"ingredients\":[{\"name\":\"\",\"amount\":0,\"unit\":\"шт\",\"needsReview\":true}]},\"message\":\"\",\"issues\":[]}." +
+          " Не выдумывай данные. Бери только то, что явно есть в тексте страницы.";
+        const ai = await callOpenRouter(
+          system,
+          JSON.stringify({
+            url: normalizedUrl,
+            pageText: htmlToText(html).slice(0, 18000),
+            knownProducts: safeStringArray(payload.knownProducts).slice(0, 200),
+          }),
+          [],
+          DEFAULT_MODEL
+        );
+        if (ai && ai.recipe && typeof ai.recipe === "object") {
+          const parsed = parseRecipeFromAi(ai.recipe);
+          if (parsed) {
+            return NextResponse.json(
+              toRecipeResponse(
+                parsed,
+                "Импортированный рецепт",
+                safeString(ai.message) || "Импортировано. Проверьте и сохраните.",
+                normalizeImportIssues(safeStringArray(ai.issues))
+              )
+            );
+          }
+        }
+
+        return NextResponse.json({
+          recipe: null,
+          message: "Не удалось автоматически извлечь рецепт по этой ссылке. Попробуйте другую ссылку или заполните вручную.",
+          issues: [],
+        });
+      }
+
       const system =
-        source === "photo"
-          ? "Ты OCR-помощник по рецептам на русском языке. " +
-            "На входе 1+ фото страниц одного рецепта. Читай их в порядке передачи и собери единый рецепт. " +
-            "Не придумывай ингредиенты и шаги, извлекай только то, что реально видно на фото. " +
-            "Верни только JSON: {\"recipe\":{\"title\":\"\",\"shortDescription\":\"\",\"instructions\":\"\",\"servings\":null,\"timeMinutes\":null,\"image\":\"\",\"tags\":[],\"ingredients\":[{\"name\":\"\",\"amount\":0,\"unit\":\"шт\",\"needsReview\":true}]},\"message\":\"\",\"issues\":[]}. " +
-            "Разделяй ингредиенты и шаги. Сохраняй порядок шагов и их нумерацию. " +
-            "Единицы используй только: г, кг, мл, л, шт, ч.л., ст.л., по вкусу. " +
-            "Если в строке диапазон (например 3-4), ставь среднее число и needsReview=true. " +
-            "В поле name возвращай название без количества и единицы. Если есть сомнения — добавляй пояснение в issues."
-          : "Ты извлекаешь рецепт по ссылке. Верни только JSON: {\"recipe\":{\"title\":\"\",\"shortDescription\":\"\",\"instructions\":\"\",\"servings\":null,\"timeMinutes\":null,\"image\":\"\",\"tags\":[],\"ingredients\":[{\"name\":\"\",\"amount\":0,\"unit\":\"шт\",\"needsReview\":true}]},\"message\":\"\",\"issues\":[]}. " +
-            "Разделяй ингредиенты и шаги. Единицы используй только: г, кг, мл, л, шт, ч.л., ст.л., по вкусу. " +
-            "Если в строке диапазон (например 3-4), ставь среднее число и needsReview=true. " +
-            "В поле name возвращай название без количества и единицы. Если не уверен — ставь needsReview=true и добавь это в issues.";
+        "Ты OCR-помощник по рецептам на русском языке. " +
+        "На входе 1+ фото страниц одного рецепта. Читай их в порядке передачи и собери единый рецепт. " +
+        "Не придумывай ингредиенты и шаги, извлекай только то, что реально видно на фото. " +
+        "Верни только JSON: {\"recipe\":{\"title\":\"\",\"shortDescription\":\"\",\"instructions\":\"\",\"servings\":null,\"timeMinutes\":null,\"image\":\"\",\"tags\":[],\"ingredients\":[{\"name\":\"\",\"amount\":0,\"unit\":\"шт\",\"needsReview\":true}]},\"message\":\"\",\"issues\":[]}. " +
+        "Разделяй ингредиенты и шаги. Сохраняй порядок шагов и их нумерацию. " +
+        "Единицы используй только: г, кг, мл, л, шт, ч.л., ст.л., по вкусу. " +
+        "Если в строке диапазон (например 3-4), ставь среднее число и needsReview=true. " +
+        "В поле name возвращай название без количества и единицы. Если есть сомнения — добавляй пояснение в issues.";
       if (source === "photo") {
         const limitedPhotos = effectivePhotos.slice(0, 5);
         const photoIssues: string[] = [];
@@ -1149,21 +1488,6 @@ export async function POST(request: Request) {
             normalizeImportIssues(photoIssues)
           )
         );
-      }
-
-      const ai = await callOpenRouter(system, JSON.stringify(payload), [], DEFAULT_MODEL);
-      if (ai && ai.recipe && typeof ai.recipe === "object") {
-        const parsed = parseRecipeFromAi(ai.recipe);
-        if (parsed) {
-          return NextResponse.json(
-            toRecipeResponse(
-              parsed,
-              "Импортированный рецепт",
-              safeString(ai.message) || "Импорт выполнен. Проверьте перед сохранением.",
-              safeStringArray(ai.issues)
-            )
-          );
-        }
       }
       return NextResponse.json(fallbackImportedDraft(source, payload));
     }
