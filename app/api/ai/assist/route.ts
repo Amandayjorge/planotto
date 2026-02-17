@@ -251,6 +251,12 @@ const parseRecipeSchema = (schema: Record<string, unknown>): ParsedRecipeLike | 
 };
 
 const parseRecipeFromHtml = (html: string): ParsedRecipeLike | null => {
+  const fallbackTitle =
+    extractMetaContent(html, "og:title") ||
+    extractMetaContent(html, "twitter:title") ||
+    extractTagText(html, "h1") ||
+    extractTagText(html, "title");
+
   const scripts = Array.from(
     html.matchAll(/<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)
   );
@@ -270,7 +276,10 @@ const parseRecipeFromHtml = (html: string): ParsedRecipeLike | null => {
   const parsedRecipes = schemas
     .map((schema) => parseRecipeSchema(schema))
     .filter((item): item is ParsedRecipeLike => Boolean(item));
-  if (parsedRecipes.length === 0) return null;
+  if (parsedRecipes.length === 0) {
+    const textParsed = parseRecipeFromText(htmlToText(html), fallbackTitle);
+    return textParsed;
+  }
 
   parsedRecipes.sort((a, b) => {
     const scoreA = a.ingredients.length + (a.instructions ? 6 : 0) + (a.title ? 3 : 0) + (a.image ? 1 : 0);
@@ -278,7 +287,12 @@ const parseRecipeFromHtml = (html: string): ParsedRecipeLike | null => {
     return scoreB - scoreA;
   });
 
-  return parsedRecipes[0] || null;
+  const best = parsedRecipes[0] || null;
+  if (!best) return parseRecipeFromText(htmlToText(html), fallbackTitle);
+  if (!best.title && fallbackTitle) {
+    return { ...best, title: fallbackTitle };
+  }
+  return best;
 };
 
 const htmlToText = (html: string): string =>
@@ -295,6 +309,93 @@ const htmlToText = (html: string): string =>
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 
+const extractMetaContent = (html: string, key: string): string => {
+  const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const regex = new RegExp(
+    `<meta[^>]+(?:property|name)=["']${escaped}["'][^>]*content=["']([^"']+)["'][^>]*>`,
+    "i"
+  );
+  const match = html.match(regex);
+  return match ? stripHtmlTags(match[1] || "") : "";
+};
+
+const extractTagText = (html: string, tag: string): string => {
+  const regex = new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, "i");
+  const match = html.match(regex);
+  return match ? stripHtmlTags(match[1] || "") : "";
+};
+
+const extractSectionFromLines = (
+  lines: string[],
+  startMarkers: string[],
+  endMarkers: string[],
+  maxLines = 80
+): string[] => {
+  const normalized = lines.map((line) => line.trim()).filter(Boolean);
+  const lower = normalized.map((line) => line.toLowerCase());
+  const startIndex = lower.findIndex((line) => startMarkers.some((marker) => line.includes(marker)));
+  if (startIndex < 0) return [];
+
+  const result: string[] = [];
+  for (let i = startIndex + 1; i < normalized.length && result.length < maxLines; i += 1) {
+    const line = normalized[i];
+    const lineLower = lower[i];
+    if (endMarkers.some((marker) => lineLower.includes(marker))) break;
+    if (line.length < 2) continue;
+    result.push(line);
+  }
+  return result;
+};
+
+const parseRecipeFromText = (text: string, fallbackTitle = ""): ParsedRecipeLike | null => {
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (lines.length === 0) return null;
+
+  const title = fallbackTitle || lines.find((line) => line.length > 3 && line.length < 120) || "";
+
+  const ingredientLines = extractSectionFromLines(
+    lines,
+    ["ингредиенты", "состав"],
+    [
+      "приготовление",
+      "способ приготовления",
+      "как приготовить",
+      "пошаговый",
+      "инструкция",
+      "калорийность",
+      "порции",
+      "видео",
+    ],
+    120
+  );
+
+  const instructionLines = extractSectionFromLines(
+    lines,
+    ["приготовление", "способ приготовления", "как приготовить", "пошаговый рецепт", "инструкция"],
+    ["подача", "совет", "калорийность", "комментарии", "похожие рецепты"],
+    180
+  );
+
+  const ingredients = toIngredientItems(ingredientLines);
+  const instructions = instructionLines.join("\n").trim();
+  const hasContent = Boolean(title || instructions || ingredients.length > 0);
+  if (!hasContent) return null;
+
+  return {
+    title: stripHtmlTags(title),
+    shortDescription: "",
+    instructions,
+    servings: null,
+    timeMinutes: null,
+    image: "",
+    tags: [],
+    ingredients,
+  };
+};
+
 const fetchRecipePageHtml = async (url: string): Promise<string | null> => {
   try {
     const response = await fetch(url, {
@@ -310,7 +411,18 @@ const fetchRecipePageHtml = async (url: string): Promise<string | null> => {
     if (!response.ok) return null;
     const contentType = safeString(response.headers.get("content-type"));
     if (contentType && !contentType.toLowerCase().includes("html")) return null;
-    return await response.text();
+    const buffer = await response.arrayBuffer();
+    const contentTypeLower = contentType.toLowerCase();
+    const charsetMatch = contentTypeLower.match(/charset=([a-z0-9_-]+)/i);
+    const charset = safeString(charsetMatch?.[1] || "");
+    try {
+      if (charset.includes("1251") || charset.includes("windows-1251") || charset.includes("cp1251")) {
+        return new TextDecoder("windows-1251").decode(buffer);
+      }
+      return new TextDecoder("utf-8").decode(buffer);
+    } catch {
+      return new TextDecoder().decode(buffer);
+    }
   } catch (error) {
     console.error("[ai/assist] failed to fetch recipe URL", { url, error });
     return null;
@@ -1179,6 +1291,15 @@ const runFalOcrForRecipeImport = async (
         issues: safeStringArray(ai.issues),
       };
     }
+  }
+
+  const textFallback = parseRecipeFromText(normalizedText, "Импортированный рецепт по фото");
+  if (textFallback) {
+    return {
+      parsed: textFallback,
+      message: "Рецепт распознан частично. Проверьте и сохраните.",
+      issues: [BASE_OCR_FALLBACK_ISSUE, "Часть полей могла распознаться неточно. Проверьте ингредиенты и шаги."],
+    };
   }
 
   return {
