@@ -348,6 +348,30 @@ const extractSectionFromLines = (
   return result;
 };
 
+const isLikelyIngredientLine = (line: string): boolean => {
+  const normalized = line.toLowerCase();
+  if (normalized.length < 3) return false;
+  if (normalized.includes("по вкусу")) return true;
+  if (/\d/.test(normalized) && /\b(г|гр|кг|мл|л|шт|ч\.л\.|ст\.л\.)\b/.test(normalized)) return true;
+  if (/^\d+[)\.\-:]\s+[а-яa-z]/i.test(normalized)) return false;
+  return false;
+};
+
+const extractFallbackIngredientLines = (lines: string[]): string[] => {
+  const candidates = lines.filter((line) => isLikelyIngredientLine(line));
+  if (candidates.length === 0) return [];
+  return Array.from(new Set(candidates)).slice(0, 60);
+};
+
+const extractFallbackInstructionLines = (lines: string[]): string[] => {
+  const numbered = lines.filter((line) => /^\d+[)\.\-:]\s+\S+/.test(line));
+  if (numbered.length > 0) return numbered.slice(0, 120);
+  const verbs = lines.filter((line) =>
+    /(нареж|обжар|добав|смеш|выпек|вари|туш|разогре|подавай|перемеш)/i.test(line)
+  );
+  return verbs.slice(0, 120);
+};
+
 const parseRecipeFromText = (text: string, fallbackTitle = ""): ParsedRecipeLike | null => {
   const lines = text
     .split(/\r?\n/)
@@ -372,6 +396,8 @@ const parseRecipeFromText = (text: string, fallbackTitle = ""): ParsedRecipeLike
     ],
     120
   );
+  const ingredientLinesResolved =
+    ingredientLines.length > 0 ? ingredientLines : extractFallbackIngredientLines(lines);
 
   const instructionLines = extractSectionFromLines(
     lines,
@@ -379,9 +405,11 @@ const parseRecipeFromText = (text: string, fallbackTitle = ""): ParsedRecipeLike
     ["подача", "совет", "калорийность", "комментарии", "похожие рецепты"],
     180
   );
+  const instructionLinesResolved =
+    instructionLines.length > 0 ? instructionLines : extractFallbackInstructionLines(lines);
 
-  const ingredients = toIngredientItems(ingredientLines);
-  const instructions = instructionLines.join("\n").trim();
+  const ingredients = toIngredientItems(ingredientLinesResolved);
+  const instructions = instructionLinesResolved.join("\n").trim();
   const hasContent = Boolean(title || instructions || ingredients.length > 0);
   if (!hasContent) return null;
 
