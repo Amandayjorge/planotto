@@ -245,20 +245,20 @@ const getWeekdayLong = (raw: string): string => {
   return date.toLocaleDateString("ru-RU", { weekday: "long" });
 };
 
-const normalizeMealLabel = (value: string): (typeof DEFAULT_MEALS)[number] | null => {
+const normalizeMealLabel = (value: string): (typeof DEFAULT_DAY_MEALS)[number] | null => {
   const normalized = value.trim().toLocaleLowerCase("ru-RU");
   if (!normalized) return null;
 
   if (/(\u0437\u0430\u0432\u0442\u0440\u0430\u043a|\u0443\u0442\u0440|\u043a\u0430\u0448\u0430|\u043e\u043c\u043b\u0435\u0442|\u043e\u043b\u0430\u0434|\u0431\u043b\u0438\u043d)/u.test(normalized)) {
-    return DEFAULT_MEALS.find((meal) => meal.toLocaleLowerCase("ru-RU").includes("\u0437\u0430\u0432\u0442\u0440\u0430\u043a")) || null;
+    return DEFAULT_DAY_MEALS.find((meal) => meal.toLocaleLowerCase("ru-RU").includes("\u0437\u0430\u0432\u0442\u0440\u0430\u043a")) || null;
   }
 
   if (/(\u043e\u0431\u0435\u0434|\u0441\u0443\u043f)/u.test(normalized)) {
-    return DEFAULT_MEALS.find((meal) => meal.toLocaleLowerCase("ru-RU").includes("\u043e\u0431\u0435\u0434")) || null;
+    return DEFAULT_DAY_MEALS.find((meal) => meal.toLocaleLowerCase("ru-RU").includes("\u043e\u0431\u0435\u0434")) || null;
   }
 
   if (/(\u0443\u0436\u0438\u043d|\u0432\u0435\u0447\u0435\u0440)/u.test(normalized)) {
-    return DEFAULT_MEALS.find((meal) => meal.toLocaleLowerCase("ru-RU").includes("\u0443\u0436\u0438\u043d")) || null;
+    return DEFAULT_DAY_MEALS.find((meal) => meal.toLocaleLowerCase("ru-RU").includes("\u0443\u0436\u0438\u043d")) || null;
   }
 
   return null;
@@ -267,7 +267,7 @@ const normalizeMealLabel = (value: string): (typeof DEFAULT_MEALS)[number] | nul
 const resolvePreferredMealForRecipe = (
   recipe: (Recipe & { tags?: string[] }) | undefined,
   mealFromQueryRaw: string
-): (typeof DEFAULT_MEALS)[number] => {
+): (typeof DEFAULT_DAY_MEALS)[number] => {
   const fromQuery = normalizeMealLabel(mealFromQueryRaw);
   if (fromQuery) return fromQuery;
 
@@ -283,7 +283,7 @@ const resolvePreferredMealForRecipe = (
   const fromRecipe = normalizeMealLabel(text);
   if (fromRecipe) return fromRecipe;
 
-  return DEFAULT_MEALS.find((meal) => meal.toLocaleLowerCase("ru-RU").includes("\u0443\u0436\u0438\u043d")) || DEFAULT_MEALS[0];
+  return DEFAULT_DAY_MEALS.find((meal) => meal.toLocaleLowerCase("ru-RU").includes("\u0443\u0436\u0438\u043d")) || DEFAULT_DAY_MEALS[0];
 };
 
 /**
@@ -764,6 +764,21 @@ function MenuPageContent() {
     [dayMealSlots, persistDayMealSlots]
   );
 
+  const [mealData, setMealData] = useState<Record<string, MenuItem[]>>({});
+  const removeDaySlotItems = useCallback(
+    (dayKey: string, slotLabel: string) => {
+      setMealData((prev) => {
+        const next = { ...prev };
+        const slotKey = `${dayKey}-${slotLabel}`;
+        if (next[slotKey]) {
+          delete next[slotKey];
+        }
+        return next;
+      });
+    },
+    [setMealData]
+  );
+
 
 
   const toggleDaySlot = useCallback(
@@ -800,20 +815,6 @@ function MenuPageContent() {
   const initialRangeStart = formatDate(getMonday(new Date()));
   const initialRangeEnd = formatDate(addDays(getMonday(new Date()), 6));
 
-  const [mealData, setMealData] = useState<Record<string, MenuItem[]>>({});
-  const removeDaySlotItems = useCallback(
-    (dayKey: string, slotLabel: string) => {
-      setMealData((prev) => {
-        const next = { ...prev };
-        const slotKey = `${dayKey}-${slotLabel}`;
-        if (next[slotKey]) {
-          delete next[slotKey];
-        }
-        return next;
-      });
-    },
-    [setMealData]
-  );
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [hasLoaded, setHasLoaded] = useState(false);
 
@@ -2090,7 +2091,7 @@ function MenuPageContent() {
             <label>Прием:</label>
             <select value={moveTargetMeal} onChange={(e) => setMoveTargetMeal(e.target.value)} className="move-dialog-select">
               <option value="">Выберите...</option>
-              {meals.map((meal) => (
+              {(moveTargetDay ? getDayMeals(moveTargetDay) : [...DEFAULT_DAY_MEALS]).map((meal) => (
                 <option key={meal} value={meal}>
                   {meal}
                 </option>
