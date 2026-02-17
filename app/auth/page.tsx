@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, type ChangeEvent, type Dispatch, type SetStateAction } from "react";
 import { useRouter } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
-import { getSupabaseClient, isSupabaseConfigured } from "../lib/supabaseClient";
+import { SUPABASE_UNAVAILABLE_MESSAGE, getSupabaseClient, isSupabaseConfigured } from "../lib/supabaseClient";
 import ProductAutocompleteInput from "../components/ProductAutocompleteInput";
 import { appendProductSuggestions, loadProductSuggestions } from "../lib/productSuggestions";
 
@@ -162,7 +162,7 @@ export default function AuthPage() {
 
   const handleSubmit = async () => {
     if (!isSupabaseConfigured()) {
-      setMessage("Supabase не настроен: добавьте NEXT_PUBLIC_SUPABASE_URL и NEXT_PUBLIC_SUPABASE_ANON_KEY.");
+      setMessage(SUPABASE_UNAVAILABLE_MESSAGE);
       return;
     }
     if (!email.trim() || !password.trim()) {

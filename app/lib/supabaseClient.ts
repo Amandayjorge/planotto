@@ -3,6 +3,7 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 let client: SupabaseClient | null = null;
+export const SUPABASE_UNAVAILABLE_MESSAGE = "Сервис авторизации временно недоступен. Попробуйте позже.";
 
 const hasValidSupabaseEnv = (url?: string, anonKey?: string): boolean => {
   const normalizedUrl = (url || "").trim();
@@ -30,9 +31,13 @@ export const getSupabaseClient = (): SupabaseClient => {
   const anonKey = (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "").trim();
 
   if (!hasValidSupabaseEnv(url, anonKey)) {
-    throw new Error(
-      "Supabase is not configured. Set valid NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY."
-    );
+    if (process.env.NODE_ENV === "development") {
+      // eslint-disable-next-line no-console
+      console.warn(
+        "Supabase is not configured. Set valid NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY."
+      );
+    }
+    throw new Error(SUPABASE_UNAVAILABLE_MESSAGE);
   }
 
   if (!client) {
