@@ -3593,6 +3593,33 @@ body {
   cursor: pointer;
 }
 
+.house-assistant__input-wrap {
+  position: relative;
+}
+
+.house-assistant__voice-btn {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: 1px solid rgba(122, 116, 109, 0.28);
+  background: var(--background-primary);
+  color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  cursor: pointer;
+  z-index: 1;
+}
+
+.house-assistant__voice-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .house-assistant__header {
   display: flex;
   align-items: center;
