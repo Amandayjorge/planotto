@@ -1026,11 +1026,26 @@ function RecipesPageContent() {
         <div style={{ display: "grid", gap: "12px" }}>
           {filteredRecipes.map((recipe) => {
             const isOwner = currentUserId && recipe.ownerId === currentUserId;
-            const canManage = viewMode === "mine";
             const cardImage = resolveRecipeCardImage(recipe);
             const duplicateExists =
               viewMode === "public" &&
               existingMineTitleSet.has(normalizeRecipeTitle(recipe.title || ""));
+            const isPublicSourceRecipe = viewMode === "public" && !isOwner;
+            const mainActionLabel = isPublicSourceRecipe
+              ? duplicateExists
+                ? "Уже добавлен"
+                : "Добавить"
+              : "Открыть";
+            const mainActionClassName = `btn ${
+              isPublicSourceRecipe && duplicateExists ? "recipes-card__add-btn--disabled" : "btn-primary"
+            }`;
+            const handleMainAction = () => {
+              if (isPublicSourceRecipe) {
+                handleCopyToMine(recipe.id);
+                return;
+              }
+              router.push(`/recipes/${recipe.id}`);
+            };
             return (
               <div key={recipe.id} className="card" style={{ textAlign: "left" }}>
                 <div style={{ display: "flex", gap: "16px", alignItems: "flex-start" }}>
@@ -1051,72 +1066,38 @@ function RecipesPageContent() {
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "flex-start" }}>
                       <h3 style={{ margin: 0 }}>{recipe.title}</h3>
-                      <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "8px", flexShrink: 0 }}>
-                        <span style={{ fontSize: "13px", color: "var(--text-secondary)" }}>Порции: {recipe.servings || 2}</span>
-                        {canManage ? (
-                          <div className="recipes-card__manage-actions">
-                            <button
-                              className="btn recipes-card__action-btn recipes-card__action-btn--edit"
-                              onClick={() => router.push(`/recipes/${recipe.id}`)}
-                            >
-                              Редактировать
-                            </button>
-                            <button
-                              className="btn recipes-card__action-btn recipes-card__action-btn--delete"
-                              onClick={() => handleDeleteRecipe(recipe)}
-                            >
-                              Удалить
-                            </button>
-                          </div>
-                        ) : null}
-                      </div>
+                      <span style={{ fontSize: "13px", color: "var(--text-secondary)", flexShrink: 0 }}>
+                        Порции: {recipe.servings || 2}
+                      </span>
                     </div>
 
                     {(() => {
                       const fallbackDescription = recipe.description || "";
                       const cardDescription = recipe.shortDescription || (looksLikeUrl(fallbackDescription) ? "" : fallbackDescription);
                       return cardDescription ? (
-                      <p style={{ margin: "8px 0 0 0", color: "var(--text-secondary)" }}>
-                        {cardDescription}
-                      </p>
+                        <p
+                          style={{
+                            margin: "8px 0 0 0",
+                            color: "var(--text-secondary)",
+                            display: "-webkit-box",
+                            WebkitLineClamp: 2,
+                            WebkitBoxOrient: "vertical",
+                            overflow: "hidden",
+                          }}
+                        >
+                          {cardDescription}
+                        </p>
                       ) : null;
                     })()}
 
-                    {(recipe.tags || recipe.categories || []).length > 0 && (
-                      <div style={{ marginTop: "8px", display: "flex", flexWrap: "wrap", gap: "6px" }}>
-                        {(recipe.tags || recipe.categories || []).map((tag) => (
-                          <span
-                            key={tag}
-                            style={{
-                              border: "1px solid var(--border-default)",
-                              borderRadius: "999px",
-                              padding: "3px 8px",
-                              fontSize: "12px",
-                              background: "var(--background-secondary)",
-                            }}
-                          >
-                            {tag}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-
                     <div style={{ marginTop: "10px", display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                      <button className="btn" onClick={() => router.push(`/recipes/${recipe.id}`)}>
-                        Открыть
+                      <button
+                        className={mainActionClassName}
+                        onClick={handleMainAction}
+                        disabled={isPublicSourceRecipe && duplicateExists}
+                      >
+                        {mainActionLabel}
                       </button>
-                      <span className="badge badge-neutral">
-                        {recipe.isTemplate ? "Шаблон" : recipe.visibility === "public" ? "Публичный" : "Приватный"}
-                      </span>
-                      {viewMode === "public" && !isOwner && (
-                        <button
-                          className={`btn recipes-card__add-btn ${duplicateExists ? "recipes-card__add-btn--disabled" : "btn-primary"}`}
-                          onClick={() => handleCopyToMine(recipe.id)}
-                          disabled={duplicateExists}
-                        >
-                          {duplicateExists ? "Уже в моих рецептах" : "Добавить в мои рецепты"}
-                        </button>
-                      )}
                     </div>
                   </div>
                 </div>
