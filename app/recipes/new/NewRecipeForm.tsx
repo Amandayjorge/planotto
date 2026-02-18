@@ -947,12 +947,12 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
                   disabled={!currentUserId}
                   style={{ width: "180px", marginTop: "8px" }}
                 >
-                  <option value="private">Private</option>
-                  <option value="public">Public</option>
+                  <option value="private">Приватный</option>
+                  <option value="public">Публичный</option>
                 </select>
                 {!currentUserId ? (
                   <span className="muted" style={{ display: "block", marginTop: "6px", fontWeight: 400 }}>
-                    Public доступен после входа.
+                    Публичный доступен после входа.
                   </span>
                 ) : null}
               </label>

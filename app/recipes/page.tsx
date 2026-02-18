@@ -1106,7 +1106,7 @@ function RecipesPageContent() {
                         Открыть
                       </button>
                       <span className="badge badge-neutral">
-                        {recipe.isTemplate ? "Шаблон" : recipe.visibility === "public" ? "Public" : "Private"}
+                        {recipe.isTemplate ? "Шаблон" : recipe.visibility === "public" ? "Публичный" : "Приватный"}
                       </span>
                       {viewMode === "public" && !isOwner && (
                         <button

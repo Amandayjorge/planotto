@@ -787,12 +787,12 @@ export default function RecipeDetailPage() {
                       disabled={!canChangeVisibility}
                       style={{ width: "180px", marginTop: "8px" }}
                     >
-                      <option value="private">Private</option>
-                      <option value="public">Public</option>
+                      <option value="private">Приватный</option>
+                      <option value="public">Публичный</option>
                     </select>
                     {!canChangeVisibility ? (
                       <span className="muted" style={{ display: "block", marginTop: "6px", fontWeight: 400 }}>
-                        Public доступен только для рецептов аккаунта.
+                        Публичный доступен только для рецептов аккаунта.
                       </span>
                     ) : null}
                   </label>
@@ -941,7 +941,7 @@ export default function RecipeDetailPage() {
           </p>
 
           <p style={{ marginBottom: "16px" }}>
-            <strong>Видимость:</strong> {recipe.visibility === "public" ? "Public" : "Private"}
+            <strong>Видимость:</strong> {recipe.visibility === "public" ? "Публичный" : "Приватный"}
           </p>
 
           {recipe.tags && recipe.tags.length > 0 && (

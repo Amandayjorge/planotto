@@ -161,7 +161,7 @@ const getLocalHelpResponse = (pathname: string, prompt: string): string => {
   const text = prompt.toLowerCase();
   if (pathname.startsWith("/recipes")) {
     if (text.includes("публич") || text.includes("приват")) {
-      return "Private виден только вам. Public виден другим. Перед публикацией проверьте источник и права.";
+      return "Приватный рецепт виден только вам. Публичный виден другим. Перед публикацией проверьте источник и права.";
     }
     return "В рецептах начните с названия и ингредиентов, затем добавьте теги и способ приготовления. Я могу подсказать шаги по вашему вопросу.";
   }
