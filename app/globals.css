@@ -3669,14 +3669,15 @@ body {
   .house-assistant--collapsed {
     left: auto;
     right: 10px;
-    bottom: calc(74px + env(safe-area-inset-bottom));
-    width: 48px;
-    height: 48px;
+    bottom: calc(78px + env(safe-area-inset-bottom));
+    width: 62px;
+    height: 62px;
     border-radius: 999px;
     padding: 0;
     justify-content: center;
     gap: 0;
     max-width: none;
+    box-shadow: 0 10px 24px rgba(59, 49, 42, 0.22);
   }
 
   .house-assistant--collapsed span {
@@ -3684,7 +3685,8 @@ body {
   }
 
   .house-assistant--collapsed .house-assistant__avatar {
-    width: 32px;
-    height: 32px;
+    width: 42px;
+    height: 42px;
+    border-radius: 999px;
   }
 }
