@@ -570,7 +570,11 @@ export default function RecipeDetailPage() {
         )}
 
         {showReportButton && !isEditing && (
-          <button className="btn" onClick={() => setShowReportForm((prev) => !prev)}>
+          <button
+            type="button"
+            className="recipes-report-link"
+            onClick={() => setShowReportForm((prev) => !prev)}
+          >
             Пожаловаться
           </button>
         )}

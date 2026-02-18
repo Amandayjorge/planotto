@@ -3430,6 +3430,28 @@ body {
   cursor: not-allowed;
 }
 
+.recipes-report-link {
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: 13px;
+  line-height: 1.2;
+  padding: 4px 2px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.recipes-report-link:hover {
+  color: var(--text-secondary);
+}
+
+.recipes-report-link:focus-visible {
+  outline: 2px solid rgba(135, 152, 116, 0.35);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
 .recipes-account-chip {
   border: 1px solid var(--border-default);
   background: var(--background-primary);
