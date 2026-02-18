@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type TouchEvent } from "react";
 import { usePathname } from "next/navigation";
 import Image from "next/image";
 import {
@@ -263,6 +263,8 @@ export default function HouseAssistant() {
   const [homeQuickAskMode, setHomeQuickAskMode] = useState(false);
   const [voiceListening, setVoiceListening] = useState(false);
   const [voiceReplyEnabled, setVoiceReplyEnabled] = useState(false);
+  const [sheetDragOffset, setSheetDragOffset] = useState(0);
+  const [sheetDragging, setSheetDragging] = useState(false);
   const [lastSubmittedPrompt, setLastSubmittedPrompt] = useState("");
   const [hintsDisabled, setHintsDisabled] = useState(false);
   const [welcomeSeen, setWelcomeSeen] = useState(true);
@@ -275,6 +277,7 @@ export default function HouseAssistant() {
   const menuRequestTimeoutRef = useRef<number | null>(null);
   const menuStatusReceivedRef = useRef(false);
   const promptTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const sheetTouchStartYRef = useRef<number | null>(null);
   const isMenuPage = pathname.startsWith("/menu");
   const pageHint = useMemo(() => getPageHint(pathname), [pathname]);
   const speechRecognitionCtor = useMemo(() => {
@@ -286,6 +289,12 @@ export default function HouseAssistant() {
     return typedWindow.SpeechRecognition || typedWindow.webkitSpeechRecognition;
   }, []);
   const voiceSupported = Boolean(speechRecognitionCtor);
+
+  const resetSheetDrag = () => {
+    sheetTouchStartYRef.current = null;
+    setSheetDragging(false);
+    setSheetDragOffset(0);
+  };
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -687,6 +696,7 @@ export default function HouseAssistant() {
     if (collapsed) {
       setHomeQuickAskMode(false);
       setShowFeedbackForm(false);
+      resetSheetDrag();
     }
   }, [collapsed]);
 
@@ -695,6 +705,39 @@ export default function HouseAssistant() {
       setHomeQuickAskMode(false);
     }
   }, [pathname]);
+
+  useEffect(() => {
+    if (!isMobileViewport) {
+      resetSheetDrag();
+    }
+  }, [isMobileViewport]);
+
+  const handleSheetTouchStart = (event: TouchEvent<HTMLElement>) => {
+    if (!isMobileViewport) return;
+    sheetTouchStartYRef.current = event.touches[0]?.clientY ?? null;
+    setSheetDragging(true);
+  };
+
+  const handleSheetTouchMove = (event: TouchEvent<HTMLElement>) => {
+    if (!isMobileViewport) return;
+    const startY = sheetTouchStartYRef.current;
+    if (startY === null) return;
+    const currentY = event.touches[0]?.clientY ?? startY;
+    const nextOffset = Math.max(0, currentY - startY);
+    setSheetDragOffset(Math.min(nextOffset, 220));
+    if (nextOffset > 0) {
+      event.preventDefault();
+    }
+  };
+
+  const handleSheetTouchEnd = () => {
+    if (!isMobileViewport) return;
+    const shouldClose = sheetDragOffset >= 90;
+    resetSheetDrag();
+    if (shouldClose) {
+      setCollapsed(true);
+    }
+  };
 
   if (collapsed) {
     return (
@@ -726,7 +769,28 @@ export default function HouseAssistant() {
           onClick={() => setCollapsed(true)}
         />
       ) : null}
-      <aside className={`house-assistant ${shouldPreferCollapsed ? "house-assistant--subtle" : ""}`} aria-live="polite">
+      <aside
+        className={`house-assistant ${shouldPreferCollapsed ? "house-assistant--subtle" : ""} ${isMobileViewport ? "house-assistant--mobile-sheet" : ""} ${sheetDragging ? "house-assistant--dragging" : ""}`}
+        aria-live="polite"
+        style={
+          isMobileViewport
+            ? {
+                transform: `translateY(${sheetDragOffset}px)`,
+                transition: sheetDragging ? "none" : "transform 0.2s ease",
+              }
+            : undefined
+        }
+      >
+        {isMobileViewport ? (
+          <div
+            className="house-assistant__drag-handle"
+            onTouchStart={handleSheetTouchStart}
+            onTouchMove={handleSheetTouchMove}
+            onTouchEnd={handleSheetTouchEnd}
+            onTouchCancel={handleSheetTouchEnd}
+            aria-hidden="true"
+          />
+        ) : null}
         <div className="house-assistant__header">
           <Image
             src={avatarSrc}

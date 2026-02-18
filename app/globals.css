@@ -3556,6 +3556,7 @@ body {
   background: var(--background-primary);
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.14);
   padding: 12px;
+  overscroll-behavior: contain;
 }
 
 .house-assistant--subtle {
@@ -3578,7 +3579,7 @@ body {
   position: fixed;
   inset: 0;
   border: 0;
-  background: rgba(44, 36, 31, 0.3);
+  background: rgba(44, 36, 31, 0.44);
   z-index: 10019;
 }
 
@@ -3625,6 +3626,14 @@ body {
   align-items: center;
   gap: 10px;
   margin-bottom: 8px;
+}
+
+.house-assistant__drag-handle {
+  width: 42px;
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(118, 104, 93, 0.34);
+  margin: 0 auto 10px;
 }
 
 .house-assistant__avatar {
@@ -3689,8 +3698,17 @@ body {
     left: 10px;
     width: auto;
     bottom: calc(12px + env(safe-area-inset-bottom));
-    max-height: 60vh;
+    max-height: min(62vh, 520px);
     padding: 10px;
+    border-radius: 16px;
+  }
+
+  .house-assistant--mobile-sheet {
+    touch-action: pan-y;
+  }
+
+  .house-assistant--dragging {
+    user-select: none;
   }
 
   .house-assistant--collapsed {
