@@ -325,6 +325,33 @@ const isMissingRelationError = (error: unknown, relationName: string): boolean =
   return typed.code === "42P01" || message.includes(relation) || message.includes("does not exist");
 };
 
+const isDuplicateKeyError = (error: unknown): boolean => {
+  if (!error || typeof error !== "object") return false;
+  const typed = error as PostgrestLikeError;
+  const message = String(typed.message || "").toLowerCase();
+  return typed.code === "23505" || message.includes("duplicate key");
+};
+
+const normalizeTitle = (value: string): string => value.trim().toLocaleLowerCase("ru-RU");
+
+const findOwnedRecipeByTitle = async (ownerId: string, title: string): Promise<RecipeModel | null> => {
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase
+    .from("recipes")
+    .select(RECIPE_COLUMNS)
+    .eq("owner_id", ownerId)
+    .limit(100);
+
+  if (error) {
+    throw error;
+  }
+
+  const rows = Array.isArray(data) ? (data as RecipeRow[]) : [];
+  const targetTitle = normalizeTitle(title);
+  const matched = rows.find((row) => normalizeTitle(row.title || "") === targetTitle);
+  return matched ? mapRow(matched) : null;
+};
+
 const normalizeIngredients = (value: unknown): Ingredient[] => {
   if (!Array.isArray(value)) return [];
   return value
@@ -664,24 +691,30 @@ export const copyPublicRecipeToMine = async (ownerId: string, recipeId: string):
   const seedTemplate = getSeedTemplateRecipeById(recipeId);
 
   if (seedTemplate) {
+    const payload = {
+      owner_id: ownerId,
+      title: seedTemplate.title,
+      short_description: seedTemplate.shortDescription || "",
+      description: seedTemplate.description || "",
+      instructions: seedTemplate.instructions || "",
+      ingredients: normalizeIngredients(seedTemplate.ingredients),
+      servings: seedTemplate.servings && seedTemplate.servings > 0 ? seedTemplate.servings : 2,
+      image: seedTemplate.image || "",
+      categories: [...(seedTemplate.tags || seedTemplate.categories || [])],
+      visibility: "private" as RecipeVisibility,
+    };
+
     const { data, error } = await supabase
       .from("recipes")
-      .insert({
-        owner_id: ownerId,
-        title: seedTemplate.title,
-        short_description: seedTemplate.shortDescription || "",
-        description: seedTemplate.description || "",
-        instructions: seedTemplate.instructions || "",
-        ingredients: normalizeIngredients(seedTemplate.ingredients),
-        servings: seedTemplate.servings && seedTemplate.servings > 0 ? seedTemplate.servings : 2,
-        image: seedTemplate.image || "",
-        categories: [...(seedTemplate.tags || seedTemplate.categories || [])],
-        visibility: "private",
-      })
+      .insert(payload)
       .select(RECIPE_COLUMNS)
       .single();
 
     if (error) {
+      if (isDuplicateKeyError(error)) {
+        const existing = await findOwnedRecipeByTitle(ownerId, payload.title);
+        if (existing) return existing;
+      }
       throw error;
     }
 
@@ -700,24 +733,30 @@ export const copyPublicRecipeToMine = async (ownerId: string, recipeId: string):
   }
 
   const source = sourceData as RecipeRow;
+  const payload = {
+    owner_id: ownerId,
+    title: source.title,
+    short_description: source.short_description || "",
+    description: source.description || "",
+    instructions: source.instructions || "",
+    ingredients: normalizeIngredients(source.ingredients),
+    servings: source.servings && source.servings > 0 ? source.servings : 2,
+    image: source.image || "",
+    categories: Array.isArray(source.categories) ? source.categories : [],
+    visibility: "private" as RecipeVisibility,
+  };
+
   const { data, error } = await supabase
     .from("recipes")
-    .insert({
-      owner_id: ownerId,
-      title: source.title,
-      short_description: source.short_description || "",
-      description: source.description || "",
-      instructions: source.instructions || "",
-      ingredients: normalizeIngredients(source.ingredients),
-      servings: source.servings && source.servings > 0 ? source.servings : 2,
-      image: source.image || "",
-      categories: Array.isArray(source.categories) ? source.categories : [],
-      visibility: "private",
-    })
+    .insert(payload)
     .select(RECIPE_COLUMNS)
     .single();
 
   if (error) {
+    if (isDuplicateKeyError(error)) {
+      const existing = await findOwnedRecipeByTitle(ownerId, payload.title);
+      if (existing) return existing;
+    }
     throw error;
   }
 
