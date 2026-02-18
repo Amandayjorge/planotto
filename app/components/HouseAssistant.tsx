@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
+import Image from "next/image";
 import {
   getAssistantAvatarChangedEventName,
   loadAssistantAvatarSetting,
@@ -10,6 +11,7 @@ import { getAssistantHelp, getMenuSuggestion } from "../lib/aiAssistantClient";
 
 const MENU_AI_REQUEST_EVENT = "planotto:request-menu-ai";
 const MENU_AI_STATUS_EVENT = "planotto:menu-ai-status";
+const MOBILE_MENU_TOGGLE_EVENT = "planotto:mobile-menu-toggle";
 const PLANOTTO_HINTS_DISABLED_KEY = "planottoHintsDisabled";
 const PLANOTTO_WELCOME_SEEN_KEY = "planottoWelcomeSeen";
 const PLANOTTO_PAGE_HINTS_KEY = "planottoPageHintsSeen";
@@ -19,14 +21,23 @@ type SpeechRecognitionResultEventLike = {
   results?: ArrayLike<ArrayLike<{ transcript?: string }>>;
 };
 
+type SpeechRecognitionErrorEventLike = {
+  error?: string;
+};
+
 type SpeechRecognitionLike = {
   lang: string;
   interimResults: boolean;
   maxAlternatives: number;
+  continuous?: boolean;
   onresult: ((event: SpeechRecognitionResultEventLike) => void) | null;
-  onerror: (() => void) | null;
+  onerror: ((event: SpeechRecognitionErrorEventLike) => void) | null;
+  onstart?: (() => void) | null;
+  onnomatch?: (() => void) | null;
   onend: (() => void) | null;
   start: () => void;
+  stop?: () => void;
+  abort?: () => void;
 };
 
 type SpeechRecognitionCtor = new () => SpeechRecognitionLike;
@@ -104,7 +115,49 @@ const getPromptPlaceholder = (pathname: string): string => {
   return "Например: с чего начать и как лучше настроить сервис?";
 };
 
+const isCookingPrompt = (prompt: string): boolean => {
+  const text = prompt.toLowerCase().trim();
+  if (!text) return false;
+  return (
+    text.includes("как приготовить") ||
+    text.includes("как сделать") ||
+    text.includes("как испечь") ||
+    text.includes("как сварить") ||
+    text.includes("как пожарить") ||
+    text.includes("как запечь") ||
+    text.includes("рецепт") ||
+    text.includes("омлет") ||
+    text.includes("яичниц") ||
+    text.includes("суп") ||
+    text.includes("пирож")
+  );
+};
+
+const buildLocalCookingResponse = (prompt: string): string => {
+  const text = prompt.toLowerCase();
+  if (text.includes("пирожное картошка") || text.includes("картошка пирожное")) {
+    return [
+      "Пирожное «Картошка»:",
+      "1. Измельчите 300 г печенья в крошку.",
+      "2. Добавьте 3 ст. л. какао, 120 г сгущенки и 80 г мягкого сливочного масла.",
+      "3. Перемешайте до плотной массы, при необходимости добавьте 1-2 ст. л. молока.",
+      "4. Сформируйте 8-10 пирожных, обваляйте в какао.",
+      "5. Охладите 30-40 минут.",
+    ].join("\n");
+  }
+  if (text.includes("омлет")) {
+    return "Омлет: 2-3 яйца + 2-3 ст. л. молока + соль, взбить, вылить на сковороду с маслом, готовить 4-6 минут под крышкой на слабом огне.";
+  }
+  if (text.includes("яичниц")) {
+    return "Яичница: разогрейте сковороду, добавьте немного масла, вбейте яйца, посолите и готовьте 2-4 минуты на среднем огне.";
+  }
+  return "Напишите блюдо и продукты, которые есть дома, и я дам короткий пошаговый рецепт с пропорциями.";
+};
+
 const getLocalHelpResponse = (pathname: string, prompt: string): string => {
+  if (isCookingPrompt(prompt)) {
+    return buildLocalCookingResponse(prompt);
+  }
   const text = prompt.toLowerCase();
   if (pathname.startsWith("/recipes")) {
     if (text.includes("публич") || text.includes("приват")) {
@@ -137,15 +190,68 @@ const getStartActionMessage = (pathname: string): string => {
   return "Отлично! Откройте раздел «Меню» или «Рецепты», и я подскажу первый шаг.";
 };
 
+const isMenuGenerationPrompt = (prompt: string): boolean => {
+  const text = prompt.toLowerCase().trim();
+  if (!text) return false;
+
+  const generationHints = [
+    "составь меню",
+    "сгенерируй меню",
+    "сделай меню",
+    "распиши меню",
+    "подбери меню",
+    "план питания",
+    "меню на",
+  ];
+
+  return generationHints.some((hint) => text.includes(hint));
+};
+
+const canUseVoiceRecognition = (): boolean => {
+  if (typeof window === "undefined") return false;
+  if (window.isSecureContext) return true;
+  const host = window.location.hostname;
+  return host === "localhost" || host === "127.0.0.1" || host === "::1";
+};
+
+const isLikelyInAppBrowser = (): boolean => {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent || "";
+  return /Instagram|FBAN|FBAV|Line|MiuiBrowser|YaApp_Android|wv|Telegram/i.test(ua);
+};
+
+const getVoiceRecognitionErrorText = (errorCode: string): string => {
+  const code = errorCode.trim().toLowerCase();
+  if (code === "not-allowed" || code === "service-not-allowed") {
+    return "Нет доступа к микрофону. Разрешите микрофон в настройках браузера и обновите страницу.";
+  }
+  if (code === "audio-capture") {
+    return "Микрофон не найден. Проверьте подключение и права доступа.";
+  }
+  if (code === "network") {
+    return "Проблема сети при распознавании речи. Проверьте интернет и попробуйте снова.";
+  }
+  if (code === "no-speech") {
+    return "Не услышал речь. Говорите чуть громче и поднесите телефон ближе.";
+  }
+  if (code === "language-not-supported") {
+    return "Этот браузер не поддерживает выбранный язык распознавания.";
+  }
+  if (code === "aborted") {
+    return "Распознавание остановлено. Попробуйте еще раз.";
+  }
+  return "Не удалось распознать голос. Попробуйте еще раз.";
+};
+
 export default function HouseAssistant() {
   const pathname = usePathname();
-  const router = useRouter();
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
   const shouldPreferCollapsed =
+    isMobileViewport ||
     pathname === "/" ||
     pathname.startsWith("/recipes/new") ||
     (pathname.startsWith("/recipes/") && pathname !== "/recipes");
   const [collapsed, setCollapsed] = useState(() => shouldPreferCollapsed);
-  const [isMobileViewport, setIsMobileViewport] = useState(false);
   const [avatarSrc, setAvatarSrc] = useState<string>(() => loadAssistantAvatarSetting());
   const [menuAiMessage, setMenuAiMessage] = useState("");
   const [menuAiLoading, setMenuAiLoading] = useState(false);
@@ -154,6 +260,7 @@ export default function HouseAssistant() {
   const [feedbackType, setFeedbackType] = useState<"recipes_missing" | "not_working" | "idea">("recipes_missing");
   const [feedbackText, setFeedbackText] = useState("");
   const [feedbackStatus, setFeedbackStatus] = useState("");
+  const [homeQuickAskMode, setHomeQuickAskMode] = useState(false);
   const [voiceListening, setVoiceListening] = useState(false);
   const [voiceReplyEnabled, setVoiceReplyEnabled] = useState(false);
   const [lastSubmittedPrompt, setLastSubmittedPrompt] = useState("");
@@ -162,6 +269,9 @@ export default function HouseAssistant() {
   const [seenPageHints, setSeenPageHints] = useState<Record<string, boolean>>({});
   const [hintsHydrated, setHintsHydrated] = useState(false);
   const pendingVoiceReplyRef = useRef(false);
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const voiceResultReceivedRef = useRef(false);
+  const voiceErrorHandledRef = useRef(false);
   const menuRequestTimeoutRef = useRef<number | null>(null);
   const menuStatusReceivedRef = useRef(false);
   const promptTextareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -179,11 +289,11 @@ export default function HouseAssistant() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const media = window.matchMedia("(max-width: 720px)");
-    const sync = () => setIsMobileViewport(media.matches);
-    sync();
-    media.addEventListener("change", sync);
-    return () => media.removeEventListener("change", sync);
+    const media = window.matchMedia("(max-width: 768px)");
+    const syncViewport = () => setIsMobileViewport(media.matches);
+    syncViewport();
+    media.addEventListener("change", syncViewport);
+    return () => media.removeEventListener("change", syncViewport);
   }, []);
 
   useEffect(() => {
@@ -239,14 +349,36 @@ export default function HouseAssistant() {
       }
     };
 
+    const onMobileMenuToggle = (event: Event) => {
+      const detail = (event as CustomEvent<{ open?: boolean }>).detail;
+      if (!detail?.open) return;
+      setCollapsed(true);
+      setShowFeedbackForm(false);
+    };
+
     window.addEventListener("storage", onChanged);
     window.addEventListener(getAssistantAvatarChangedEventName(), onChanged as EventListener);
     window.addEventListener(MENU_AI_STATUS_EVENT, onMenuAiStatus as EventListener);
+    window.addEventListener(MOBILE_MENU_TOGGLE_EVENT, onMobileMenuToggle as EventListener);
     return () => {
       clearMenuTimeout();
       window.removeEventListener("storage", onChanged);
       window.removeEventListener(getAssistantAvatarChangedEventName(), onChanged as EventListener);
       window.removeEventListener(MENU_AI_STATUS_EVENT, onMenuAiStatus as EventListener);
+      window.removeEventListener(MOBILE_MENU_TOGGLE_EVENT, onMobileMenuToggle as EventListener);
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      try {
+        recognitionRef.current?.stop?.();
+        recognitionRef.current?.abort?.();
+      } catch {
+        // ignore cleanup errors
+      } finally {
+        recognitionRef.current = null;
+      }
     };
   }, []);
 
@@ -282,7 +414,7 @@ export default function HouseAssistant() {
     setLastSubmittedPrompt(prompt);
     setMenuAiLoading(true);
     setMenuAiMessage("Вопрос отправлен. Жду ответ...");
-    if (isMenuPage) {
+    if (isMenuPage && isMenuGenerationPrompt(prompt)) {
       if (menuRequestTimeoutRef.current !== null) {
         window.clearTimeout(menuRequestTimeoutRef.current);
       }
@@ -315,7 +447,17 @@ export default function HouseAssistant() {
   };
 
   const handleVoiceAsk = () => {
+    if (!canUseVoiceRecognition()) {
+      setMenuAiMessage("Голосовой ввод работает только в защищенном режиме (HTTPS или localhost).");
+      return;
+    }
     if (!voiceSupported) {
+      if (isLikelyInAppBrowser()) {
+        setMenuAiMessage(
+          "Встроенный браузер ограничивает микрофон. Откройте сайт в Safari/Chrome и попробуйте снова."
+        );
+        return;
+      }
       setMenuAiMessage("Голосовой ввод не поддерживается в этом браузере.");
       return;
     }
@@ -325,15 +467,31 @@ export default function HouseAssistant() {
       return;
     }
 
+    try {
+      recognitionRef.current?.stop?.();
+      recognitionRef.current?.abort?.();
+    } catch {
+      // ignore restart errors
+    }
+
     const recognition = new speechRecognitionCtor();
+    recognitionRef.current = recognition;
     recognition.lang = "ru-RU";
     recognition.interimResults = false;
     recognition.maxAlternatives = 1;
+    recognition.continuous = false;
+    voiceResultReceivedRef.current = false;
+    voiceErrorHandledRef.current = false;
 
     setVoiceListening(true);
     setMenuAiMessage("Слушаю вас...");
 
+    recognition.onstart = () => {
+      setMenuAiMessage("Слушаю вас...");
+    };
+
     recognition.onresult = (event: SpeechRecognitionResultEventLike) => {
+      voiceResultReceivedRef.current = true;
       const transcript = String(event?.results?.[0]?.[0]?.transcript || "").trim();
       if (!transcript) {
         setMenuAiMessage("Не удалось распознать фразу. Попробуйте еще раз.");
@@ -344,17 +502,41 @@ export default function HouseAssistant() {
       handleAskAssistant(transcript, true);
     };
 
-    recognition.onerror = () => {
-      setMenuAiMessage("Не удалось распознать голос. Попробуйте еще раз.");
+    recognition.onnomatch = () => {
+      voiceErrorHandledRef.current = true;
+      setMenuAiMessage("Не удалось распознать фразу. Попробуйте еще раз.");
+      pendingVoiceReplyRef.current = false;
+      setVoiceListening(false);
+    };
+
+    recognition.onerror = (event: SpeechRecognitionErrorEventLike) => {
+      voiceErrorHandledRef.current = true;
+      const code = String(event?.error || "");
+      if ((code === "not-allowed" || code === "service-not-allowed") && isLikelyInAppBrowser()) {
+        setMenuAiMessage("Браузер внутри мессенджера блокирует микрофон. Откройте сайт в Safari/Chrome.");
+      } else {
+        setMenuAiMessage(getVoiceRecognitionErrorText(code));
+      }
       pendingVoiceReplyRef.current = false;
       setVoiceListening(false);
     };
 
     recognition.onend = () => {
+      recognitionRef.current = null;
+      if (!voiceResultReceivedRef.current && !voiceErrorHandledRef.current) {
+        setMenuAiMessage("Не удалось распознать фразу. Попробуйте еще раз.");
+        pendingVoiceReplyRef.current = false;
+      }
       setVoiceListening(false);
     };
 
-    recognition.start();
+    try {
+      recognition.start();
+    } catch {
+      recognitionRef.current = null;
+      setVoiceListening(false);
+      setMenuAiMessage("Не удалось запустить микрофон. Проверьте разрешение браузера.");
+    }
   };
 
   useEffect(() => {
@@ -484,6 +666,11 @@ export default function HouseAssistant() {
   const showWelcomeHint = hintsHydrated && !hintsDisabled && !welcomeSeen;
   const showPageHint =
     hintsHydrated && !hintsDisabled && welcomeSeen && Boolean(pageHint) && !seenPageHints[pageHint?.id || ""];
+  const compactMobileAssistant = isMobileViewport;
+  const isMobileHome = compactMobileAssistant && pathname === "/";
+  const introMessage = compactMobileAssistant
+    ? "Спросите про рецепт, меню или покупки."
+    : message;
   const hasFinalAnswer =
     Boolean(menuAiMessage) &&
     !menuAiLoading &&
@@ -496,6 +683,19 @@ export default function HouseAssistant() {
     }
   }, [shouldPreferCollapsed]);
 
+  useEffect(() => {
+    if (collapsed) {
+      setHomeQuickAskMode(false);
+      setShowFeedbackForm(false);
+    }
+  }, [collapsed]);
+
+  useEffect(() => {
+    if (pathname !== "/") {
+      setHomeQuickAskMode(false);
+    }
+  }, [pathname]);
+
   if (collapsed) {
     return (
       <button
@@ -504,7 +704,13 @@ export default function HouseAssistant() {
         aria-label="Открыть помощника"
         title="Открыть помощника"
       >
-        <img src={avatarSrc} alt="Отто помощник" className="house-assistant__avatar" />
+        <Image
+          src={avatarSrc}
+          alt="Отто помощник"
+          className="house-assistant__avatar"
+          width={56}
+          height={56}
+        />
         <span>Отто</span>
       </button>
     );
@@ -516,176 +722,107 @@ export default function HouseAssistant() {
         <button
           type="button"
           className="house-assistant__backdrop"
-          onClick={() => setCollapsed(true)}
           aria-label="Закрыть помощника"
+          onClick={() => setCollapsed(true)}
         />
       ) : null}
       <aside className={`house-assistant ${shouldPreferCollapsed ? "house-assistant--subtle" : ""}`} aria-live="polite">
-      <button
-        className="house-assistant__close"
-        onClick={() => setCollapsed(true)}
-        aria-label="Свернуть помощника"
-        title="Свернуть"
-      >
-        ×
-      </button>
-      <div className="house-assistant__header">
-        <img src={avatarSrc} alt="Отто помощник" className="house-assistant__avatar" />
-        <div>
-          <div className="house-assistant__title">Отто</div>
-          <div className="house-assistant__subtitle">Ваш помощник</div>
-        </div>
-      </div>
-      <p className="house-assistant__text">{message}</p>
-      {showWelcomeHint ? (
-        <div className="house-assistant__hint">
-          <div className="house-assistant__hint-title">Добро пожаловать</div>
-          <p className="house-assistant__text" style={{ marginBottom: "8px" }}>
-            Я Отто. Помогу планировать меню, вести покупки и кладовку. Без вашего подтверждения ничего не меняю.
-          </p>
-          <div className="house-assistant__hint-actions">
-            <button className="btn btn-primary" onClick={handleWelcomeStart}>
-              Начать
-            </button>
-            <button className="btn" onClick={handleWelcomeStart}>
-              Пропустить
-            </button>
-            <button className="btn" onClick={disableHintsForever}>
-              Не показывать больше
-            </button>
-          </div>
-        </div>
-      ) : null}
-      {showPageHint && pageHint ? (
-        <div className="house-assistant__hint">
-          <div className="house-assistant__hint-title">{pageHint.title}</div>
-          <p className="house-assistant__text" style={{ marginBottom: "8px" }}>
-            {pageHint.text}
-          </p>
-          <div className="house-assistant__hint-actions">
-            <button className="btn btn-primary" onClick={markPageHintSeen}>
-              Понятно
-            </button>
-            <button className="btn" onClick={disableHintsForever}>
-              Не показывать больше
-            </button>
-          </div>
-        </div>
-      ) : null}
-      <div style={{ marginBottom: "10px" }}>
-        <textarea
-          ref={promptTextareaRef}
-          className="input"
-          value={menuPrompt}
-          onChange={(event) => setMenuPrompt(event.target.value)}
-          placeholder={promptPlaceholder}
-          rows={3}
-          style={{ minHeight: "74px", resize: "vertical" }}
-        />
-        <label style={{ display: "inline-flex", alignItems: "center", gap: "8px", marginTop: "8px", fontSize: "13px" }}>
-          <input
-            type="checkbox"
-            checked={voiceReplyEnabled}
-            onChange={(event) => setVoiceReplyEnabled(event.target.checked)}
+        <div className="house-assistant__header">
+          <Image
+            src={avatarSrc}
+            alt="Отто помощник"
+            className="house-assistant__avatar"
+            width={56}
+            height={56}
           />
-          Озвучивать ответ
-        </label>
-      </div>
-      {menuAiMessage ? (
-        <p className="house-assistant__text" style={{ marginTop: "0", whiteSpace: "pre-wrap" }}>
-          {menuAiMessage}
-        </p>
-      ) : null}
-      {hasFinalAnswer ? (
-        <div style={{ marginTop: "2px", marginBottom: "10px" }}>
-          <p className="house-assistant__text" style={{ marginTop: "0", marginBottom: "8px" }}>
-            Чем еще помочь?
-          </p>
-          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-            <button className="btn" onClick={startNewQuestion}>
-              Еще вопрос
-            </button>
-            <button className="btn" onClick={finishConversation}>
-              Завершить разговор
-            </button>
-            <button className="btn" onClick={clearConversation}>
-              Очистить
+          <div style={{ minWidth: 0 }}>
+            <div className="house-assistant__title">Отто</div>
+            {!compactMobileAssistant ? <div className="house-assistant__subtitle">Ваш помощник</div> : null}
+          </div>
+          <div className="house-assistant__header-actions">
+            <button
+              className="house-assistant__close"
+              onClick={() => setCollapsed(true)}
+              aria-label="Свернуть помощника"
+              title="Свернуть"
+            >
+              ×
             </button>
           </div>
         </div>
-      ) : null}
-      {menuAiLoading && lastSubmittedPrompt ? (
-        <p className="house-assistant__text" style={{ marginTop: "0", color: "var(--text-secondary)" }}>
-          Отправлено: {lastSubmittedPrompt}
-        </p>
-      ) : null}
-      {feedbackStatus ? (
-        <p className="house-assistant__text" style={{ marginTop: "0", color: "var(--text-secondary)" }}>
-          {feedbackStatus}
-        </p>
-      ) : null}
-      {showFeedbackForm ? (
-        <div style={{ marginBottom: "10px", display: "grid", gap: "8px" }}>
-          <select
-            className="input"
-            value={feedbackType}
-            onChange={(event) =>
-              setFeedbackType(event.target.value as "recipes_missing" | "not_working" | "idea")
-            }
-          >
-            <option value="recipes_missing">Я не вижу свои рецепты</option>
-            <option value="not_working">Что-то работает не так</option>
-            <option value="idea">Это идея</option>
-          </select>
-          <textarea
-            className="input"
-            value={feedbackText}
-            onChange={(event) => setFeedbackText(event.target.value)}
-            rows={3}
-            placeholder="Коротко: что вы делали, что ожидали и что получилось"
-            style={{ minHeight: "74px", resize: "vertical" }}
-          />
-          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-            <button className="btn btn-primary" onClick={submitFeedback}>
-              Отправить
-            </button>
-            <button className="btn" onClick={() => setShowFeedbackForm(false)}>
-              Отмена
-            </button>
-          </div>
-        </div>
-      ) : null}
-      <div className="house-assistant__actions">
-        <button className="btn" onClick={() => setCollapsed(true)}>
-          Свернуть
-        </button>
-        <button className="btn" onClick={() => router.push("/recipes")}>
-          К рецептам
-        </button>
-        <button className="btn" onClick={() => setShowFeedbackForm((prev) => !prev)}>
-          Нужна помощь?
-        </button>
-        <button className="btn" onClick={resetHints}>
-          Показать подсказки снова
-        </button>
-        <button className="btn btn-primary" onClick={() => handleAskAssistant()} disabled={menuAiLoading || voiceListening}>
-          {menuAiLoading ? "Отто думает..." : "Спросить Отто"}
-        </button>
-        <button
-          className="btn"
-          onClick={handleVoiceAsk}
-          disabled={voiceListening || menuAiLoading}
-          title="Спросить голосом"
-        >
-          {voiceListening ? "Слушаю..." : "🎤 Спросить голосом"}
-        </button>
-        {!isMenuPage ? (
-          <button className="btn" onClick={() => router.push("/menu")}>
-            К меню
-          </button>
-        ) : null}
-      </div>
-    </aside>
+
+        {isMobileHome && !homeQuickAskMode ? (
+          <>
+            <p className="house-assistant__text house-assistant__intro" style={{ marginTop: 2 }}>
+              Я помогу начать. Нажмите Начать планирование или задайте вопрос.
+            </p>
+            <div className="house-assistant__home-actions">
+              <button
+                className="btn btn-primary"
+                onClick={() => {
+                  setHomeQuickAskMode(true);
+                  setTimeout(() => promptTextareaRef.current?.focus(), 0);
+                }}
+              >
+                Спросить Отто
+              </button>
+              <button className="btn" onClick={() => setCollapsed(true)}>
+                Закрыть
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <p className="house-assistant__text house-assistant__intro">{introMessage}</p>
+
+            <div style={{ marginBottom: "10px" }}>
+              <div className={`house-assistant__input-wrap${compactMobileAssistant ? " house-assistant__input-wrap--compact" : ""}`}>
+                <textarea
+                  ref={promptTextareaRef}
+                  className="input"
+                  value={menuPrompt}
+                  onChange={(event) => setMenuPrompt(event.target.value)}
+                  placeholder={promptPlaceholder}
+                  rows={compactMobileAssistant ? 2 : 3}
+                  style={{
+                    minHeight: compactMobileAssistant ? "62px" : "74px",
+                    resize: "vertical",
+                    paddingRight: "42px",
+                  }}
+                />
+                <button
+                  className="house-assistant__voice-btn"
+                  onClick={handleVoiceAsk}
+                  disabled={voiceListening || menuAiLoading}
+                  title="Спросить голосом"
+                  aria-label="Спросить голосом"
+                >
+                  🎤
+                </button>
+              </div>
+            </div>
+
+            {menuAiMessage ? (
+              <p className="house-assistant__text" style={{ marginTop: "0", whiteSpace: "pre-wrap" }}>
+                {menuAiMessage}
+              </p>
+            ) : null}
+
+            {menuAiLoading && lastSubmittedPrompt ? (
+              <p className="house-assistant__text" style={{ marginTop: "0", color: "var(--text-secondary)" }}>
+                Отправлено: {lastSubmittedPrompt}
+              </p>
+            ) : null}
+
+            <div className="house-assistant__actions">
+              <button className="btn btn-primary" onClick={() => handleAskAssistant()} disabled={menuAiLoading || voiceListening}>
+                {menuAiLoading ? "Отто думает..." : "Спросить Отто"}
+              </button>
+            </div>
+          </>
+        )}
+
+      </aside>
     </>
   );
 }
