@@ -411,6 +411,18 @@ function RecipesPageContent() {
     );
   }, [recipes, viewMode]);
 
+  const existingMineByTitle = useMemo(() => {
+    if (typeof window === "undefined") return new Map<string, string>();
+    const source = loadLocalRecipes();
+    const map = new Map<string, string>();
+    source.forEach((item) => {
+      const key = normalizeRecipeTitle(item.title || "");
+      if (!key || !item.id || map.has(key)) return;
+      map.set(key, item.id);
+    });
+    return map;
+  }, [recipes, viewMode]);
+
   const handleCreateRecipe = () => {
     if (typeof window !== "undefined") {
       const shouldStartFirstFlow =
@@ -1031,9 +1043,17 @@ function RecipesPageContent() {
               viewMode === "public" &&
               existingMineTitleSet.has(normalizeRecipeTitle(recipe.title || ""));
             const isPublicSourceRecipe = viewMode === "public" && !isOwner;
+            const recipeTitleKey = normalizeRecipeTitle(recipe.title || "");
+            const existingMineRecipeId = isPublicSourceRecipe ? existingMineByTitle.get(recipeTitleKey) || null : null;
+            const openTargetId = duplicateExists && existingMineRecipeId ? existingMineRecipeId : recipe.id;
+            const sourceLabel = isPublicSourceRecipe
+              ? duplicateExists
+                ? "Из примеров • уже в моих рецептах"
+                : "Из примеров"
+              : "Мой рецепт";
             const mainActionLabel = isPublicSourceRecipe
               ? duplicateExists
-                ? "Уже добавлен"
+                ? "Уже в моих рецептах"
                 : "Добавить"
               : "Открыть";
             const mainActionClassName = `btn ${
@@ -1065,7 +1085,12 @@ function RecipesPageContent() {
 
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "flex-start" }}>
-                      <h3 style={{ margin: 0 }}>{recipe.title}</h3>
+                      <div style={{ minWidth: 0 }}>
+                        <h3 style={{ margin: 0 }}>{recipe.title}</h3>
+                        <div style={{ marginTop: "4px", fontSize: "12px", color: "var(--text-tertiary)" }}>
+                          {sourceLabel}
+                        </div>
+                      </div>
                       <span style={{ fontSize: "13px", color: "var(--text-secondary)", flexShrink: 0 }}>
                         Порции: {recipe.servings || 2}
                       </span>
@@ -1098,6 +1123,11 @@ function RecipesPageContent() {
                       >
                         {mainActionLabel}
                       </button>
+                      {isPublicSourceRecipe ? (
+                        <button className="btn" onClick={() => router.push(`/recipes/${openTargetId}`)}>
+                          Открыть
+                        </button>
+                      ) : null}
                     </div>
                   </div>
                 </div>
