@@ -151,12 +151,17 @@ function RecipesPageContent() {
   const [currentUserAvatar, setCurrentUserAvatar] = useState<string | null>(null);
   const [currentUserFrame, setCurrentUserFrame] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState("");
+  const [pendingCopyRecipeId, setPendingCopyRecipeId] = useState<string | null>(null);
+  const [mineSyncVersion, setMineSyncVersion] = useState(0);
+  const [justAddedRecipeTitles, setJustAddedRecipeTitles] = useState<Record<string, boolean>>({});
+  const [addedToastMessage, setAddedToastMessage] = useState<string | null>(null);
   const [showFirstRecipeSuccess, setShowFirstRecipeSuccess] = useState(false);
   const [isFirstRecipeFlow, setIsFirstRecipeFlow] = useState(false);
   const [firstCopiedRecipeId, setFirstCopiedRecipeId] = useState<string | null>(null);
   const [showGuestRegisterReminder, setShowGuestRegisterReminder] = useState(false);
 
   const importedForUser = useRef<string | null>(null);
+  const addedToastTimerRef = useRef<number | null>(null);
 
   const refreshRecipes = async (mode: ViewMode, userId: string | null): Promise<void> => {
     setIsLoading(true);
@@ -220,6 +225,14 @@ function RecipesPageContent() {
 
     return () => {
       sub.subscription.unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (addedToastTimerRef.current !== null) {
+        window.clearTimeout(addedToastTimerRef.current);
+      }
     };
   }, []);
 
@@ -409,7 +422,7 @@ function RecipesPageContent() {
         .map((item) => normalizeRecipeTitle(item.title || ""))
         .filter(Boolean)
     );
-  }, [recipes, viewMode]);
+  }, [mineSyncVersion, recipes, viewMode]);
 
   const existingMineByTitle = useMemo(() => {
     if (typeof window === "undefined") return new Map<string, string>();
@@ -421,7 +434,23 @@ function RecipesPageContent() {
       map.set(key, item.id);
     });
     return map;
-  }, [recipes, viewMode]);
+  }, [mineSyncVersion, recipes, viewMode]);
+
+  const showAddedFeedback = (title: string, duplicate = false) => {
+    const key = normalizeRecipeTitle(title);
+    if (key) {
+      setJustAddedRecipeTitles((prev) => ({ ...prev, [key]: true }));
+    }
+    setMineSyncVersion((prev) => prev + 1);
+    setAddedToastMessage(duplicate ? "Рецепт уже был в моих рецептах." : "Рецепт добавлен в мои рецепты.");
+    if (addedToastTimerRef.current !== null) {
+      window.clearTimeout(addedToastTimerRef.current);
+    }
+    addedToastTimerRef.current = window.setTimeout(() => {
+      setAddedToastMessage(null);
+      addedToastTimerRef.current = null;
+    }, 3500);
+  };
 
   const handleCreateRecipe = () => {
     if (typeof window !== "undefined") {
@@ -506,60 +535,62 @@ function RecipesPageContent() {
   const handleCopyToMine = async (recipeId: string) => {
     const source = recipes.find((item) => item.id === recipeId);
     if (!source) return;
+    setPendingCopyRecipeId(recipeId);
 
-    const inFirstRecipeFlow =
-      isFirstRecipeFlow ||
-      (typeof window !== "undefined" &&
-        (localStorage.getItem(RECIPES_FIRST_FLOW_KEY) === "1" ||
-          localStorage.getItem(FIRST_RECIPE_CREATE_FLOW_KEY) === "1"));
+    try {
+      const inFirstRecipeFlow =
+        isFirstRecipeFlow ||
+        (typeof window !== "undefined" &&
+          (localStorage.getItem(RECIPES_FIRST_FLOW_KEY) === "1" ||
+            localStorage.getItem(FIRST_RECIPE_CREATE_FLOW_KEY) === "1"));
 
-    if (!currentUserId) {
-      const existingLocal = loadLocalRecipes();
-      const duplicateLocal = existingLocal.find(
-        (item) => normalizeRecipeTitle(item.title || "") === normalizeRecipeTitle(source.title || "")
-      );
-      if (duplicateLocal) {
+      if (!currentUserId) {
+        const existingLocal = loadLocalRecipes();
+        const duplicateLocal = existingLocal.find(
+          (item) => normalizeRecipeTitle(item.title || "") === normalizeRecipeTitle(source.title || "")
+        );
+        if (duplicateLocal) {
+          if (inFirstRecipeFlow) {
+            localStorage.removeItem(RECIPES_FIRST_FLOW_KEY);
+            localStorage.removeItem(FIRST_RECIPE_CREATE_FLOW_KEY);
+            setIsFirstRecipeFlow(false);
+            setShowFirstRecipeSuccess(true);
+            setFirstCopiedRecipeId(duplicateLocal.id);
+            setActionMessage("");
+            setViewMode("public");
+          } else {
+            setActionMessage("");
+            showAddedFeedback(source.title || "", true);
+          }
+          return;
+        }
+
+        const localCopy: RecipeModel = {
+          ...source,
+          id: crypto.randomUUID(),
+          ownerId: "",
+          type: "user",
+          isTemplate: false,
+          visibility: "private",
+          notes: source.notes || "",
+        };
+
+        upsertRecipeInLocalCache(localCopy);
         if (inFirstRecipeFlow) {
           localStorage.removeItem(RECIPES_FIRST_FLOW_KEY);
           localStorage.removeItem(FIRST_RECIPE_CREATE_FLOW_KEY);
           setIsFirstRecipeFlow(false);
           setShowFirstRecipeSuccess(true);
-          setFirstCopiedRecipeId(duplicateLocal.id);
+          setFirstCopiedRecipeId(localCopy.id);
           setActionMessage("");
           setViewMode("public");
         } else {
-          setActionMessage("Такой рецепт уже есть в вашей библиотеке.");
+          setActionMessage("");
+          showAddedFeedback(source.title || "", false);
         }
         return;
       }
 
-      const localCopy: RecipeModel = {
-        ...source,
-        id: crypto.randomUUID(),
-        ownerId: "",
-        type: "user",
-        isTemplate: false,
-        visibility: "private",
-        notes: source.notes || "",
-      };
-
-      upsertRecipeInLocalCache(localCopy);
-      if (inFirstRecipeFlow) {
-        localStorage.removeItem(RECIPES_FIRST_FLOW_KEY);
-        localStorage.removeItem(FIRST_RECIPE_CREATE_FLOW_KEY);
-        setIsFirstRecipeFlow(false);
-        setShowFirstRecipeSuccess(true);
-        setFirstCopiedRecipeId(localCopy.id);
-        setActionMessage("");
-        setViewMode("public");
-      } else {
-        setActionMessage("Скопировано локально в режим черновика.");
-        setViewMode("mine");
-      }
-      return;
-    }
-
-    try {
       const mine = await listMyRecipes(currentUserId);
       const duplicateMine = mine.find(
         (item) => normalizeRecipeTitle(item.title || "") === normalizeRecipeTitle(source.title || "")
@@ -576,7 +607,8 @@ function RecipesPageContent() {
           setActionMessage("");
           setViewMode("public");
         } else {
-          setActionMessage("Такой рецепт уже есть в вашей библиотеке.");
+          setActionMessage("");
+          showAddedFeedback(source.title || "", true);
         }
         return;
       }
@@ -592,12 +624,14 @@ function RecipesPageContent() {
         setActionMessage("");
         setViewMode("public");
       } else {
-        setActionMessage("Рецепт скопирован в Мои.");
-        setViewMode("mine");
+        setActionMessage("");
+        showAddedFeedback(source.title || "", false);
       }
     } catch (copyError) {
       const text = copyError instanceof Error ? copyError.message : "Не удалось скопировать рецепт.";
       setActionMessage(text);
+    } finally {
+      setPendingCopyRecipeId((prev) => (prev === recipeId ? null : prev));
     }
   };
 
@@ -926,6 +960,22 @@ function RecipesPageContent() {
         </p>
       )}
 
+      {addedToastMessage ? (
+        <div className="card" style={{ marginBottom: "14px", padding: "10px 12px", display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
+          <span style={{ color: "var(--text-primary)", fontWeight: 600 }}>{addedToastMessage}</span>
+          <button
+            type="button"
+            className="btn"
+            onClick={() => {
+              setViewMode("mine");
+              setAddedToastMessage(null);
+            }}
+          >
+            Перейти в мои рецепты
+          </button>
+        </div>
+      ) : null}
+
       {showGuestRegisterReminder && (
         <div className="card" style={{ marginBottom: "14px", padding: "12px 14px", borderRadius: "10px" }}>
           <img
@@ -1046,18 +1096,23 @@ function RecipesPageContent() {
             const recipeTitleKey = normalizeRecipeTitle(recipe.title || "");
             const existingMineRecipeId = isPublicSourceRecipe ? existingMineByTitle.get(recipeTitleKey) || null : null;
             const openTargetId = duplicateExists && existingMineRecipeId ? existingMineRecipeId : recipe.id;
+            const addedNow = Boolean(justAddedRecipeTitles[recipeTitleKey]);
+            const addDone = duplicateExists || addedNow;
+            const isAdding = pendingCopyRecipeId === recipe.id;
             const sourceLabel = isPublicSourceRecipe
-              ? duplicateExists
+              ? addDone
                 ? "Из примеров • уже в моих рецептах"
                 : "Из примеров"
               : "Мой рецепт";
             const mainActionLabel = isPublicSourceRecipe
-              ? duplicateExists
-                ? "Уже в моих рецептах"
+              ? isAdding
+                ? "Добавляю..."
+                : addDone
+                  ? "Добавлено"
                 : "Добавить"
               : "Открыть";
             const mainActionClassName = `btn ${
-              isPublicSourceRecipe && duplicateExists ? "recipes-card__add-btn--disabled" : "btn-primary"
+              isPublicSourceRecipe && addDone ? "recipes-card__add-btn--disabled" : "btn-primary"
             }`;
             const handleMainAction = () => {
               if (isPublicSourceRecipe) {
@@ -1067,7 +1122,17 @@ function RecipesPageContent() {
               router.push(`/recipes/${recipe.id}`);
             };
             return (
-              <div key={recipe.id} className="card" style={{ textAlign: "left" }}>
+              <div
+                key={recipe.id}
+                className="card"
+                style={{
+                  textAlign: "left",
+                  background: isPublicSourceRecipe && addDone
+                    ? "color-mix(in srgb, var(--background-primary) 84%, var(--accent-primary) 16%)"
+                    : undefined,
+                  borderColor: isPublicSourceRecipe && addDone ? "rgba(135, 152, 116, 0.45)" : undefined,
+                }}
+              >
                 <div style={{ display: "flex", gap: "16px", alignItems: "flex-start" }}>
                   {cardImage ? (
                     <img
@@ -1119,7 +1184,7 @@ function RecipesPageContent() {
                       <button
                         className={mainActionClassName}
                         onClick={handleMainAction}
-                        disabled={isPublicSourceRecipe && duplicateExists}
+                        disabled={isPublicSourceRecipe && (addDone || isAdding)}
                       >
                         {mainActionLabel}
                       </button>
