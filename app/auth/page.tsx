@@ -279,7 +279,6 @@ export default function AuthPage() {
     const base = profileName.trim() || (userEmail || "").split("@")[0] || "Г";
     return base.charAt(0).toUpperCase();
   }, [profileName, userEmail]);
-  const hasFrame = Boolean(profileFrame.trim());
 
   return (
     <section className="card" style={{ maxWidth: "560px", margin: "0 auto" }}>
@@ -310,9 +309,9 @@ export default function AuthPage() {
                 <span
                   style={{
                     position: "absolute",
-                    inset: hasFrame ? "20% 24%" : 0,
+                    inset: 0,
                     overflow: "hidden",
-                    borderRadius: hasFrame ? "8px" : "50%",
+                    borderRadius: "0",
                   }}
                 >
                   <img
@@ -322,7 +321,7 @@ export default function AuthPage() {
                       width: "100%",
                       height: "100%",
                       objectFit: "cover",
-                      objectPosition: "center 20%",
+                      objectPosition: "center center",
                     }}
                   />
                 </span>
