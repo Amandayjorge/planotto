@@ -1114,7 +1114,7 @@ function RecipesPageContent() {
                           onClick={() => handleCopyToMine(recipe.id)}
                           disabled={duplicateExists}
                         >
-                          {duplicateExists ? "Уже добавлен" : "Добавить"}
+                          {duplicateExists ? "Уже в моих рецептах" : "Добавить в мои рецепты"}
                         </button>
                       )}
                     </div>

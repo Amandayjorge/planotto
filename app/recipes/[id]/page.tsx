@@ -566,7 +566,7 @@ export default function RecipeDetailPage() {
         )}
 
         {showCopyButton && (
-          <button className="btn btn-primary" onClick={copyToMine}>Добавить</button>
+          <button className="btn btn-primary" onClick={copyToMine}>Добавить в мои рецепты</button>
         )}
 
         {showReportButton && !isEditing && (
