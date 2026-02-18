@@ -136,6 +136,7 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
   const stepOneRef = useRef<HTMLDivElement | null>(null);
   const hasCoreInput = title.trim().length > 0 || ingredients.some((item) => item.name.trim().length > 0);
+  const hasTitle = title.trim().length > 0;
 
   const optimizeImageFile = (file: File): Promise<string> =>
     new Promise((resolve) => {
@@ -1080,7 +1081,7 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
         <button
           className="btn btn-primary"
           onClick={saveRecipe}
-          disabled={isSaving || (visibility === "public" && !publishConsentChecked)}
+          disabled={isSaving || !hasTitle || (visibility === "public" && !publishConsentChecked)}
         >
           {isSaving ? "Сохранение..." : visibility === "public" ? "Сделать публичным" : "Сохранить рецепт"}
         </button>
