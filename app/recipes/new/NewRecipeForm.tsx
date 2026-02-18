@@ -798,8 +798,14 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
               <div className="recipe-new-ingredient-row__meta">
               <input
                 type="number"
-                value={ingredient.amount}
-                onChange={(e) => updateIngredient(index, "amount", parseFloat(e.target.value) || 0)}
+                value={ingredient.amount > 0 ? ingredient.amount : ""}
+                onChange={(e) =>
+                  updateIngredient(
+                    index,
+                    "amount",
+                    e.target.value.trim() === "" ? 0 : parseFloat(e.target.value) || 0
+                  )
+                }
                 step="0.1"
                 min="0"
                 placeholder="Кол-во"
