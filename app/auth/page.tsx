@@ -309,9 +309,9 @@ export default function AuthPage() {
                 <span
                   style={{
                     position: "absolute",
-                    inset: 0,
+                    inset: profileFrame ? "16px" : 0,
                     overflow: "hidden",
-                    borderRadius: "0",
+                    borderRadius: profileFrame ? "16px" : "0",
                   }}
                 >
                   <img
@@ -337,8 +337,10 @@ export default function AuthPage() {
                     inset: 0,
                     width: "100%",
                     height: "100%",
-                    objectFit: "contain",
+                    objectFit: "cover",
                     objectPosition: "center",
+                    transform: "scale(1.14)",
+                    transformOrigin: "center",
                     pointerEvents: "none",
                   }}
                 />

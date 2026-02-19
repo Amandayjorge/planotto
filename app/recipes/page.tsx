@@ -742,11 +742,20 @@ function RecipesPageContent() {
               <img
                 src={currentUserAvatar}
                 alt="Аватар"
-                className="recipes-account-chip__avatar-image"
+                className={`recipes-account-chip__avatar-image ${
+                  currentUserFrame ? "recipes-account-chip__avatar-image--framed" : ""
+                }`}
               />
             ) : (
               <span className="recipes-account-chip__avatar-initial">{accountInitial}</span>
             )}
+            {currentUserFrame ? (
+              <img
+                src={currentUserFrame}
+                alt="Рамка"
+                className="recipes-account-chip__avatar-frame"
+              />
+            ) : null}
           </span>
           <span className="recipes-account-chip__content">
             <span className="recipes-account-chip__meta">
