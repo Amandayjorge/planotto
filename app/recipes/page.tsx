@@ -551,26 +551,6 @@ function RecipesPageContent() {
             localStorage.getItem(FIRST_RECIPE_CREATE_FLOW_KEY) === "1"));
 
       if (!currentUserId) {
-        const existingLocal = loadLocalRecipes();
-        const duplicateLocal = existingLocal.find(
-          (item) => normalizeRecipeTitle(item.title || "") === normalizeRecipeTitle(source.title || "")
-        );
-        if (duplicateLocal) {
-          if (inFirstRecipeFlow) {
-            localStorage.removeItem(RECIPES_FIRST_FLOW_KEY);
-            localStorage.removeItem(FIRST_RECIPE_CREATE_FLOW_KEY);
-            setIsFirstRecipeFlow(false);
-            setShowFirstRecipeSuccess(true);
-            setFirstCopiedRecipeId(duplicateLocal.id);
-            setActionMessage("");
-            setViewMode("public");
-          } else {
-            setActionMessage("");
-            showAddedFeedback(source.title || "", true);
-          }
-          return;
-        }
-
         const localCopy: RecipeModel = {
           ...source,
           id: crypto.randomUUID(),
@@ -593,28 +573,6 @@ function RecipesPageContent() {
         } else {
           setActionMessage("");
           showAddedFeedback(source.title || "", false);
-        }
-        return;
-      }
-
-      const mine = await listMyRecipes(currentUserId);
-      const duplicateMine = mine.find(
-        (item) => normalizeRecipeTitle(item.title || "") === normalizeRecipeTitle(source.title || "")
-      );
-      if (duplicateMine) {
-        upsertRecipeInLocalCache(duplicateMine);
-
-        if (inFirstRecipeFlow) {
-          localStorage.removeItem(RECIPES_FIRST_FLOW_KEY);
-          localStorage.removeItem(FIRST_RECIPE_CREATE_FLOW_KEY);
-          setIsFirstRecipeFlow(false);
-          setShowFirstRecipeSuccess(true);
-          setFirstCopiedRecipeId(duplicateMine.id);
-          setActionMessage("");
-          setViewMode("public");
-        } else {
-          setActionMessage("");
-          showAddedFeedback(source.title || "", true);
         }
         return;
       }
@@ -766,7 +724,7 @@ function RecipesPageContent() {
             ← Назад к меню
           </button>
           <button className="btn btn-add" onClick={handleCreateRecipe}>
-            + Добавить в мои
+            + Добавить рецепт
           </button>
           {viewMode === "mine" && hasAnyRecipes ? (
             <button className="btn btn-danger" onClick={handleClearAllRecipes}>
