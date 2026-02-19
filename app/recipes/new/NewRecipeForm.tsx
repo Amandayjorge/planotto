@@ -26,8 +26,8 @@ import {
 
 const UNITS = ["г", "кг", "мл", "л", "шт", "ч.л.", "ст.л.", "по вкусу"];
 const MAX_IMPORT_PHOTOS = 8;
-const IMPORT_MAX_SIDE = 1800;
-const IMPORT_QUALITY = 0.88;
+const IMPORT_MAX_SIDE = 1600;
+const IMPORT_QUALITY = 0.84;
 const RECIPES_FIRST_FLOW_KEY = "recipesFirstFlowActive";
 const FIRST_RECIPE_ADDED_KEY = "recipes:first-added-recipe-id";
 const FIRST_RECIPE_SUCCESS_PENDING_KEY = "recipes:first-success-pending";
@@ -154,12 +154,7 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
         const image = new Image();
         image.onload = () => {
           const maxSide = Math.max(image.width, image.height);
-          if (maxSide <= IMPORT_MAX_SIDE) {
-            resolve(source);
-            return;
-          }
-
-          const scale = IMPORT_MAX_SIDE / maxSide;
+          const scale = maxSide > IMPORT_MAX_SIDE ? IMPORT_MAX_SIDE / maxSide : 1;
           const width = Math.max(1, Math.round(image.width * scale));
           const height = Math.max(1, Math.round(image.height * scale));
           const canvas = document.createElement("canvas");
@@ -171,6 +166,7 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
             return;
           }
           ctx.drawImage(image, 0, 0, width, height);
+          // Always convert imports to JPEG so OCR/vision providers receive a consistent format.
           resolve(canvas.toDataURL("image/jpeg", IMPORT_QUALITY));
         };
         image.onerror = () => resolve(source);
