@@ -865,6 +865,26 @@ type OpenRouterResult = {
   error: string | null;
 };
 
+const extractMessageText = (content: unknown): string => {
+  if (typeof content === "string") return content;
+  if (Array.isArray(content)) {
+    return content
+      .map((part) => {
+        if (typeof part === "string") return part;
+        if (!part || typeof part !== "object") return "";
+        const record = part as Record<string, unknown>;
+        return safeString(record.text || record.content || record.output_text);
+      })
+      .filter(Boolean)
+      .join("\n");
+  }
+  if (content && typeof content === "object") {
+    const record = content as Record<string, unknown>;
+    return safeString(record.text || record.content || record.output_text);
+  }
+  return "";
+};
+
 const extractOpenRouterErrorMessage = (raw: string): string => {
   if (!raw.trim()) return "";
   try {
@@ -945,16 +965,17 @@ const callOpenRouterWithDetails = async (
     return { json: null, error: mapped };
   }
   let data: {
-    choices?: Array<{ message?: { content?: string } }>;
+    choices?: Array<{ message?: { content?: unknown } }>;
   } = {};
   try {
     data = JSON.parse(rawText) as {
-      choices?: Array<{ message?: { content?: string } }>;
+      choices?: Array<{ message?: { content?: unknown } }>;
     };
   } catch {
     return { json: null, error: "Сервис распознавания вернул некорректный ответ." };
   }
-  return { json: extractJsonBlock(data.choices?.[0]?.message?.content || ""), error: null };
+  const contentText = extractMessageText(data.choices?.[0]?.message?.content);
+  return { json: extractJsonBlock(contentText), error: null };
 };
 
 const callOpenRouter = async (
@@ -1172,74 +1193,140 @@ type ParsedRecipeLike = {
   ingredients: Array<{ name: string; amount: number; unit: string; needsReview: boolean }>;
 };
 
-const parseRecipeFromAi = (input: unknown): ParsedRecipeLike | null => {
-  if (!input || typeof input !== "object") return null;
-  const raw = input as Record<string, unknown>;
-  const ingredients = Array.isArray(raw.ingredients)
-    ? raw.ingredients
-        .map((item) => {
-          if (typeof item === "string") {
-            const line = safeString(item);
-            return {
-              name: cleanupIngredientName(line),
-              amount: parseAmountValue(line),
-              unit: normalizeUnit(detectUnitFromText(line)),
-              needsReview: true,
-            };
-          }
-          return item as Record<string, unknown>;
-        })
-        .map((item) => {
-          if ("name" in item && "amount" in item && "unit" in item) {
-            const typed = item as {
-              name?: unknown;
-              amount?: unknown;
-              unit?: unknown;
-              needsReview?: unknown;
-            };
-            const rawName = safeString(typed.name);
-            const amountFromField = parseAmountValue(typed.amount);
-            const amountFromName = parseAmountValue(rawName);
-            const rawUnit = normalizeUnit(safeString(typed.unit));
-            const unitFromName = normalizeUnit(detectUnitFromText(rawName));
-            const finalUnit =
-              rawUnit === "шт" && unitFromName !== "шт" ? unitFromName : rawUnit;
-            const finalAmount = amountFromField > 0 ? amountFromField : amountFromName;
-            const cleanedName = cleanupIngredientName(rawName) || rawName;
+const asRecord = (value: unknown): Record<string, unknown> | null => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+};
 
-            return {
-              name: cleanedName,
-              amount: finalAmount,
-              unit:
-                finalAmount === 0 &&
-                (cleanedName.toLowerCase().includes("соль") ||
-                  cleanedName.toLowerCase().includes("перец"))
-                  ? "по вкусу"
-                  : finalUnit,
-              needsReview: Boolean(typed.needsReview ?? true),
-            };
-          }
-          const fallbackName = safeString((item as Record<string, unknown>).name);
-          return {
-            name: cleanupIngredientName(fallbackName),
-            amount: parseAmountValue(fallbackName),
-            unit: normalizeUnit(detectUnitFromText(fallbackName)),
-            needsReview: true,
-          };
-        })
-        .filter((item) => item.name.length > 0)
-    : [];
+const pickFirstValue = (
+  record: Record<string, unknown>,
+  keys: readonly string[]
+): unknown => {
+  for (const key of keys) {
+    if (key in record) return record[key];
+  }
+  return undefined;
+};
 
-  const servingsRaw = Number(raw.servings || 0);
-  const timeRaw = Number(raw.timeMinutes || 0);
+const pickStringFromRecord = (
+  record: Record<string, unknown>,
+  keys: readonly string[]
+): string => safeString(pickFirstValue(record, keys));
+
+const parseInstructionValue = (value: unknown): string => {
+  if (typeof value === "string") return safeString(value);
+  if (Array.isArray(value)) {
+    return value
+      .flatMap((item) => {
+        if (typeof item === "string") return [safeString(item)];
+        const itemRecord = asRecord(item);
+        if (!itemRecord) return [];
+        const stepText = pickStringFromRecord(itemRecord, ["text", "step", "instruction", "description", "name"]);
+        return stepText ? [stepText] : [];
+      })
+      .filter(Boolean)
+      .join("\n")
+      .trim();
+  }
+  const record = asRecord(value);
+  if (!record) return "";
+  return pickStringFromRecord(record, ["text", "step", "instruction", "description", "name"]);
+};
+
+const parseIngredientObject = (
+  value: Record<string, unknown>
+): { name: string; amount: number; unit: string; needsReview: boolean } => {
+  const line = pickStringFromRecord(value, ["line", "raw", "text", "value", "ingredientLine"]);
+  const rawName = pickStringFromRecord(value, ["name", "ingredient", "product", "title", "item"]) || line;
+  const amountSource = pickFirstValue(value, ["amount", "qty", "quantity", "count", "value"]);
+  const unitSource = pickStringFromRecord(value, ["unit", "measure", "uom"]);
+  const needsReviewSource = pickFirstValue(value, ["needsReview", "needs_review", "review"]);
+
+  const amountFromField = parseAmountValue(amountSource);
+  const amountFromName = parseAmountValue(rawName);
+  const detectedUnitFromName = normalizeUnit(detectUnitFromText(rawName));
+  const normalizedUnitFromField = normalizeUnit(unitSource);
+  const finalAmount = amountFromField > 0 ? amountFromField : amountFromName;
+  const cleanedName = cleanupIngredientName(rawName) || rawName;
+  const finalUnit =
+    normalizedUnitFromField === "шт" && detectedUnitFromName !== "шт"
+      ? detectedUnitFromName
+      : normalizedUnitFromField;
+
   return {
-    title: safeString(raw.title),
-    shortDescription: safeString(raw.shortDescription),
-    instructions: safeString(raw.instructions),
-    servings: Number.isFinite(servingsRaw) && servingsRaw > 0 ? servingsRaw : null,
-    timeMinutes: Number.isFinite(timeRaw) && timeRaw > 0 ? timeRaw : null,
-    image: safeString(raw.image),
-    tags: safeStringArray(raw.tags),
+    name: cleanedName,
+    amount: finalAmount,
+    unit:
+      finalAmount === 0 &&
+      (cleanedName.toLowerCase().includes("соль") || cleanedName.toLowerCase().includes("перец"))
+        ? "по вкусу"
+        : finalUnit,
+    needsReview: typeof needsReviewSource === "boolean" ? needsReviewSource : true,
+  };
+};
+
+const parseIngredientsFromUnknown = (
+  value: unknown
+): Array<{ name: string; amount: number; unit: string; needsReview: boolean }> => {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => {
+      if (typeof item === "string") {
+        const line = safeString(item);
+        return {
+          name: cleanupIngredientName(line),
+          amount: parseAmountValue(line),
+          unit: normalizeUnit(detectUnitFromText(line)),
+          needsReview: true,
+        };
+      }
+      const record = asRecord(item);
+      if (!record) return null;
+      return parseIngredientObject(record);
+    })
+    .filter((item): item is { name: string; amount: number; unit: string; needsReview: boolean } => Boolean(item))
+    .filter((item) => item.name.length > 0);
+};
+
+const parseRecipeFromAi = (input: unknown): ParsedRecipeLike | null => {
+  const rawInput = asRecord(input);
+  if (!rawInput) return null;
+  const raw = asRecord(rawInput.recipe) || rawInput;
+
+  const title = pickStringFromRecord(raw, ["title", "name", "recipeTitle", "recipe_title"]);
+  const shortDescription = pickStringFromRecord(raw, [
+    "shortDescription",
+    "short_description",
+    "summary",
+    "description",
+  ]);
+  const instructions = parseInstructionValue(
+    pickFirstValue(raw, ["instructions", "steps", "method", "directions", "preparation"])
+  );
+  const servingsRaw = parseAmountValue(
+    pickFirstValue(raw, ["servings", "serves", "yield", "portions"])
+  );
+  const timeRaw = parseAmountValue(
+    pickFirstValue(raw, ["timeMinutes", "time_minutes", "totalTimeMinutes", "total_time_minutes", "time"])
+  );
+  const image = pickStringFromRecord(raw, ["image", "imageUrl", "image_url", "photo", "picture"]);
+  const tags = safeStringArray(pickFirstValue(raw, ["tags", "categories", "labels", "keywords"]));
+  const ingredients = parseIngredientsFromUnknown(
+    pickFirstValue(raw, ["ingredients", "items", "products", "ingredientItems", "ingredient_lines", "ingredientLines"])
+  );
+
+  const hasUsefulContent =
+    Boolean(title || shortDescription || instructions || image || tags.length > 0 || ingredients.length > 0);
+  if (!hasUsefulContent) return null;
+
+  return {
+    title,
+    shortDescription,
+    instructions,
+    servings: servingsRaw > 0 ? servingsRaw : null,
+    timeMinutes: timeRaw > 0 ? timeRaw : null,
+    image,
+    tags,
     ingredients,
   };
 };
@@ -1413,8 +1500,8 @@ const runFalOcrForRecipeImport = async (
     DEFAULT_MODEL
   );
 
-  if (ai && ai.recipe && typeof ai.recipe === "object") {
-    const parsed = parseRecipeFromAi(ai.recipe);
+  if (ai) {
+    const parsed = parseRecipeFromAi(ai);
     if (parsed) {
       return {
         parsed,
@@ -1613,8 +1700,8 @@ export async function POST(request: Request) {
           [],
           DEFAULT_MODEL
         );
-        if (ai && ai.recipe && typeof ai.recipe === "object") {
-          const parsed = parseRecipeFromAi(ai.recipe);
+        if (ai) {
+          const parsed = parseRecipeFromAi(ai);
           if (parsed) {
             return NextResponse.json(
               toRecipeResponse(
@@ -1680,13 +1767,14 @@ export async function POST(request: Request) {
         );
         if (combinedResult.error) {
           photoIssues.push(BASE_OCR_FALLBACK_ISSUE);
+          photoIssues.push(combinedResult.error);
         } else {
           if (combinedResult.json?.message) {
             const message = safeString((combinedResult.json as Record<string, unknown>).message);
             if (message) collectedMessages.push(message);
           }
-          if (combinedResult.json?.recipe) {
-            const parsed = parseRecipeFromAi((combinedResult.json as Record<string, unknown>).recipe);
+          if (combinedResult.json) {
+            const parsed = parseRecipeFromAi(combinedResult.json);
             if (parsed) parsedParts.push(parsed);
           }
         }
@@ -1706,14 +1794,15 @@ export async function POST(request: Request) {
             );
             if (result.error) {
               photoIssues.push(BASE_OCR_FALLBACK_ISSUE);
+              photoIssues.push(result.error);
               continue;
             }
             if (result.json?.message) {
               const message = safeString((result.json as Record<string, unknown>).message);
               if (message) collectedMessages.push(message);
             }
-            if (result.json?.recipe) {
-              const parsed = parseRecipeFromAi((result.json as Record<string, unknown>).recipe);
+            if (result.json) {
+              const parsed = parseRecipeFromAi(result.json);
               if (parsed) parsedParts.push(parsed);
             }
           }

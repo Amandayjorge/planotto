@@ -54,6 +54,10 @@ function normalizeRecipeTitle(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
+function isSeedTemplateId(recipeId: string | null | undefined): boolean {
+  return String(recipeId || "").trim().toLowerCase().startsWith("seed-");
+}
+
 function resolveRecipeCardImage(recipe: RecipeModel): string | null {
   const normalizedTitle = normalizeRecipeTitle(recipe.title || "");
   const matched = Object.entries(TEMPLATE_IMAGE_FALLBACKS).find(
@@ -416,7 +420,9 @@ function RecipesPageContent() {
   const existingMineTitleSet = useMemo(() => {
     if (typeof window === "undefined") return new Set<string>();
 
-    const source = viewMode === "mine" ? recipes : loadLocalRecipes();
+    const source = (viewMode === "mine" ? recipes : loadLocalRecipes()).filter(
+      (item) => !isSeedTemplateId(item.id)
+    );
     return new Set(
       source
         .map((item) => normalizeRecipeTitle(item.title || ""))
@@ -426,7 +432,7 @@ function RecipesPageContent() {
 
   const existingMineByTitle = useMemo(() => {
     if (typeof window === "undefined") return new Map<string, string>();
-    const source = loadLocalRecipes();
+    const source = loadLocalRecipes().filter((item) => !isSeedTemplateId(item.id));
     const map = new Map<string, string>();
     source.forEach((item) => {
       const key = normalizeRecipeTitle(item.title || "");
@@ -760,7 +766,7 @@ function RecipesPageContent() {
             ← Назад к меню
           </button>
           <button className="btn btn-add" onClick={handleCreateRecipe}>
-            + Добавить рецепт
+            + Добавить в мои
           </button>
           {viewMode === "mine" && hasAnyRecipes ? (
             <button className="btn btn-danger" onClick={handleClearAllRecipes}>
@@ -769,25 +775,20 @@ function RecipesPageContent() {
           ) : null}
         </div>
         <button className="recipes-account-chip" onClick={() => router.push("/auth")}>
-          <span className="recipes-account-chip__avatar">
+          <span
+            className={`recipes-account-chip__avatar ${
+              currentUserFrame ? "recipes-account-chip__avatar--has-frame" : ""
+            }`.trim()}
+          >
             {currentUserAvatar ? (
               <img
                 src={currentUserAvatar}
                 alt="Аватар"
-                className={`recipes-account-chip__avatar-image ${
-                  currentUserFrame ? "recipes-account-chip__avatar-image--framed" : ""
-                }`}
+                className="recipes-account-chip__avatar-image"
               />
             ) : (
               <span className="recipes-account-chip__avatar-initial">{accountInitial}</span>
             )}
-            {currentUserFrame ? (
-              <img
-                src={currentUserFrame}
-                alt="Рамка"
-                className="recipes-account-chip__avatar-frame"
-              />
-            ) : null}
           </span>
           <span className="recipes-account-chip__content">
             <span className="recipes-account-chip__meta">
@@ -1108,12 +1109,10 @@ function RecipesPageContent() {
               ? isAdding
                 ? "Добавляю..."
                 : addDone
-                  ? "Добавлено"
-                : "Добавить"
+                  ? "Уже в моих"
+                : "Добавить в мои"
               : "Открыть";
-            const mainActionClassName = `btn ${
-              isPublicSourceRecipe && addDone ? "recipes-card__add-btn--disabled" : "btn-primary"
-            }`;
+            const mainActionClassName = `btn ${isPublicSourceRecipe && !addDone ? "btn-primary" : ""}`.trim();
             const handleMainAction = () => {
               if (isPublicSourceRecipe) {
                 handleCopyToMine(recipe.id);
@@ -1184,7 +1183,7 @@ function RecipesPageContent() {
                       <button
                         className={mainActionClassName}
                         onClick={handleMainAction}
-                        disabled={isPublicSourceRecipe && (addDone || isAdding)}
+                        disabled={isPublicSourceRecipe && isAdding}
                       >
                         {mainActionLabel}
                       </button>
