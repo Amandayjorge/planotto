@@ -64,6 +64,50 @@ function toErrorText(error: unknown, fallback: string): string {
   return fallback;
 }
 
+function isMissingRecipesTableError(error: unknown): boolean {
+  const parts: string[] = [];
+  const seen = new Set<unknown>();
+
+  const collect = (value: unknown): void => {
+    if (value == null || seen.has(value)) return;
+    if (typeof value === "object" || typeof value === "function") {
+      seen.add(value);
+    }
+
+    if (typeof value === "string") {
+      parts.push(value);
+      return;
+    }
+
+    if (value instanceof Error) {
+      parts.push(value.message || "");
+      collect((value as Error & { cause?: unknown }).cause);
+      return;
+    }
+
+    if (typeof value !== "object") {
+      parts.push(String(value));
+      return;
+    }
+
+    const typed = value as Record<string, unknown>;
+    const fields = ["code", "message", "details", "hint", "error", "statusText", "name"] as const;
+    fields.forEach((key) => {
+      if (key in typed) collect(typed[key]);
+    });
+    if ("cause" in typed) collect(typed.cause);
+  };
+
+  collect(error);
+  const text = parts.join(" ").toLowerCase();
+  if (!text) return false;
+  if (text.includes("42p01")) return true;
+  if (text.includes("public.recipes") && text.includes("schema cache")) return true;
+  if (text.includes("relation") && text.includes("recipes") && text.includes("does not exist")) return true;
+  if (text.includes("could not find the table") && text.includes("recipes") && text.includes("schema cache")) return true;
+  return false;
+}
+
 function isSeedTemplateId(recipeId: string | null | undefined): boolean {
   return String(recipeId || "").trim().toLowerCase().startsWith("seed-");
 }
@@ -552,6 +596,11 @@ function RecipesPageContent() {
     const source = recipes.find((item) => item.id === recipeId);
     if (!source) return;
     setPendingCopyRecipeId(recipeId);
+    const inFirstRecipeFlow =
+      isFirstRecipeFlow ||
+      (typeof window !== "undefined" &&
+        (localStorage.getItem(RECIPES_FIRST_FLOW_KEY) === "1" ||
+          localStorage.getItem(FIRST_RECIPE_CREATE_FLOW_KEY) === "1"));
 
     try {
       let targetUserId = currentUserId;
@@ -563,12 +612,6 @@ function RecipesPageContent() {
           targetUserId = null;
         }
       }
-
-      const inFirstRecipeFlow =
-        isFirstRecipeFlow ||
-        (typeof window !== "undefined" &&
-          (localStorage.getItem(RECIPES_FIRST_FLOW_KEY) === "1" ||
-            localStorage.getItem(FIRST_RECIPE_CREATE_FLOW_KEY) === "1"));
 
       if (!targetUserId) {
         const localCopy: RecipeModel = {
@@ -628,6 +671,31 @@ function RecipesPageContent() {
         showAddedFeedback(source.title || "", false);
       }
     } catch (copyError) {
+      if (isMissingRecipesTableError(copyError)) {
+        const localCopy: RecipeModel = {
+          ...source,
+          id: crypto.randomUUID(),
+          ownerId: "",
+          type: "user",
+          isTemplate: false,
+          visibility: "private",
+          notes: source.notes || "",
+        };
+        upsertRecipeInLocalCache(localCopy);
+        if (inFirstRecipeFlow) {
+          localStorage.removeItem(RECIPES_FIRST_FLOW_KEY);
+          localStorage.removeItem(FIRST_RECIPE_CREATE_FLOW_KEY);
+          setIsFirstRecipeFlow(false);
+          setShowFirstRecipeSuccess(true);
+          setFirstCopiedRecipeId(localCopy.id);
+          setActionMessage("");
+          setViewMode("public");
+        } else {
+          setActionMessage("Таблица рецептов в Supabase не инициализирована. Рецепт добавлен локально.");
+          showAddedFeedback(source.title || "", false);
+        }
+        return;
+      }
       const text = toErrorText(copyError, "Не удалось скопировать рецепт.");
       setActionMessage(text);
     } finally {

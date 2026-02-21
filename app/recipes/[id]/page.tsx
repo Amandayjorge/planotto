@@ -53,6 +53,50 @@ const toErrorText = (error: unknown, fallback: string): string => {
   return fallback;
 };
 
+const isMissingRecipesTableError = (error: unknown): boolean => {
+  const parts: string[] = [];
+  const seen = new Set<unknown>();
+
+  const collect = (value: unknown): void => {
+    if (value == null || seen.has(value)) return;
+    if (typeof value === "object" || typeof value === "function") {
+      seen.add(value);
+    }
+
+    if (typeof value === "string") {
+      parts.push(value);
+      return;
+    }
+
+    if (value instanceof Error) {
+      parts.push(value.message || "");
+      collect((value as Error & { cause?: unknown }).cause);
+      return;
+    }
+
+    if (typeof value !== "object") {
+      parts.push(String(value));
+      return;
+    }
+
+    const typed = value as Record<string, unknown>;
+    const fields = ["code", "message", "details", "hint", "error", "statusText", "name"] as const;
+    fields.forEach((key) => {
+      if (key in typed) collect(typed[key]);
+    });
+    if ("cause" in typed) collect(typed.cause);
+  };
+
+  collect(error);
+  const text = parts.join(" ").toLowerCase();
+  if (!text) return false;
+  if (text.includes("42p01")) return true;
+  if (text.includes("public.recipes") && text.includes("schema cache")) return true;
+  if (text.includes("relation") && text.includes("recipes") && text.includes("does not exist")) return true;
+  if (text.includes("could not find the table") && text.includes("recipes") && text.includes("schema cache")) return true;
+  return false;
+};
+
 const TEMPLATE_IMAGE_FALLBACKS: Record<string, string> = {
   "Омлет с овощами": "/recipes/templates/omelet-vegetables.jpg",
   "Овсяная каша с фруктами": "/recipes/templates/oatmeal-fruits.jpg",
@@ -498,6 +542,23 @@ export default function RecipeDetailPage() {
         router.push(`/recipes/${copied.id}`);
       }
     } catch (error) {
+      if (isMissingRecipesTableError(error)) {
+        const localCopy: RecipeModel = {
+          ...recipe,
+          id: crypto.randomUUID(),
+          ownerId: "",
+          visibility: "private",
+        };
+        upsertRecipeInLocalCache(localCopy);
+        if (shouldShowFirstRecipeOverlay && typeof window !== "undefined") {
+          localStorage.setItem(FIRST_RECIPE_ADDED_KEY, localCopy.id);
+          localStorage.setItem(FIRST_RECIPE_SUCCESS_PENDING_KEY, "1");
+          router.push(`/recipes?firstAdded=1&recipe=${encodeURIComponent(localCopy.id)}`);
+        } else {
+          router.push(`/recipes/${localCopy.id}`);
+        }
+        return;
+      }
       const text = toErrorText(error, "Не удалось скопировать рецепт.");
       alert(text);
     }
