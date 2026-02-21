@@ -515,6 +515,22 @@ const falFetchJson = async (
   return call("Bearer");
 };
 
+const OCR_META_LINE_REGEX =
+  /^(?:completed|done|failed|error|in[_\s-]?progress|queued|running|pending)(?:\s+[0-9a-f-]{8,})?$/i;
+const OCR_UUID_REGEX =
+  /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/i;
+const OCR_META_KEYWORDS_REGEX = /\b(?:request[_\s-]?id|job[_\s-]?id|task[_\s-]?id|status)\b/i;
+
+const isOcrMetaLine = (value: string): boolean => {
+  const text = value.trim();
+  if (!text) return true;
+  if (/^https?:\/\//i.test(text)) return true;
+  if (OCR_META_LINE_REGEX.test(text)) return true;
+  if (OCR_META_KEYWORDS_REGEX.test(text) && OCR_UUID_REGEX.test(text)) return true;
+  if (/^[0-9a-f-]{24,}$/i.test(text)) return true;
+  return false;
+};
+
 const collectTextCandidates = (value: unknown, output: string[], depth = 0): void => {
   if (depth > 6 || value == null) return;
   if (typeof value === "string") {
@@ -543,7 +559,18 @@ const collectTextCandidates = (value: unknown, output: string[], depth = 0): voi
     for (const key of priorityKeys) {
       if (key in record) collectTextCandidates(record[key], output, depth + 1);
     }
-    for (const item of Object.values(record)) {
+    for (const [key, item] of Object.entries(record)) {
+      const lowerKey = key.toLowerCase();
+      if (
+        lowerKey.includes("status") ||
+        lowerKey.includes("request_id") ||
+        lowerKey.includes("job_id") ||
+        lowerKey.includes("task_id") ||
+        lowerKey.includes("response_url") ||
+        lowerKey.includes("status_url")
+      ) {
+        continue;
+      }
       collectTextCandidates(item, output, depth + 1);
     }
   }
@@ -552,7 +579,14 @@ const collectTextCandidates = (value: unknown, output: string[], depth = 0): voi
 const extractFalOcrText = (payload: unknown): string => {
   const chunks: string[] = [];
   collectTextCandidates(payload, chunks);
-  const unique = Array.from(new Set(chunks.map((item) => item.trim()).filter(Boolean)));
+  const unique = Array.from(
+    new Set(
+      chunks
+        .map((item) => item.trim())
+        .filter(Boolean)
+        .filter((item) => !isOcrMetaLine(item))
+    )
+  );
   return unique.join("\n").trim();
 };
 
@@ -1515,7 +1549,21 @@ const runFalOcrForRecipeImport = async (
         const statusValue = safeString(statusData.status).toUpperCase();
         const maybePayload = statusData.response ?? statusData.output ?? statusData.result ?? statusData;
         if (!statusValue || statusValue === "COMPLETED" || statusValue === "DONE") {
-          ocrPayload = maybePayload;
+          let finalPayload: unknown = maybePayload;
+          if (!extractFalOcrText(finalPayload) && responseUrl && pollUrl !== responseUrl) {
+            const responseFetch = await falFetchJson(
+              responseUrl,
+              {
+                method: "GET",
+              },
+              falKey
+            );
+            if (responseFetch.ok) {
+              const responseData = (responseFetch.json || {}) as Record<string, unknown>;
+              finalPayload = responseData.response ?? responseData.output ?? responseData.result ?? responseData;
+            }
+          }
+          ocrPayload = finalPayload;
           break;
         }
         if (statusValue === "FAILED" || statusValue === "ERROR") {
