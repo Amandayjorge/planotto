@@ -76,6 +76,13 @@ const hasImportedContent = (draft: ImportedRecipeDraft | null): boolean => {
   return (draft.ingredients || []).some((item) => item.name?.trim().length > 0);
 };
 
+const hasImportedPhotoContent = (draft: ImportedRecipeDraft | null): boolean => {
+  if (!draft) return false;
+  if (draft.shortDescription?.trim()) return true;
+  if (draft.instructions?.trim()) return true;
+  return (draft.ingredients || []).some((item) => item.name?.trim().length > 0);
+};
+
 const sanitizeImportIssue = (issue: string): string => {
   const value = issue.trim();
   if (!value) return "";
@@ -419,13 +426,16 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
       applyImportedDraft(data.recipe);
       setImportIssues(sanitizeImportIssues(Array.isArray(data.issues) ? data.issues : []));
       setAiMessage(data.message || "");
+      const backendMessage = String(data.message || "").trim();
       if (hasImportedContent(data.recipe)) {
         setImportStatus("success");
         setImportStatusMessage("Импортировано. Проверьте и сохраните.");
+        if (backendMessage) setImportStatusMessage(backendMessage);
         scrollToStepOne();
       } else {
         setImportStatus("error");
         setImportStatusMessage("Не удалось импортировать рецепт по ссылке. Попробуйте другую ссылку или заполните вручную.");
+        if (backendMessage) setImportStatusMessage(backendMessage);
       }
     } catch (error) {
       if (requestId !== importRequestIdRef.current) return;
@@ -530,13 +540,16 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
       applyImportedDraft(data.recipe);
       setImportIssues(sanitizeImportIssues(Array.isArray(data.issues) ? data.issues : []));
       setAiMessage(data.message || "");
-      if (hasImportedContent(data.recipe)) {
+      const backendMessage = String(data.message || "").trim();
+      if (hasImportedPhotoContent(data.recipe)) {
         setImportStatus("success");
         setImportStatusMessage("Рецепт распознан, проверьте и сохраните.");
+        if (backendMessage) setImportStatusMessage(backendMessage);
         scrollToStepOne();
       } else {
         setImportStatus("error");
         setImportStatusMessage("Не удалось распознать фото. Попробуйте другое фото или заполните вручную.");
+        if (backendMessage) setImportStatusMessage(backendMessage);
       }
     } catch (error) {
       if (requestId !== importRequestIdRef.current) return;
