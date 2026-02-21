@@ -4,7 +4,7 @@ import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
 import {
-  copyPublicRecipeToMine,
+  createRecipe,
   deleteRecipe,
   deleteAllMyRecipes,
   importLocalRecipesIfNeeded,
@@ -577,7 +577,23 @@ function RecipesPageContent() {
         return;
       }
 
-      const copied = await copyPublicRecipeToMine(currentUserId, recipeId);
+      const copied = await createRecipe(currentUserId, {
+        title: source.title || "Рецепт",
+        shortDescription: source.shortDescription || "",
+        description: source.description || "",
+        instructions: source.instructions || source.description || "",
+        ingredients: (source.ingredients || []).map((item) => ({
+          name: item.name || "",
+          amount: Number(item.amount || 0),
+          unit: item.unit || "шт",
+        })),
+        notes: source.notes || "",
+        servings: source.servings && source.servings > 0 ? source.servings : 2,
+        image: source.image || "",
+        visibility: "private",
+        categories: source.tags || source.categories || [],
+        tags: source.tags || source.categories || [],
+      });
       upsertRecipeInLocalCache(copied);
       if (inFirstRecipeFlow) {
         localStorage.removeItem(RECIPES_FIRST_FLOW_KEY);
