@@ -4,6 +4,7 @@ import { getSupabaseClient } from "./supabaseClient";
 
 export const RECIPES_STORAGE_KEY = "recipes";
 const RECIPE_REPORTS_KEY = "recipeReports";
+const RECIPES_CLOUD_FALLBACK_KEY = "planotto_recipes_cloud_v1";
 
 export type RecipeVisibility = "private" | "public";
 
@@ -374,6 +375,88 @@ const normalizeStringArray = (value: unknown): string[] => {
     .filter((item) => item.length > 0);
 };
 
+const serializeRecipeForCloudFallback = (recipe: RecipeModel): Record<string, unknown> => ({
+  id: recipe.id,
+  title: recipe.title || "Рецепт",
+  shortDescription: recipe.shortDescription || "",
+  description: recipe.description || "",
+  instructions: recipe.instructions || "",
+  ingredients: normalizeIngredients(recipe.ingredients),
+  notes: recipe.notes || "",
+  servings: recipe.servings && recipe.servings > 0 ? recipe.servings : 2,
+  image: recipe.image || "",
+  categories: normalizeStringArray(recipe.categories),
+  tags: normalizeStringArray(recipe.tags || recipe.categories),
+  visibility: "private",
+  createdAt: recipe.createdAt || new Date().toISOString(),
+  updatedAt: recipe.updatedAt || new Date().toISOString(),
+});
+
+const mapCloudFallbackItemToRecipe = (ownerId: string, value: unknown): RecipeModel | null => {
+  if (!value || typeof value !== "object") return null;
+  const raw = value as Record<string, unknown>;
+  const id = String(raw.id || "").trim();
+  const title = String(raw.title || "").trim();
+  if (!id || !title) return null;
+
+  const categories = normalizeStringArray(raw.categories);
+  const tags = normalizeStringArray(raw.tags ?? raw.categories);
+
+  return {
+    id,
+    ownerId,
+    type: "user",
+    isTemplate: false,
+    title,
+    shortDescription: String(raw.shortDescription || ""),
+    description: String(raw.description || ""),
+    instructions: String(raw.instructions || raw.description || ""),
+    ingredients: normalizeIngredients(raw.ingredients),
+    notes: String(raw.notes || ""),
+    servings: Number(raw.servings || 2),
+    image: String(raw.image || ""),
+    categories,
+    tags: tags.length > 0 ? tags : categories,
+    visibility: "private",
+    createdAt: String(raw.createdAt || ""),
+    updatedAt: String(raw.updatedAt || ""),
+  };
+};
+
+const loadCloudFallbackRecipes = async (ownerId: string): Promise<RecipeModel[]> => {
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase.auth.getUser();
+  if (error || !data.user || data.user.id !== ownerId) return [];
+  const metadata = (data.user.user_metadata || {}) as Record<string, unknown>;
+  const rawList = metadata[RECIPES_CLOUD_FALLBACK_KEY];
+  if (!Array.isArray(rawList)) return [];
+  return rawList
+    .map((item) => mapCloudFallbackItemToRecipe(ownerId, item))
+    .filter((item): item is RecipeModel => Boolean(item))
+    .sort((a, b) => Date.parse(b.updatedAt || "") - Date.parse(a.updatedAt || ""));
+};
+
+const saveCloudFallbackRecipes = async (ownerId: string, recipes: RecipeModel[]): Promise<void> => {
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase.auth.getUser();
+  if (error || !data.user || data.user.id !== ownerId) {
+    throw error || new Error("Supabase user is not available.");
+  }
+
+  const existingMetadata = (data.user.user_metadata || {}) as Record<string, unknown>;
+  const payload = recipes.map((item) => serializeRecipeForCloudFallback(item));
+  const { error: updateError } = await supabase.auth.updateUser({
+    data: {
+      ...existingMetadata,
+      [RECIPES_CLOUD_FALLBACK_KEY]: payload,
+    },
+  });
+
+  if (updateError) {
+    throw updateError;
+  }
+};
+
 const mapRow = (row: RecipeRow, notes?: string | null): RecipeModel => {
   const tags = normalizeStringArray(row.categories);
   const isTemplate = !row.owner_id;
@@ -494,6 +577,9 @@ export const listMyRecipes = async (ownerId: string): Promise<RecipeModel[]> => 
     .order("updated_at", { ascending: false });
 
   if (recipesError) {
+    if (isMissingRelationError(recipesError, "recipes")) {
+      return loadCloudFallbackRecipes(ownerId);
+    }
     throw recipesError;
   }
 
@@ -566,6 +652,10 @@ export const getRecipeById = async (recipeId: string, currentUserId?: string | n
 
   const { data, error } = await query.maybeSingle();
   if (error) {
+    if (isMissingRelationError(error, "recipes") && currentUserId) {
+      const cloudRecipes = await loadCloudFallbackRecipes(currentUserId);
+      return cloudRecipes.find((item) => item.id === recipeId) || null;
+    }
     throw error;
   }
   if (!data) return null;
@@ -607,6 +697,31 @@ export const createRecipe = async (ownerId: string, input: RecipeUpsertInput): P
     .single();
 
   if (error) {
+    if (isMissingRelationError(error, "recipes")) {
+      const now = new Date().toISOString();
+      const cloudRecipes = await loadCloudFallbackRecipes(ownerId);
+      const created: RecipeModel = {
+        id: crypto.randomUUID(),
+        ownerId,
+        type: "user",
+        isTemplate: false,
+        title: payload.title || "Рецепт",
+        shortDescription: payload.short_description || "",
+        description: payload.description || "",
+        instructions: payload.instructions || payload.description || "",
+        ingredients: normalizeIngredients(payload.ingredients),
+        notes: (input.notes || "").trim(),
+        servings: payload.servings && payload.servings > 0 ? payload.servings : 2,
+        image: payload.image || "",
+        categories: normalizeStringArray(payload.categories),
+        tags: normalizeStringArray(payload.categories),
+        visibility: "private",
+        createdAt: now,
+        updatedAt: now,
+      };
+      await saveCloudFallbackRecipes(ownerId, [created, ...cloudRecipes]);
+      return created;
+    }
     throw error;
   }
 
@@ -641,6 +756,32 @@ export const updateRecipe = async (ownerId: string, recipeId: string, input: Rec
     .single();
 
   if (error) {
+    if (isMissingRelationError(error, "recipes")) {
+      const cloudRecipes = await loadCloudFallbackRecipes(ownerId);
+      const existing = cloudRecipes.find((item) => item.id === recipeId);
+      if (!existing) {
+        throw error;
+      }
+      const now = new Date().toISOString();
+      const updated: RecipeModel = {
+        ...existing,
+        title: payload.title || existing.title,
+        shortDescription: payload.short_description || "",
+        description: payload.description || "",
+        instructions: payload.instructions || payload.description || "",
+        ingredients: normalizeIngredients(payload.ingredients),
+        notes: (input.notes || "").trim(),
+        servings: payload.servings && payload.servings > 0 ? payload.servings : 2,
+        image: payload.image || "",
+        categories: normalizeStringArray(payload.categories),
+        tags: normalizeStringArray(payload.categories),
+        visibility: payload.visibility || "private",
+        updatedAt: now,
+      };
+      const next = [updated, ...cloudRecipes.filter((item) => item.id !== recipeId)];
+      await saveCloudFallbackRecipes(ownerId, next);
+      return updated;
+    }
     throw error;
   }
 
@@ -674,6 +815,12 @@ export const deleteRecipe = async (ownerId: string, recipeId: string): Promise<v
   const supabase = getSupabaseClient();
   const { error } = await supabase.from("recipes").delete().eq("id", recipeId).eq("owner_id", ownerId);
   if (error) {
+    if (isMissingRelationError(error, "recipes")) {
+      const cloudRecipes = await loadCloudFallbackRecipes(ownerId);
+      const next = cloudRecipes.filter((item) => item.id !== recipeId);
+      await saveCloudFallbackRecipes(ownerId, next);
+      return;
+    }
     throw error;
   }
 };
@@ -682,6 +829,10 @@ export const deleteAllMyRecipes = async (ownerId: string): Promise<void> => {
   const supabase = getSupabaseClient();
   const { error } = await supabase.from("recipes").delete().eq("owner_id", ownerId);
   if (error) {
+    if (isMissingRelationError(error, "recipes")) {
+      await saveCloudFallbackRecipes(ownerId, []);
+      return;
+    }
     throw error;
   }
 };
@@ -776,6 +927,28 @@ export const importLocalRecipesIfNeeded = async (ownerId: string): Promise<numbe
     .eq("owner_id", ownerId);
 
   if (countError) {
+    if (isMissingRelationError(countError, "recipes")) {
+      const cloud = await loadCloudFallbackRecipes(ownerId);
+      if (cloud.length > 0) return 0;
+      let importedFallback = 0;
+      for (const item of local) {
+        const created = await createRecipe(ownerId, {
+          title: item.title,
+          shortDescription: item.shortDescription,
+          description: item.description,
+          instructions: item.instructions || item.description,
+          ingredients: item.ingredients || [],
+          notes: item.notes,
+          servings: item.servings,
+          image: item.image,
+          categories: item.categories,
+          tags: item.tags || item.categories,
+          visibility: "private",
+        });
+        if (created.id) importedFallback += 1;
+      }
+      return importedFallback;
+    }
     throw countError;
   }
   if ((count || 0) > 0) return 0;
