@@ -1189,13 +1189,16 @@ function RecipesPageContent() {
             const mainActionLabel = isPublicSourceRecipe
               ? isAdding
                 ? "Добавляю..."
-                : addDone
-                  ? "Уже в моих"
                 : "Добавить в мои"
               : "Открыть";
-            const mainActionClassName = `btn ${isPublicSourceRecipe && !addDone ? "btn-primary" : ""}`.trim();
+            const mainActionClassName = `btn ${isPublicSourceRecipe ? "btn-primary" : ""}`.trim();
             const handleMainAction = () => {
               if (isPublicSourceRecipe) {
+                if (addDone && existingMineRecipeId) {
+                  showAddedFeedback(recipe.title || "", true);
+                  router.push(`/recipes/${existingMineRecipeId}`);
+                  return;
+                }
                 handleCopyToMine(recipe.id);
                 return;
               }
