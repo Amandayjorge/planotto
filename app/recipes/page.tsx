@@ -7,6 +7,7 @@ import {
   createRecipe,
   deleteRecipe,
   deleteAllMyRecipes,
+  getCurrentUserId,
   importLocalRecipesIfNeeded,
   listSeedTemplateRecipes,
   listMyRecipes,
@@ -52,6 +53,15 @@ function looksLikeUrl(value: string): boolean {
 
 function normalizeRecipeTitle(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function toErrorText(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message) return error.message;
+  if (typeof error === "object" && error && "message" in error) {
+    const text = String((error as { message?: unknown }).message || "");
+    if (text) return text;
+  }
+  return fallback;
 }
 
 function isSeedTemplateId(recipeId: string | null | undefined): boolean {
@@ -544,13 +554,23 @@ function RecipesPageContent() {
     setPendingCopyRecipeId(recipeId);
 
     try {
+      let targetUserId = currentUserId;
+      if (!targetUserId && isSupabaseConfigured()) {
+        try {
+          targetUserId = await getCurrentUserId();
+          if (targetUserId) setCurrentUserId(targetUserId);
+        } catch {
+          targetUserId = null;
+        }
+      }
+
       const inFirstRecipeFlow =
         isFirstRecipeFlow ||
         (typeof window !== "undefined" &&
           (localStorage.getItem(RECIPES_FIRST_FLOW_KEY) === "1" ||
             localStorage.getItem(FIRST_RECIPE_CREATE_FLOW_KEY) === "1"));
 
-      if (!currentUserId) {
+      if (!targetUserId) {
         const localCopy: RecipeModel = {
           ...source,
           id: crypto.randomUUID(),
@@ -577,7 +597,7 @@ function RecipesPageContent() {
         return;
       }
 
-      const copied = await createRecipe(currentUserId, {
+      const copied = await createRecipe(targetUserId, {
         title: source.title || "Рецепт",
         shortDescription: source.shortDescription || "",
         description: source.description || "",
@@ -608,7 +628,7 @@ function RecipesPageContent() {
         showAddedFeedback(source.title || "", false);
       }
     } catch (copyError) {
-      const text = copyError instanceof Error ? copyError.message : "Не удалось скопировать рецепт.";
+      const text = toErrorText(copyError, "Не удалось скопировать рецепт.");
       setActionMessage(text);
     } finally {
       setPendingCopyRecipeId((prev) => (prev === recipeId ? null : prev));

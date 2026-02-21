@@ -6,7 +6,7 @@ import LinkifiedText from "../../components/LinkifiedText";
 import ProductAutocompleteInput from "../../components/ProductAutocompleteInput";
 import { appendProductSuggestions, loadProductSuggestions } from "../../lib/productSuggestions";
 import {
-  copyPublicRecipeToMine,
+  createRecipe,
   deleteRecipe,
   getCurrentUserId,
   getRecipeById,
@@ -42,6 +42,15 @@ const normalizeLink = (value: string): string => {
   const trimmed = value.trim();
   if (!trimmed) return "";
   return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+};
+
+const toErrorText = (error: unknown, fallback: string): string => {
+  if (error instanceof Error && error.message) return error.message;
+  if (typeof error === "object" && error && "message" in error) {
+    const text = String((error as { message?: unknown }).message || "");
+    if (text) return text;
+  }
+  return fallback;
 };
 
 const TEMPLATE_IMAGE_FALLBACKS: Record<string, string> = {
@@ -434,7 +443,17 @@ export default function RecipeDetailPage() {
       (localStorage.getItem(RECIPES_FIRST_FLOW_KEY) === "1" ||
         localStorage.getItem(FIRST_RECIPE_SUCCESS_SHOWN_KEY) !== "1");
 
-    if (!currentUserId) {
+    let targetUserId = currentUserId;
+    if (!targetUserId && isSupabaseConfigured()) {
+      try {
+        targetUserId = await getCurrentUserId();
+        if (targetUserId) setCurrentUserId(targetUserId);
+      } catch {
+        targetUserId = null;
+      }
+    }
+
+    if (!targetUserId) {
       const localCopy: RecipeModel = {
         ...recipe,
         id: crypto.randomUUID(),
@@ -453,7 +472,23 @@ export default function RecipeDetailPage() {
     }
 
     try {
-      const copied = await copyPublicRecipeToMine(currentUserId, recipe.id);
+      const copied = await createRecipe(targetUserId, {
+        title: recipe.title || "Рецепт",
+        shortDescription: recipe.shortDescription || "",
+        description: recipe.description || "",
+        instructions: recipe.instructions || recipe.description || "",
+        ingredients: (recipe.ingredients || []).map((item) => ({
+          name: item.name || "",
+          amount: Number(item.amount || 0),
+          unit: item.unit || "шт",
+        })),
+        notes: recipe.notes || "",
+        servings: recipe.servings && recipe.servings > 0 ? recipe.servings : 2,
+        image: recipe.image || "",
+        visibility: "private",
+        categories: recipe.tags || recipe.categories || [],
+        tags: recipe.tags || recipe.categories || [],
+      });
       upsertRecipeInLocalCache(copied);
       if (shouldShowFirstRecipeOverlay && typeof window !== "undefined") {
         localStorage.setItem(FIRST_RECIPE_ADDED_KEY, copied.id);
@@ -463,7 +498,7 @@ export default function RecipeDetailPage() {
         router.push(`/recipes/${copied.id}`);
       }
     } catch (error) {
-      const text = error instanceof Error ? error.message : "Не удалось скопировать рецепт.";
+      const text = toErrorText(error, "Не удалось скопировать рецепт.");
       alert(text);
     }
   };
