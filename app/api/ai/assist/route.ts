@@ -412,9 +412,23 @@ const parseRecipeFromText = (text: string, fallbackTitle = ""): ParsedRecipeLike
   );
   const instructionLinesResolved =
     instructionLines.length > 0 ? instructionLines : extractFallbackInstructionLines(lines);
+  const normalizedTitle = stripHtmlTags(title).toLowerCase();
+  const ingredientSet = new Set(ingredientLinesResolved.map((line) => line.toLowerCase()));
+  const genericInstructionLines = lines.filter((line) => {
+    const lower = line.toLowerCase();
+    if (lower === normalizedTitle) return false;
+    if (ingredientSet.has(lower)) return false;
+    return lower.length > 2;
+  });
 
   const ingredients = toIngredientItems(ingredientLinesResolved);
-  const instructions = instructionLinesResolved.join("\n").trim();
+  const instructions = (
+    instructionLinesResolved.length > 0
+      ? instructionLinesResolved
+      : genericInstructionLines.slice(0, 140)
+  )
+    .join("\n")
+    .trim();
   const hasContent = Boolean(title || instructions || ingredients.length > 0);
   if (!hasContent) return null;
 
@@ -1559,6 +1573,28 @@ const runFalOcrForRecipeImport = async (
       parsed: textFallback,
       message: "Рецепт распознан частично. Проверьте и сохраните.",
       issues: [BASE_OCR_FALLBACK_ISSUE, "Часть полей могла распознаться неточно. Проверьте ингредиенты и шаги."],
+    };
+  }
+
+  const minimalLines = normalizedText
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(0, 160);
+  if (minimalLines.length > 0) {
+    return {
+      parsed: {
+        title: "Импортированный рецепт по фото",
+        shortDescription: "",
+        instructions: minimalLines.join("\n"),
+        servings: null,
+        timeMinutes: null,
+        image: "",
+        tags: [],
+        ingredients: [],
+      },
+      message: "Текст с фото извлечен частично. Проверьте и отредактируйте рецепт.",
+      issues: [BASE_OCR_FALLBACK_ISSUE, "Структура рецепта определена не полностью. Проверьте ингредиенты и шаги."],
     };
   }
 

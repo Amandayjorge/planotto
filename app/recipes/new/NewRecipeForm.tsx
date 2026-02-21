@@ -70,6 +70,8 @@ const isSupportedImportUrl = (normalizedUrl: string): boolean => {
 
 const hasImportedContent = (draft: ImportedRecipeDraft | null): boolean => {
   if (!draft) return false;
+  if (draft.title?.trim()) return true;
+  if (draft.shortDescription?.trim()) return true;
   if (draft.instructions?.trim()) return true;
   return (draft.ingredients || []).some((item) => item.name?.trim().length > 0);
 };
