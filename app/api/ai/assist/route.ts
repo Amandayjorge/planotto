@@ -19,6 +19,11 @@ interface AiRequestBody {
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 const DEFAULT_MODEL = process.env.OPENROUTER_MODEL || "openai/gpt-4o-mini";
 const VISION_MODEL = process.env.OPENROUTER_VISION_MODEL || "openai/gpt-4o-mini";
+const VISION_FALLBACK_MODELS = (process.env.OPENROUTER_VISION_FALLBACK_MODELS ||
+  "google/gemini-2.0-flash-001,qwen/qwen-vl-plus")
+  .split(",")
+  .map((item) => item.trim())
+  .filter(Boolean);
 const FOOD_IMAGE_URL = "https://loremflickr.com";
 const FAL_OCR_ENDPOINT = process.env.FAL_OCR_ENDPOINT || "https://queue.fal.run/fal-ai/got-ocr/v2";
 const FAL_IMAGE_ENDPOINT = process.env.FAL_IMAGE_ENDPOINT || "https://queue.fal.run/fal-ai/flux/schnell";
@@ -865,6 +870,21 @@ type OpenRouterResult = {
   error: string | null;
 };
 
+const getVisionModelCandidates = (): string[] => {
+  const all = [VISION_MODEL, ...VISION_FALLBACK_MODELS, DEFAULT_MODEL]
+    .map((item) => safeString(item))
+    .filter(Boolean);
+  const unique: string[] = [];
+  const seen = new Set<string>();
+  for (const model of all) {
+    const key = model.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push(model);
+  }
+  return unique;
+};
+
 const extractMessageText = (content: unknown): string => {
   if (typeof content === "string") return content;
   if (Array.isArray(content)) {
@@ -986,6 +1006,28 @@ const callOpenRouter = async (
 ): Promise<Record<string, unknown> | null> => {
   const result = await callOpenRouterWithDetails(system, user, imageDataUrls, model);
   return result.json;
+};
+
+const callOpenRouterWithVisionFallback = async (
+  system: string,
+  user: string,
+  imageDataUrls: string[]
+): Promise<OpenRouterResult> => {
+  const candidates = getVisionModelCandidates();
+  const errors: string[] = [];
+  for (const model of candidates) {
+    const result = await callOpenRouterWithDetails(system, user, imageDataUrls, model);
+    if (result.json) return result;
+    const reason = result.error || "Пустой ответ от модели.";
+    errors.push(`${model}: ${reason}`);
+  }
+  return {
+    json: null,
+    error:
+      errors.length > 0
+        ? `Не удалось распознать фото (${errors.join(" | ").slice(0, 420)}).`
+        : "Не удалось распознать фото.",
+  };
 };
 
 const fallbackIngredientHints = (payload: Record<string, unknown>) => {
@@ -1759,11 +1801,10 @@ export async function POST(request: Request) {
           pageOrder: "Переданы по порядку: 1..N",
           knownProducts: safeStringArray(payload.knownProducts).slice(0, 200),
         };
-        const combinedResult = await callOpenRouterWithDetails(
+        const combinedResult = await callOpenRouterWithVisionFallback(
           system,
           JSON.stringify(combinedContext),
-          limitedPhotos,
-          VISION_MODEL
+          limitedPhotos
         );
         if (combinedResult.error) {
           photoIssues.push(BASE_OCR_FALLBACK_ISSUE);
@@ -1786,11 +1827,10 @@ export async function POST(request: Request) {
               totalPages: limitedPhotos.length,
               knownProducts: safeStringArray(payload.knownProducts).slice(0, 200),
             };
-            const result = await callOpenRouterWithDetails(
+            const result = await callOpenRouterWithVisionFallback(
               system,
               JSON.stringify(context),
-              [limitedPhotos[i]],
-              VISION_MODEL
+              [limitedPhotos[i]]
             );
             if (result.error) {
               photoIssues.push(BASE_OCR_FALLBACK_ISSUE);
