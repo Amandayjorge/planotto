@@ -478,7 +478,12 @@ const fetchRecipePageHtml = async (url: string): Promise<string | null> => {
 };
 
 const getFalKey = (): string => {
-  const key = process.env.FAL_KEY || process.env.FAL_API_KEY || "";
+  const key =
+    process.env.FAL_KEY ||
+    process.env.FAL_API_KEY ||
+    process.env.FAL_TOKEN ||
+    process.env.FALKEY ||
+    "";
   return safeString(key);
 };
 
@@ -882,6 +887,8 @@ const getOpenRouterKey = (): string => {
   const key =
     process.env.OPENROUTER_API_KEY ||
     process.env.OPENROUTER_KEY ||
+    process.env.OPEN_ROUTER_API_KEY ||
+    process.env.NEXT_PUBLIC_OPENROUTER_API_KEY ||
     process.env.OPENTOUTERKEY ||
     "";
   return key.trim();
@@ -975,7 +982,11 @@ const extractOpenRouterErrorMessage = (raw: string): string => {
   return raw.slice(0, 300);
 };
 
-const mapOpenRouterError = (status: number): string => {
+const mapOpenRouterError = (status: number, details = ""): string => {
+  const detailsLower = details.toLowerCase();
+  if (detailsLower.includes("no auth") || detailsLower.includes("invalid api key")) {
+    return "Не настроен корректный OPENROUTER_API_KEY.";
+  }
   if (status === 429) return "Сервис распознавания перегружен. Попробуйте позже.";
   if (status === 400 || status === 422) return "Не удалось обработать фото для распознавания.";
   if (status === 401 || status === 403) return "Сервис распознавания временно недоступен.";
@@ -1023,7 +1034,7 @@ const callOpenRouterWithDetails = async (
   const rawText = await response.text();
   if (!response.ok) {
     const details = extractOpenRouterErrorMessage(rawText);
-    const mapped = mapOpenRouterError(response.status);
+    const mapped = mapOpenRouterError(response.status, details);
     console.error("[ai/assist] OpenRouter request failed", {
       status: response.status,
       details,
@@ -1061,6 +1072,9 @@ const callOpenRouterWithVisionFallback = async (
   user: string,
   imageDataUrls: string[]
 ): Promise<OpenRouterResult> => {
+  if (!getOpenRouterKey()) {
+    return { json: null, error: "Не настроен OPENROUTER_API_KEY." };
+  }
   const candidates = getVisionModelCandidates();
   const errors: string[] = [];
   for (const model of candidates) {
@@ -1068,6 +1082,12 @@ const callOpenRouterWithVisionFallback = async (
     if (result.json) return result;
     const reason = result.error || "Пустой ответ от модели.";
     errors.push(`${model}: ${reason}`);
+    if (
+      reason.toLowerCase().includes("openrouter_api_key") ||
+      reason.toLowerCase().includes("ошибка доступа openrouter")
+    ) {
+      break;
+    }
   }
   return {
     json: null,
@@ -1242,8 +1262,17 @@ const fallbackImportedDraft = (source: "url" | "photo", payload: Record<string, 
   const sourceTitle = source === "photo" && photosCount > 1 ? `Импортированный рецепт по фото (${photosCount})` : title;
   if (source === "photo") {
     return {
-      recipe: null,
-      message: "Не удалось уверенно распознать рецепт с фото. Попробуйте более четкое фото и крупный текст.",
+      recipe: {
+        title: sourceTitle,
+        shortDescription: "",
+        instructions: "",
+        servings: null,
+        timeMinutes: null,
+        image: "",
+        tags: [],
+        ingredients: [],
+      },
+      message: "Авто-распознавание недоступно. Создан черновик, заполните рецепт вручную.",
       issues:
         photosCount > 1
           ? [`Обработано фото: ${photosCount}. Распознавание оказалось неполным.`]
@@ -1501,7 +1530,7 @@ const runFalOcrForRecipeImport = async (
     return {
       parsed: null,
       message: "",
-      issues: [BASE_OCR_FALLBACK_ISSUE],
+      issues: [BASE_OCR_FALLBACK_ISSUE, "Не настроен FAL_KEY для OCR."],
     };
   }
 
