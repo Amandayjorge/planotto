@@ -502,7 +502,10 @@ export default function RecipeDetailPage() {
         ...recipe,
         id: crypto.randomUUID(),
         ownerId: "",
+        type: "user",
+        isTemplate: false,
         visibility: "private",
+        notes: recipe.notes || "",
       };
       upsertRecipeInLocalCache(localCopy);
       if (shouldShowFirstRecipeOverlay && typeof window !== "undefined") {
@@ -547,7 +550,10 @@ export default function RecipeDetailPage() {
           ...recipe,
           id: crypto.randomUUID(),
           ownerId: "",
+          type: "user",
+          isTemplate: false,
           visibility: "private",
+          notes: recipe.notes || "",
         };
         upsertRecipeInLocalCache(localCopy);
         if (shouldShowFirstRecipeOverlay && typeof window !== "undefined") {

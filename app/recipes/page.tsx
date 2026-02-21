@@ -223,34 +223,44 @@ function RecipesPageContent() {
 
   const refreshRecipes = async (mode: ViewMode, userId: string | null): Promise<void> => {
     setIsLoading(true);
+    const localMine = () => loadLocalRecipes().filter((item) => !isSeedTemplateId(item.id));
 
     try {
       if (!isSupabaseConfigured()) {
-        setRecipes(mode === "public" ? listSeedTemplateRecipes() : loadLocalRecipes());
+        setRecipes(mode === "public" ? listSeedTemplateRecipes() : localMine());
         return;
       }
 
       if (mode === "mine") {
         if (!userId) {
-          setRecipes(loadLocalRecipes());
+          setRecipes(localMine());
           return;
         }
 
-        if (importedForUser.current !== userId) {
-          await importLocalRecipesIfNeeded(userId);
-          importedForUser.current = userId;
-        }
+        try {
+          if (importedForUser.current !== userId) {
+            await importLocalRecipesIfNeeded(userId);
+            importedForUser.current = userId;
+          }
 
-        const mine = await listMyRecipes(userId);
-        setRecipes(mine);
-        syncRecipesToLocalCache(mine);
-        return;
+          const mine = await listMyRecipes(userId);
+          setRecipes(mine);
+          syncRecipesToLocalCache(mine);
+          return;
+        } catch (mineError) {
+          if (isMissingRecipesTableError(mineError)) {
+            setRecipes(localMine());
+            setActionMessage("Таблица recipes в Supabase не инициализирована. Показываем локальные рецепты.");
+            return;
+          }
+          throw mineError;
+        }
       }
 
       setRecipes(listSeedTemplateRecipes());
     } catch (requestError) {
       console.error("[recipes] failed to load recipes", requestError);
-      setRecipes(mode === "public" ? listSeedTemplateRecipes() : []);
+      setRecipes(mode === "public" ? listSeedTemplateRecipes() : localMine());
     } finally {
       setIsLoading(false);
     }
