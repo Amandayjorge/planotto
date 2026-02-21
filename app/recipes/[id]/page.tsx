@@ -215,11 +215,13 @@ export default function RecipeDetailPage() {
         return;
       }
 
-      if (localRecipe && !localRecipe.ownerId) {
+      if (localRecipe) {
         setRecipe(localRecipe);
         resetFormFromRecipe(localRecipe);
         setIsReportedHidden(false);
-        return;
+        if (!localRecipe.ownerId) {
+          return;
+        }
       }
 
       const data = await getRecipeById(recipeId, currentUserId);
@@ -235,8 +237,20 @@ export default function RecipeDetailPage() {
       setRecipe(data);
       if (data) resetFormFromRecipe(data);
     } catch (error) {
+      const localRecipe = loadLocalRecipes().find((item) => item.id === recipeId) || null;
+      if (isMissingRecipesTableError(error) && localRecipe) {
+        const localFallback: RecipeModel = {
+          ...localRecipe,
+          ownerId: "",
+          visibility: "private",
+        };
+        setRecipe(localFallback);
+        resetFormFromRecipe(localFallback);
+        setIsReportedHidden(false);
+        return;
+      }
       console.error("Failed to load recipe:", error);
-      setRecipe(null);
+      setRecipe(localRecipe);
     } finally {
       setIsLoading(false);
     }
@@ -448,6 +462,27 @@ export default function RecipeDetailPage() {
       setRecipe(updated);
       setIsEditing(false);
     } catch (error) {
+      if (isMissingRecipesTableError(error)) {
+        const updatedLocal: RecipeModel = {
+          ...recipe,
+          ownerId: "",
+          title: title.trim(),
+          shortDescription: shortDescription.trim(),
+          description: normalizedRecipeLink,
+          instructions: instructions.trim(),
+          notes: notes.trim(),
+          ingredients: normalizedIngredients,
+          servings: servings > 0 ? servings : 2,
+          image: image.trim(),
+          visibility: "private",
+          categories: normalizedTags,
+          tags: normalizedTags,
+        };
+        upsertRecipeInLocalCache(updatedLocal);
+        setRecipe(updatedLocal);
+        setIsEditing(false);
+        return;
+      }
       const text = error instanceof Error ? error.message : "Не удалось сохранить рецепт.";
       alert(text);
     } finally {
@@ -475,6 +510,11 @@ export default function RecipeDetailPage() {
       removeRecipeFromLocalCache(recipe.id);
       router.push("/recipes");
     } catch (error) {
+      if (isMissingRecipesTableError(error)) {
+        removeRecipeFromLocalCache(recipe.id);
+        router.push("/recipes");
+        return;
+      }
       const text = error instanceof Error ? error.message : "Не удалось удалить рецепт.";
       alert(text);
     }

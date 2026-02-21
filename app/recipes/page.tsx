@@ -250,7 +250,7 @@ function RecipesPageContent() {
         } catch (mineError) {
           if (isMissingRecipesTableError(mineError)) {
             setRecipes(localMine());
-            setActionMessage("Таблица recipes в Supabase не инициализирована. Показываем локальные рецепты.");
+            setActionMessage("Сейчас работаем в локальном режиме. Ваши рецепты доступны на этом устройстве.");
             return;
           }
           throw mineError;
