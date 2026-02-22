@@ -1384,6 +1384,8 @@ function MenuPageContent() {
       delete next[id];
       return next;
     });
+
+    setExpandedActiveProductNoteId((prev) => (prev === id ? null : prev));
   };
 
   const updateActiveProductUntilDate = (id: string, untilDate: string) => {
@@ -1409,7 +1411,7 @@ function MenuPageContent() {
       if (parsed) return `до ${formatDisplayDate(parsed)}`;
       return "до даты";
     }
-    return "в периоде";
+    return "в этом меню";
   };
 
   const handleAiMenuSuggestion = useCallback(async (prompt = "") => {
@@ -3025,6 +3027,11 @@ function MenuPageContent() {
                         {notePreview}
                       </span>
                     ) : null}
+                    {activeProductSavedNoteId === product.id ? (
+                      <span style={{ color: "var(--accent-primary)", whiteSpace: "nowrap", fontSize: "12px" }}>
+                        Сохранено
+                      </span>
+                    ) : null}
                   </button>
 
                   {isExpanded ? (
@@ -3044,7 +3051,7 @@ function MenuPageContent() {
                         value={product.scope}
                         onChange={(e) => updateActiveProductScope(product.id, e.target.value as ActiveProductScope)}
                       >
-                        <option value="in_period">В этом периоде</option>
+                        <option value="in_period">В этом меню</option>
                         <option value="persistent">До отмены</option>
                         <option value="until_date">До даты</option>
                       </select>
@@ -3076,9 +3083,6 @@ function MenuPageContent() {
                           }
                         }}
                       />
-                      {activeProductSavedNoteId === product.id ? (
-                        <span style={{ fontSize: "12px", color: "var(--accent-primary)" }}>Сохранено</span>
-                      ) : null}
                       <label style={{ display: "inline-flex", gap: "6px", alignItems: "center", fontSize: "12px" }}>
                         <input
                           type="checkbox"
