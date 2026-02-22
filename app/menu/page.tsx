@@ -148,6 +148,7 @@ interface ActivePeriodProduct {
   untilDate: string;
   prefer: boolean;
   note: string;
+  hidden: boolean;
 }
 
 const normalizeActiveProductScope = (value: unknown): ActiveProductScope => {
@@ -176,6 +177,7 @@ const normalizeActivePeriodProducts = (
       untilDate: typeof item.untilDate === "string" ? item.untilDate : fallbackUntilDate,
       prefer: item.prefer !== false,
       note: typeof item.note === "string" ? item.note.slice(0, ACTIVE_PRODUCT_NOTE_MAX_LENGTH) : "",
+      hidden: item.hidden === true,
     }));
 };
 
@@ -970,6 +972,8 @@ function MenuPageContent() {
   const [menuSyncError, setMenuSyncError] = useState("");
   const [activeProducts, setActiveProducts] = useState<ActivePeriodProduct[]>([]);
   const [activeProductName, setActiveProductName] = useState("");
+  const [activeProductsSearch, setActiveProductsSearch] = useState("");
+  const [showActiveProductsDialog, setShowActiveProductsDialog] = useState(false);
   const [expandedActiveProductNoteId, setExpandedActiveProductNoteId] = useState<string | null>(null);
   const [activeProductNoteDrafts, setActiveProductNoteDrafts] = useState<Record<string, string>>({});
   const [activeProductSavedNoteId, setActiveProductSavedNoteId] = useState<string | null>(null);
@@ -1008,6 +1012,28 @@ function MenuPageContent() {
         .filter((entry): entry is { dateKey: string; dayLabel: string; displayDate: string } => Boolean(entry)),
     [dayKeys]
   );
+  const visibleActiveProductsCount = useMemo(
+    () => activeProducts.filter((item) => !item.hidden).length,
+    [activeProducts]
+  );
+  const hiddenActiveProductsCount = useMemo(
+    () => activeProducts.filter((item) => item.hidden).length,
+    [activeProducts]
+  );
+  const normalizedActiveProductsSearch = activeProductsSearch.trim().toLocaleLowerCase("ru-RU");
+  const filteredActiveProducts = useMemo(() => {
+    const ordered = [...activeProducts].sort((a, b) => {
+      if (a.hidden !== b.hidden) return a.hidden ? 1 : -1;
+      return a.name.localeCompare(b.name, "ru-RU");
+    });
+    if (!normalizedActiveProductsSearch) return ordered;
+    return ordered.filter((item) => {
+      const inName = item.name.toLocaleLowerCase("ru-RU").includes(normalizedActiveProductsSearch);
+      const inNote = item.note.toLocaleLowerCase("ru-RU").includes(normalizedActiveProductsSearch);
+      return inName || inNote;
+    });
+  }, [activeProducts, normalizedActiveProductsSearch]);
+
   const getMenuStorageKey = () => `${MENU_STORAGE_KEY}:${rangeKey}`;
   const getCellPeopleCountKey = () => `${CELL_PEOPLE_COUNT_KEY}:${rangeKey}`;
   const getCookedStatusKey = () => `cookedStatus:${rangeKey}`;
@@ -1109,11 +1135,18 @@ function MenuPageContent() {
     setShowMealSettings(false);
   };
 
+  const closeActiveProductsDialog = () => {
+    setShowActiveProductsDialog(false);
+    setExpandedActiveProductNoteId(null);
+    setActiveProductsSearch("");
+  };
+
   const resetAllModalStates = () => {
     closeDropdownMenu();
     closeAddEditDialog();
     closeMoveDialog();
     closeMealSettingsDialog();
+    closeActiveProductsDialog();
   };
 
   const toggleMealVisibility = (slotId: string) => {
@@ -1315,6 +1348,7 @@ function MenuPageContent() {
         untilDate: item.untilDate,
         prefer: item.prefer,
         note: item.note || "",
+        hidden: item.hidden === true,
       }));
       const { error: updateError } = await supabase.auth.updateUser({
         data: {
@@ -1346,7 +1380,7 @@ function MenuPageContent() {
       if (existing) {
         return prev.map((item) =>
           item.id === existing.id
-            ? { ...item, name, prefer: true, note: item.note || "" }
+            ? { ...item, name, prefer: true, note: item.note || "", hidden: false }
             : item
         );
       }
@@ -1359,6 +1393,7 @@ function MenuPageContent() {
           untilDate: "",
           prefer: true,
           note: "",
+          hidden: false,
         },
       ];
     });
@@ -1384,6 +1419,13 @@ function MenuPageContent() {
     setActiveProducts((prev) =>
       prev.map((item) => (item.id === id ? { ...item, prefer: !item.prefer } : item))
     );
+  };
+
+  const toggleActiveProductHidden = (id: string) => {
+    setActiveProducts((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, hidden: !item.hidden } : item))
+    );
+    setExpandedActiveProductNoteId((prev) => (prev === id ? null : prev));
   };
 
   const updateActiveProductNote = (id: string, note: string) => {
@@ -1477,7 +1519,7 @@ function MenuPageContent() {
         ? Math.max(1, Math.round(peopleValues.reduce((sum, value) => sum + value, 0) / peopleValues.length))
         : 2;
       const prioritizedProducts = activeProducts
-        .filter((item) => item.prefer)
+        .filter((item) => item.prefer && !item.hidden)
         .map((item) => item.name)
         .join(", ");
       const composedConstraints = [prompt.trim(), prioritizedProducts ? `Приоритетные продукты: ${prioritizedProducts}.` : ""]
@@ -2704,6 +2746,239 @@ function MenuPageContent() {
     );
   };
 
+  const ActiveProductsDialog = () => {
+    if (!showActiveProductsDialog) return null;
+
+    return createPortal(
+      <div
+        className="move-dialog-overlay"
+        style={{
+          position: "fixed",
+          inset: 0,
+          zIndex: 10000,
+          background: "rgba(0, 0, 0, 0.5)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: "12px",
+        }}
+        onMouseDown={(e) => {
+          if (e.target === e.currentTarget) closeActiveProductsDialog();
+        }}
+      >
+        <div
+          style={{
+            background: "white",
+            border: "1px solid #ddd",
+            borderRadius: "12px",
+            padding: "14px",
+            width: "min(760px, 96vw)",
+            maxHeight: "88vh",
+            overflow: "auto",
+          }}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px" }}>
+            <h3 style={{ margin: 0 }}>Все активные продукты</h3>
+            <button type="button" className="btn" onClick={closeActiveProductsDialog}>
+              Закрыть
+            </button>
+          </div>
+
+          <p className="muted" style={{ margin: "8px 0 0 0", fontSize: "13px" }}>
+            Активных: {visibleActiveProductsCount}
+            {hiddenActiveProductsCount > 0 ? `, скрытых: ${hiddenActiveProductsCount}` : ""}
+          </p>
+
+          <div style={{ marginTop: "12px", display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+            <div style={{ flex: "1 1 280px", minWidth: "220px" }}>
+              <ProductAutocompleteInput
+                value={activeProductName}
+                onChange={setActiveProductName}
+                suggestions={knownProductSuggestions}
+                placeholder="Добавить продукт"
+              />
+            </div>
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={addActiveProduct}
+              disabled={activeProductName.trim().length === 0}
+            >
+              Добавить
+            </button>
+          </div>
+
+          <div style={{ marginTop: "10px" }}>
+            <input
+              className="input"
+              type="text"
+              placeholder="Поиск по названию и заметке"
+              value={activeProductsSearch}
+              onChange={(e) => setActiveProductsSearch(e.target.value)}
+              style={{ width: "100%" }}
+            />
+          </div>
+
+          <div style={{ marginTop: "12px", display: "grid", gap: "8px" }}>
+            {filteredActiveProducts.length > 0 ? (
+              filteredActiveProducts.map((product) => {
+                const isExpanded = expandedActiveProductNoteId === product.id;
+                const scopeLabel = getActiveProductScopeLabel(product);
+                const trimmedNote = product.note.trim();
+                const notePreview = trimmedNote.length > 40 ? `${trimmedNote.slice(0, 40)}...` : trimmedNote;
+
+                return (
+                  <div
+                    key={product.id}
+                    style={{
+                      border: "1px solid var(--border-default)",
+                      borderRadius: "10px",
+                      padding: "8px",
+                      background: product.hidden ? "var(--background-secondary)" : "var(--background-primary)",
+                      opacity: product.hidden ? 0.8 : 1,
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                      <button
+                        type="button"
+                        onClick={() => setExpandedActiveProductNoteId((prev) => (prev === product.id ? null : product.id))}
+                        style={{
+                          flex: "1 1 260px",
+                          minWidth: "170px",
+                          border: "none",
+                          background: "transparent",
+                          padding: 0,
+                          textAlign: "left",
+                          cursor: "pointer",
+                          color: "inherit",
+                        }}
+                      >
+                        <strong>{product.name}</strong>{" "}
+                        <span style={{ color: "var(--text-secondary)", fontSize: "13px" }}>{scopeLabel}</span>
+                        {notePreview ? (
+                          <span style={{ color: "var(--text-secondary)", fontSize: "13px" }}> • {notePreview}</span>
+                        ) : null}
+                        {product.hidden ? (
+                          <span style={{ color: "var(--text-secondary)", fontSize: "12px" }}> • скрыт</span>
+                        ) : null}
+                        {activeProductSavedNoteId === product.id ? (
+                          <span style={{ color: "var(--accent-primary)", whiteSpace: "nowrap", fontSize: "12px" }}> • Сохранено</span>
+                        ) : null}
+                      </button>
+
+                      <button
+                        type="button"
+                        className="btn"
+                        onClick={() => toggleActiveProductHidden(product.id)}
+                        style={{ padding: "2px 8px" }}
+                      >
+                        {product.hidden ? "Показать" : "Скрыть"}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn"
+                        onClick={() => removeActiveProduct(product.id)}
+                        style={{ padding: "2px 8px" }}
+                      >
+                        Удалить
+                      </button>
+                    </div>
+
+                    {isExpanded ? (
+                      <div
+                        style={{
+                          marginTop: "8px",
+                          display: "grid",
+                          gap: "6px",
+                          border: "1px solid var(--border-default)",
+                          borderRadius: "10px",
+                          padding: "8px",
+                          background: "var(--background-primary)",
+                        }}
+                      >
+                        <label style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Тип действия</label>
+                        <select
+                          className="input"
+                          value={product.scope}
+                          onChange={(e) => updateActiveProductScope(product.id, e.target.value as ActiveProductScope)}
+                        >
+                          <option value="in_period">В этом меню</option>
+                          <option value="persistent">До отмены</option>
+                          <option value="until_date">До даты</option>
+                        </select>
+                        {product.scope === "until_date" ? (
+                          <>
+                            <label style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Дата</label>
+                            <input
+                              className="input"
+                              type="date"
+                              value={product.untilDate}
+                              onChange={(e) => updateActiveProductUntilDate(product.id, e.target.value)}
+                            />
+                          </>
+                        ) : null}
+                        <label style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
+                          Заметка (до {ACTIVE_PRODUCT_NOTE_MAX_LENGTH} символов)
+                        </label>
+                        <input
+                          className="input"
+                          type="text"
+                          placeholder="Например: по акции / использовать остаток"
+                          maxLength={ACTIVE_PRODUCT_NOTE_MAX_LENGTH}
+                          value={getActiveProductNoteValue(product)}
+                          onChange={(e) => handleActiveProductNoteDraftChange(product.id, e.target.value)}
+                          onBlur={() => handleActiveProductNoteBlur(product.id)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              (e.currentTarget as HTMLInputElement).blur();
+                            }
+                          }}
+                        />
+                        <label style={{ display: "inline-flex", gap: "6px", alignItems: "center", fontSize: "12px" }}>
+                          <input
+                            type="checkbox"
+                            checked={product.prefer}
+                            onChange={() => toggleActiveProductPriority(product.id)}
+                          />
+                          В приоритете
+                        </label>
+                        <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                          <button
+                            type="button"
+                            className="btn"
+                            onClick={() => setExpandedActiveProductNoteId(null)}
+                            style={{ padding: "2px 8px" }}
+                          >
+                            Готово
+                          </button>
+                          <button
+                            type="button"
+                            className="btn"
+                            onClick={() => router.push(`/recipes?q=${encodeURIComponent(product.name)}`)}
+                            style={{ padding: "2px 8px" }}
+                            title="Найти блюда с этим продуктом"
+                          >
+                            Найти
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })
+            ) : (
+              <p className="muted" style={{ margin: 0 }}>
+                По вашему запросу ничего не найдено.
+              </p>
+            )}
+          </div>
+        </div>
+      </div>,
+      document.body
+    );
+  };
+
   const renderMenuItemRow = (
     cellKey: string,
     menuItem: MenuItem,
@@ -2998,188 +3273,12 @@ function MenuPageContent() {
       </div>
 
       <div className="card" style={{ marginBottom: "14px", padding: "12px" }}>
-        <h3 style={{ marginTop: 0, marginBottom: "10px" }}>Активные продукты периода</h3>
-        <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap", marginBottom: "10px" }}>
-          <div style={{ flex: "1 1 260px", minWidth: "220px" }}>
-            <ProductAutocompleteInput
-              value={activeProductName}
-              onChange={setActiveProductName}
-              suggestions={knownProductSuggestions}
-              placeholder="Например: лосось, йогурт, курица"
-            />
-          </div>
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={addActiveProduct}
-            disabled={activeProductName.trim().length === 0}
-          >
-            Добавить
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", flexWrap: "wrap" }}>
+          <strong style={{ fontSize: "16px" }}>Активные продукты: {visibleActiveProductsCount}</strong>
+          <button type="button" className="btn" onClick={() => setShowActiveProductsDialog(true)}>
+            Открыть
           </button>
         </div>
-        {activeProducts.length > 0 ? (
-          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "flex-start" }}>
-            {activeProducts.map((product) => {
-              const isExpanded = expandedActiveProductNoteId === product.id;
-              const scopeLabel = getActiveProductScopeLabel(product);
-              const trimmedNote = product.note.trim();
-              const notePreview = trimmedNote.length > 20 ? `${trimmedNote.slice(0, 20)}...` : trimmedNote;
-              const chipTitle = product.note
-                ? `${product.name} ${scopeLabel} ${product.note}`
-                : `${product.name} ${scopeLabel}`;
-
-              return (
-                <div
-                  key={product.id}
-                  style={{
-                    display: "grid",
-                    gap: "6px",
-                    flex: "1 1 180px",
-                    minWidth: "150px",
-                    maxWidth: "280px",
-                  }}
-                >
-                  <button
-                    type="button"
-                    title={chipTitle}
-                    onClick={() => setExpandedActiveProductNoteId((prev) => (prev === product.id ? null : product.id))}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "6px",
-                      border: "1px solid var(--border-default)",
-                      borderRadius: "999px",
-                      padding: "7px 10px",
-                      background: isExpanded
-                        ? "color-mix(in srgb, var(--background-primary) 82%, var(--accent-primary) 18%)"
-                        : "var(--background-primary)",
-                      cursor: "pointer",
-                      textAlign: "left",
-                      width: "100%",
-                      fontSize: "13px",
-                      color: "inherit",
-                    }}
-                  >
-                    <strong style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {product.name}
-                    </strong>
-                    <span style={{ color: "var(--text-secondary)", whiteSpace: "nowrap" }}>
-                      {scopeLabel}
-                    </span>
-                    {notePreview ? (
-                      <span
-                        style={{
-                          color: "var(--text-secondary)",
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
-                        }}
-                      >
-                        {notePreview}
-                      </span>
-                    ) : null}
-                    {activeProductSavedNoteId === product.id ? (
-                      <span style={{ color: "var(--accent-primary)", whiteSpace: "nowrap", fontSize: "12px" }}>
-                        Сохранено
-                      </span>
-                    ) : null}
-                  </button>
-
-                  {isExpanded ? (
-                    <div
-                      style={{
-                        display: "grid",
-                        gap: "6px",
-                        border: "1px solid var(--border-default)",
-                        borderRadius: "10px",
-                        padding: "8px",
-                        background: "var(--background-primary)",
-                      }}
-                    >
-                      <label style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Тип действия</label>
-                      <select
-                        className="input"
-                        value={product.scope}
-                        onChange={(e) => updateActiveProductScope(product.id, e.target.value as ActiveProductScope)}
-                      >
-                        <option value="in_period">В этом меню</option>
-                        <option value="persistent">До отмены</option>
-                        <option value="until_date">До даты</option>
-                      </select>
-                      {product.scope === "until_date" ? (
-                        <>
-                          <label style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Дата</label>
-                          <input
-                            className="input"
-                            type="date"
-                            value={product.untilDate}
-                            onChange={(e) => updateActiveProductUntilDate(product.id, e.target.value)}
-                          />
-                        </>
-                      ) : null}
-                      <label style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
-                        Заметка (до {ACTIVE_PRODUCT_NOTE_MAX_LENGTH} символов)
-                      </label>
-                      <input
-                        className="input"
-                        type="text"
-                        placeholder="Например: по акции / использовать остаток"
-                        maxLength={ACTIVE_PRODUCT_NOTE_MAX_LENGTH}
-                        value={getActiveProductNoteValue(product)}
-                        onChange={(e) => handleActiveProductNoteDraftChange(product.id, e.target.value)}
-                        onBlur={() => handleActiveProductNoteBlur(product.id)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            (e.currentTarget as HTMLInputElement).blur();
-                          }
-                        }}
-                      />
-                      <label style={{ display: "inline-flex", gap: "6px", alignItems: "center", fontSize: "12px" }}>
-                        <input
-                          type="checkbox"
-                          checked={product.prefer}
-                          onChange={() => toggleActiveProductPriority(product.id)}
-                        />
-                        В приоритете
-                      </label>
-                      <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-                        <button
-                          type="button"
-                          className="btn"
-                          onClick={() => setExpandedActiveProductNoteId(null)}
-                          style={{ padding: "2px 8px" }}
-                        >
-                          Готово
-                        </button>
-                        <button
-                          type="button"
-                          className="btn"
-                          onClick={() => router.push(`/recipes?q=${encodeURIComponent(product.name)}`)}
-                          style={{ padding: "2px 8px" }}
-                          title="Найти блюда с этим продуктом"
-                        >
-                          Найти
-                        </button>
-                        <button
-                          type="button"
-                          className="btn"
-                          onClick={() => removeActiveProduct(product.id)}
-                          style={{ padding: "2px 8px" }}
-                        >
-                          Удалить
-                        </button>
-                      </div>
-                    </div>
-                  ) : null}
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          <p className="muted" style={{ margin: 0 }}>
-            Добавьте продукты, которые хотите использовать чаще в этом периоде.
-          </p>
-        )}
       </div>
 
       {showCalendarInlineHint && recipes.length === 0 && (
@@ -3288,6 +3387,7 @@ function MenuPageContent() {
       <DropdownMenu />
       <MoveDialog />
       <MealSettingsDialog />
+      <ActiveProductsDialog />
 
       <AddEditDialog
         key={
