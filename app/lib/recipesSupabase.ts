@@ -353,6 +353,19 @@ const findOwnedRecipeByTitle = async (ownerId: string, title: string): Promise<R
   return matched ? mapRow(matched) : null;
 };
 
+const findOwnedRecipeByTitleSafe = async (ownerId: string, title: string): Promise<RecipeModel | null> => {
+  try {
+    return await findOwnedRecipeByTitle(ownerId, title);
+  } catch (error) {
+    if (!isMissingRelationError(error, "recipes")) {
+      throw error;
+    }
+    const cloud = await loadCloudFallbackRecipes(ownerId);
+    const targetTitle = normalizeTitle(title);
+    return cloud.find((item) => normalizeTitle(item.title || "") === targetTitle) || null;
+  }
+};
+
 const normalizeIngredients = (value: unknown): Ingredient[] => {
   if (!Array.isArray(value)) return [];
   return value
@@ -855,6 +868,9 @@ export const copyPublicRecipeToMine = async (ownerId: string, recipeId: string):
       visibility: "private" as RecipeVisibility,
     };
 
+    const existing = await findOwnedRecipeByTitleSafe(ownerId, payload.title);
+    if (existing) return existing;
+
     const { data, error } = await supabase
       .from("recipes")
       .insert(payload)
@@ -862,6 +878,34 @@ export const copyPublicRecipeToMine = async (ownerId: string, recipeId: string):
       .single();
 
     if (error) {
+      if (isMissingRelationError(error, "recipes")) {
+        const cloudRecipes = await loadCloudFallbackRecipes(ownerId);
+        const targetTitle = normalizeTitle(payload.title);
+        const existingCloud = cloudRecipes.find((item) => normalizeTitle(item.title || "") === targetTitle);
+        if (existingCloud) return existingCloud;
+        const now = new Date().toISOString();
+        const created: RecipeModel = {
+          id: crypto.randomUUID(),
+          ownerId,
+          type: "user",
+          isTemplate: false,
+          title: payload.title || "Рецепт",
+          shortDescription: payload.short_description || "",
+          description: payload.description || "",
+          instructions: payload.instructions || payload.description || "",
+          ingredients: normalizeIngredients(payload.ingredients),
+          notes: "",
+          servings: payload.servings && payload.servings > 0 ? payload.servings : 2,
+          image: payload.image || "",
+          categories: normalizeStringArray(payload.categories),
+          tags: normalizeStringArray(payload.categories),
+          visibility: "private",
+          createdAt: now,
+          updatedAt: now,
+        };
+        await saveCloudFallbackRecipes(ownerId, [created, ...cloudRecipes]);
+        return created;
+      }
       if (isDuplicateKeyError(error)) {
         const existing = await findOwnedRecipeByTitle(ownerId, payload.title);
         if (existing) return existing;
@@ -897,6 +941,9 @@ export const copyPublicRecipeToMine = async (ownerId: string, recipeId: string):
     visibility: "private" as RecipeVisibility,
   };
 
+  const existing = await findOwnedRecipeByTitleSafe(ownerId, payload.title);
+  if (existing) return existing;
+
   const { data, error } = await supabase
     .from("recipes")
     .insert(payload)
@@ -904,6 +951,34 @@ export const copyPublicRecipeToMine = async (ownerId: string, recipeId: string):
     .single();
 
   if (error) {
+    if (isMissingRelationError(error, "recipes")) {
+      const cloudRecipes = await loadCloudFallbackRecipes(ownerId);
+      const targetTitle = normalizeTitle(payload.title);
+      const existingCloud = cloudRecipes.find((item) => normalizeTitle(item.title || "") === targetTitle);
+      if (existingCloud) return existingCloud;
+      const now = new Date().toISOString();
+      const created: RecipeModel = {
+        id: crypto.randomUUID(),
+        ownerId,
+        type: "user",
+        isTemplate: false,
+        title: payload.title || "Рецепт",
+        shortDescription: payload.short_description || "",
+        description: payload.description || "",
+        instructions: payload.instructions || payload.description || "",
+        ingredients: normalizeIngredients(payload.ingredients),
+        notes: "",
+        servings: payload.servings && payload.servings > 0 ? payload.servings : 2,
+        image: payload.image || "",
+        categories: normalizeStringArray(payload.categories),
+        tags: normalizeStringArray(payload.categories),
+        visibility: "private",
+        createdAt: now,
+        updatedAt: now,
+      };
+      await saveCloudFallbackRecipes(ownerId, [created, ...cloudRecipes]);
+      return created;
+    }
     if (isDuplicateKeyError(error)) {
       const existing = await findOwnedRecipeByTitle(ownerId, payload.title);
       if (existing) return existing;

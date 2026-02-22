@@ -4,7 +4,7 @@ import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
 import {
-  createRecipe,
+  copyPublicRecipeToMine,
   deleteRecipe,
   deleteAllMyRecipes,
   getCurrentUserId,
@@ -647,6 +647,20 @@ function RecipesPageContent() {
       }
 
       if (!targetUserId) {
+        const existingLocal = loadLocalRecipes().find(
+          (item) =>
+            !isSeedTemplateId(item.id) &&
+            normalizeRecipeTitle(item.title || "") === normalizeRecipeTitle(source.title || "")
+        );
+        if (existingLocal) {
+          if (showOverlayForThisCopy) {
+            showFirstRecipeOverlay(existingLocal.id);
+          } else {
+            showAddedFeedback(source.title || "", true);
+          }
+          return;
+        }
+
         const localCopy: RecipeModel = {
           ...source,
           id: crypto.randomUUID(),
@@ -667,23 +681,7 @@ function RecipesPageContent() {
         return;
       }
 
-      const copied = await createRecipe(targetUserId, {
-        title: source.title || "Рецепт",
-        shortDescription: source.shortDescription || "",
-        description: source.description || "",
-        instructions: source.instructions || source.description || "",
-        ingredients: (source.ingredients || []).map((item) => ({
-          name: item.name || "",
-          amount: Number(item.amount || 0),
-          unit: item.unit || "шт",
-        })),
-        notes: source.notes || "",
-        servings: source.servings && source.servings > 0 ? source.servings : 2,
-        image: source.image || "",
-        visibility: "private",
-        categories: source.tags || source.categories || [],
-        tags: source.tags || source.categories || [],
-      });
+      const copied = await copyPublicRecipeToMine(targetUserId, source.id);
       upsertRecipeInLocalCache(copied);
       if (showOverlayForThisCopy) {
         showFirstRecipeOverlay(copied.id);
@@ -735,11 +733,20 @@ function RecipesPageContent() {
       setShowFirstRecipeSuccess(false);
       setFirstCopiedRecipeId(null);
 
-      if (isSupabaseConfigured() && currentUserId) {
-        await deleteAllMyRecipes(currentUserId);
+      let targetUserId = currentUserId;
+      if (!targetUserId && isSupabaseConfigured()) {
+        try {
+          targetUserId = await getCurrentUserId();
+          if (targetUserId) setCurrentUserId(targetUserId);
+        } catch {
+          targetUserId = null;
+        }
+      }
+      if (isSupabaseConfigured() && targetUserId) {
+        await deleteAllMyRecipes(targetUserId);
       }
 
-      await refreshRecipes(viewMode, currentUserId);
+      await refreshRecipes(viewMode, targetUserId || currentUserId);
       setActionMessage("Рецепты очищены. Можно загружать новые для теста.");
     } catch (clearError) {
       const text =

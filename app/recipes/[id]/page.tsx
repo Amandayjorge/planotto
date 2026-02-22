@@ -6,7 +6,7 @@ import LinkifiedText from "../../components/LinkifiedText";
 import ProductAutocompleteInput from "../../components/ProductAutocompleteInput";
 import { appendProductSuggestions, loadProductSuggestions } from "../../lib/productSuggestions";
 import {
-  createRecipe,
+  copyPublicRecipeToMine,
   deleteRecipe,
   getCurrentUserId,
   getRecipeById,
@@ -538,6 +538,20 @@ export default function RecipeDetailPage() {
     }
 
     if (!targetUserId) {
+      const existingLocal = loadLocalRecipes().find(
+        (item) => normalizeRecipeTitle(item.title || "") === normalizeRecipeTitle(recipe.title || "")
+      );
+      if (existingLocal) {
+        if (shouldShowFirstRecipeOverlay && typeof window !== "undefined") {
+          localStorage.setItem(FIRST_RECIPE_ADDED_KEY, existingLocal.id);
+          localStorage.setItem(FIRST_RECIPE_SUCCESS_PENDING_KEY, "1");
+          router.push(`/recipes?firstAdded=1&recipe=${encodeURIComponent(existingLocal.id)}`);
+        } else {
+          router.push(`/recipes/${existingLocal.id}`);
+        }
+        return;
+      }
+
       const localCopy: RecipeModel = {
         ...recipe,
         id: crypto.randomUUID(),
@@ -559,23 +573,7 @@ export default function RecipeDetailPage() {
     }
 
     try {
-      const copied = await createRecipe(targetUserId, {
-        title: recipe.title || "Рецепт",
-        shortDescription: recipe.shortDescription || "",
-        description: recipe.description || "",
-        instructions: recipe.instructions || recipe.description || "",
-        ingredients: (recipe.ingredients || []).map((item) => ({
-          name: item.name || "",
-          amount: Number(item.amount || 0),
-          unit: item.unit || "шт",
-        })),
-        notes: recipe.notes || "",
-        servings: recipe.servings && recipe.servings > 0 ? recipe.servings : 2,
-        image: recipe.image || "",
-        visibility: "private",
-        categories: recipe.tags || recipe.categories || [],
-        tags: recipe.tags || recipe.categories || [],
-      });
+      const copied = await copyPublicRecipeToMine(targetUserId, recipe.id);
       upsertRecipeInLocalCache(copied);
       if (shouldShowFirstRecipeOverlay && typeof window !== "undefined") {
         localStorage.setItem(FIRST_RECIPE_ADDED_KEY, copied.id);
