@@ -607,15 +607,33 @@ function RecipesPageContent() {
     router.replace("/recipes");
   };
 
+  const shouldShowFirstRecipeOverlay = (): boolean => {
+    if (typeof window === "undefined") return isFirstRecipeFlow;
+    return (
+      isFirstRecipeFlow ||
+      localStorage.getItem(RECIPES_FIRST_FLOW_KEY) === "1" ||
+      localStorage.getItem(FIRST_RECIPE_CREATE_FLOW_KEY) === "1" ||
+      localStorage.getItem(FIRST_RECIPE_SUCCESS_SHOWN_KEY) !== "1"
+    );
+  };
+
+  const showFirstRecipeOverlay = (recipeId: string) => {
+    if (typeof window !== "undefined") {
+      localStorage.removeItem(RECIPES_FIRST_FLOW_KEY);
+      localStorage.removeItem(FIRST_RECIPE_CREATE_FLOW_KEY);
+    }
+    setIsFirstRecipeFlow(false);
+    setShowFirstRecipeSuccess(true);
+    setFirstCopiedRecipeId(recipeId);
+    setActionMessage("");
+    setViewMode("public");
+  };
+
   const handleCopyToMine = async (recipeId: string) => {
     const source = recipes.find((item) => item.id === recipeId);
     if (!source) return;
     setPendingCopyRecipeId(recipeId);
-    const inFirstRecipeFlow =
-      isFirstRecipeFlow ||
-      (typeof window !== "undefined" &&
-        (localStorage.getItem(RECIPES_FIRST_FLOW_KEY) === "1" ||
-          localStorage.getItem(FIRST_RECIPE_CREATE_FLOW_KEY) === "1"));
+    const showOverlayForThisCopy = shouldShowFirstRecipeOverlay();
 
     try {
       let targetUserId = currentUserId;
@@ -640,14 +658,8 @@ function RecipesPageContent() {
         };
 
         upsertRecipeInLocalCache(localCopy);
-        if (inFirstRecipeFlow) {
-          localStorage.removeItem(RECIPES_FIRST_FLOW_KEY);
-          localStorage.removeItem(FIRST_RECIPE_CREATE_FLOW_KEY);
-          setIsFirstRecipeFlow(false);
-          setShowFirstRecipeSuccess(true);
-          setFirstCopiedRecipeId(localCopy.id);
-          setActionMessage("");
-          setViewMode("public");
+        if (showOverlayForThisCopy) {
+          showFirstRecipeOverlay(localCopy.id);
         } else {
           setActionMessage("");
           showAddedFeedback(source.title || "", false);
@@ -673,14 +685,8 @@ function RecipesPageContent() {
         tags: source.tags || source.categories || [],
       });
       upsertRecipeInLocalCache(copied);
-      if (inFirstRecipeFlow) {
-        localStorage.removeItem(RECIPES_FIRST_FLOW_KEY);
-        localStorage.removeItem(FIRST_RECIPE_CREATE_FLOW_KEY);
-        setIsFirstRecipeFlow(false);
-        setShowFirstRecipeSuccess(true);
-        setFirstCopiedRecipeId(copied.id);
-        setActionMessage("");
-        setViewMode("public");
+      if (showOverlayForThisCopy) {
+        showFirstRecipeOverlay(copied.id);
       } else {
         setActionMessage("");
         showAddedFeedback(source.title || "", false);
@@ -697,14 +703,8 @@ function RecipesPageContent() {
           notes: source.notes || "",
         };
         upsertRecipeInLocalCache(localCopy);
-        if (inFirstRecipeFlow) {
-          localStorage.removeItem(RECIPES_FIRST_FLOW_KEY);
-          localStorage.removeItem(FIRST_RECIPE_CREATE_FLOW_KEY);
-          setIsFirstRecipeFlow(false);
-          setShowFirstRecipeSuccess(true);
-          setFirstCopiedRecipeId(localCopy.id);
-          setActionMessage("");
-          setViewMode("public");
+        if (showOverlayForThisCopy) {
+          showFirstRecipeOverlay(localCopy.id);
         } else {
           setActionMessage("Таблица рецептов в Supabase не инициализирована. Рецепт добавлен локально.");
           showAddedFeedback(source.title || "", false);
