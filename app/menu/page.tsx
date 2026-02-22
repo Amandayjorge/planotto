@@ -1390,6 +1390,7 @@ function MenuPageContent() {
 
   const updateActiveProductUntilDate = (id: string, untilDate: string) => {
     setActiveProducts((prev) => prev.map((item) => (item.id === id ? { ...item, untilDate } : item)));
+    setExpandedActiveProductNoteId((prev) => (prev === id ? null : prev));
   };
 
   const updateActiveProductScope = (id: string, scope: ActiveProductScope) => {
@@ -3095,19 +3096,19 @@ function MenuPageContent() {
                         <button
                           type="button"
                           className="btn"
+                          onClick={() => setExpandedActiveProductNoteId(null)}
+                          style={{ padding: "2px 8px" }}
+                        >
+                          Готово
+                        </button>
+                        <button
+                          type="button"
+                          className="btn"
                           onClick={() => router.push(`/recipes?q=${encodeURIComponent(product.name)}`)}
                           style={{ padding: "2px 8px" }}
                           title="Найти блюда с этим продуктом"
                         >
                           Найти
-                        </button>
-                        <button
-                          type="button"
-                          className="btn"
-                          onClick={() => setExpandedActiveProductNoteId(null)}
-                          style={{ padding: "2px 8px" }}
-                        >
-                          Скрыть
                         </button>
                         <button
                           type="button"
