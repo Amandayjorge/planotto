@@ -7,7 +7,7 @@ import ProductAutocompleteInput from "../components/ProductAutocompleteInput";
 import { appendProductSuggestions, loadProductSuggestions } from "../lib/productSuggestions";
 import { getMenuSuggestion } from "../lib/aiAssistantClient";
 import { getCurrentUserId, listMyRecipes } from "../lib/recipesSupabase";
-import { isSupabaseConfigured } from "../lib/supabaseClient";
+import { getSupabaseClient, isSupabaseConfigured } from "../lib/supabaseClient";
 import {
   copyPublicWeekToMine,
   getMineWeekMenu,
@@ -33,6 +33,7 @@ const GUEST_REMINDER_PENDING_KEY = "guestReminderPending";
 const GUEST_REMINDER_VISITS_THRESHOLD = 3;
 const GUEST_REMINDER_RECIPES_THRESHOLD = 3;
 const DAY_MEAL_SLOTS_KEY = "dayMealSlots";
+const ACTIVE_PRODUCTS_CLOUD_META_KEY = "planotto_active_products_v1";
 const DEFAULT_DAY_MEALS = ["Завтрак", "Обед", "Ужин"] as const;
 const loadDayMealSlotsFromStorage = (): Record<string, string[]> => {
   if (typeof window === "undefined") return {};
@@ -98,7 +99,29 @@ interface ActivePeriodProduct {
   scope: ActiveProductScope;
   untilDate: string;
   prefer: boolean;
+  note: string;
 }
+
+const isActiveProductScope = (value: unknown): value is ActiveProductScope =>
+  value === "today" || value === "this_week" || value === "until_date";
+
+const normalizeActivePeriodProducts = (
+  value: unknown,
+  fallbackUntilDate: string
+): ActivePeriodProduct[] => {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => item as Partial<ActivePeriodProduct>)
+    .filter((item) => typeof item.name === "string" && item.name.trim().length > 0)
+    .map((item) => ({
+      id: typeof item.id === "string" && item.id ? item.id : crypto.randomUUID(),
+      name: String(item.name || "").trim(),
+      scope: isActiveProductScope(item.scope) ? item.scope : "this_week",
+      untilDate: typeof item.untilDate === "string" && item.untilDate ? item.untilDate : fallbackUntilDate,
+      prefer: item.prefer !== false,
+      note: typeof item.note === "string" ? item.note : "",
+    }));
+};
 
 interface QuickRecipeConfirm {
   recipeId: string;
@@ -878,6 +901,8 @@ function MenuPageContent() {
   const [activeProductName, setActiveProductName] = useState("");
   const [activeProductScope, setActiveProductScope] = useState<ActiveProductScope>("this_week");
   const [activeProductUntilDate, setActiveProductUntilDate] = useState(() => formatDate(new Date()));
+  const [expandedActiveProductNoteId, setExpandedActiveProductNoteId] = useState<string | null>(null);
+  const [activeProductsCloudHydrated, setActiveProductsCloudHydrated] = useState(false);
   const [knownProductSuggestions, setKnownProductSuggestions] = useState<string[]>(() => loadProductSuggestions());
   const [showFirstVisitOnboarding, setShowFirstVisitOnboarding] = useState(() => forceFirstFromQuery);
   const [showCalendarInlineHint, setShowCalendarInlineHint] = useState(false);
@@ -890,6 +915,7 @@ function MenuPageContent() {
   const [guestReminderStrong, setGuestReminderStrong] = useState(false);
   const [authResolved, setAuthResolved] = useState(false);
   const guestVisitTrackedRef = useRef(false);
+  const activeProductsSaveTimerRef = useRef<number | null>(null);
 
   const rangeKey = `${weekStart}__${periodEnd}`;
   const periodDays = getRangeLengthDays(weekStart, periodEnd);
@@ -1077,6 +1103,55 @@ function MenuPageContent() {
     return activeProductUntilDate || periodEnd;
   };
 
+  const loadActiveProductsFromCloud = useCallback(
+    async (ownerId: string, key: string): Promise<ActivePeriodProduct[] | null> => {
+      if (!isSupabaseConfigured()) return null;
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase.auth.getUser();
+      if (error || !data.user || data.user.id !== ownerId) return null;
+      const metadata = (data.user.user_metadata || {}) as Record<string, unknown>;
+      const rawByRange = metadata[ACTIVE_PRODUCTS_CLOUD_META_KEY];
+      if (!rawByRange || typeof rawByRange !== "object") return null;
+      const byRange = rawByRange as Record<string, unknown>;
+      if (!(key in byRange)) return null;
+      return normalizeActivePeriodProducts(byRange[key], periodEnd);
+    },
+    [periodEnd]
+  );
+
+  const saveActiveProductsToCloud = useCallback(
+    async (ownerId: string, key: string, items: ActivePeriodProduct[]): Promise<void> => {
+      if (!isSupabaseConfigured()) return;
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase.auth.getUser();
+      if (error || !data.user || data.user.id !== ownerId) return;
+      const metadata = (data.user.user_metadata || {}) as Record<string, unknown>;
+      const rawByRange = metadata[ACTIVE_PRODUCTS_CLOUD_META_KEY];
+      const byRange =
+        rawByRange && typeof rawByRange === "object"
+          ? { ...(rawByRange as Record<string, unknown>) }
+          : {};
+      byRange[key] = items.map((item) => ({
+        id: item.id,
+        name: item.name,
+        scope: item.scope,
+        untilDate: item.untilDate,
+        prefer: item.prefer,
+        note: item.note || "",
+      }));
+      const { error: updateError } = await supabase.auth.updateUser({
+        data: {
+          ...metadata,
+          [ACTIVE_PRODUCTS_CLOUD_META_KEY]: byRange,
+        },
+      });
+      if (updateError) {
+        console.error("[menu] failed to save active products to cloud", updateError);
+      }
+    },
+    []
+  );
+
   const addActiveProduct = () => {
     const name = activeProductName.trim();
     if (!name) return;
@@ -1089,7 +1164,7 @@ function MenuPageContent() {
       if (existing) {
         return prev.map((item) =>
           item.id === existing.id
-            ? { ...item, name, scope: activeProductScope, untilDate, prefer: true }
+            ? { ...item, name, scope: activeProductScope, untilDate, prefer: true, note: item.note || "" }
             : item
         );
       }
@@ -1101,6 +1176,7 @@ function MenuPageContent() {
           scope: activeProductScope,
           untilDate,
           prefer: true,
+          note: "",
         },
       ];
     });
@@ -1112,12 +1188,17 @@ function MenuPageContent() {
 
   const removeActiveProduct = (id: string) => {
     setActiveProducts((prev) => prev.filter((item) => item.id !== id));
+    setExpandedActiveProductNoteId((prev) => (prev === id ? null : prev));
   };
 
   const toggleActiveProductPriority = (id: string) => {
     setActiveProducts((prev) =>
       prev.map((item) => (item.id === id ? { ...item, prefer: !item.prefer } : item))
     );
+  };
+
+  const updateActiveProductNote = (id: string, note: string) => {
+    setActiveProducts((prev) => prev.map((item) => (item.id === id ? { ...item, note } : item)));
   };
 
   const handleAiMenuSuggestion = useCallback(async (prompt = "") => {
@@ -1440,6 +1521,41 @@ function MenuPageContent() {
   }, []);
 
   useEffect(() => {
+    let isCancelled = false;
+
+    if (!hasLoaded || !authResolved) return () => { isCancelled = true; };
+    if (!currentUserId || !isSupabaseConfigured()) {
+      setActiveProductsCloudHydrated(true);
+      return () => {
+        isCancelled = true;
+      };
+    }
+
+    setActiveProductsCloudHydrated(false);
+    loadActiveProductsFromCloud(currentUserId, rangeKey)
+      .then((cloudProducts) => {
+        if (isCancelled) return;
+        if (cloudProducts !== null) {
+          setActiveProducts(cloudProducts);
+        }
+      })
+      .catch((error) => {
+        if (!isCancelled) {
+          console.error("[menu] failed to load active products from cloud", error);
+        }
+      })
+      .finally(() => {
+        if (!isCancelled) {
+          setActiveProductsCloudHydrated(true);
+        }
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [authResolved, currentUserId, hasLoaded, loadActiveProductsFromCloud, rangeKey]);
+
+  useEffect(() => {
     if (!authResolved || currentUserId) return;
     if (guestVisitTrackedRef.current) return;
 
@@ -1512,24 +1628,7 @@ function MenuPageContent() {
     if (storedActiveProducts) {
       try {
         const parsed = JSON.parse(storedActiveProducts);
-        if (Array.isArray(parsed)) {
-          const normalized = parsed
-            .map((item) => item as Partial<ActivePeriodProduct>)
-            .filter((item) => typeof item.name === "string" && item.name.trim().length > 0)
-            .map((item) => ({
-              id: typeof item.id === "string" && item.id ? item.id : crypto.randomUUID(),
-              name: String(item.name).trim(),
-              scope:
-                item.scope === "today" || item.scope === "this_week" || item.scope === "until_date"
-                  ? item.scope
-                  : "this_week",
-              untilDate: typeof item.untilDate === "string" && item.untilDate ? item.untilDate : periodEnd,
-              prefer: item.prefer !== false,
-            }));
-          setActiveProducts(normalized);
-        } else {
-          setActiveProducts([]);
-        }
+        setActiveProducts(normalizeActivePeriodProducts(parsed, periodEnd));
       } catch (e) {
         console.error("Failed to load active products:", e);
         setActiveProducts([]);
@@ -1538,6 +1637,8 @@ function MenuPageContent() {
       setActiveProducts([]);
     }
 
+    setExpandedActiveProductNoteId(null);
+    setActiveProductsCloudHydrated(false);
     setHasLoaded(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rangeKey]);
@@ -1590,6 +1691,46 @@ function MenuPageContent() {
     if (!hasLoaded) return;
     localStorage.setItem(getActiveProductsKey(), JSON.stringify(activeProducts));
   }, [activeProducts, hasLoaded, rangeKey]);
+
+  useEffect(() => {
+    if (!hasLoaded || !authResolved || !currentUserId || !activeProductsCloudHydrated) return;
+    if (!isSupabaseConfigured()) return;
+    if (typeof window === "undefined") return;
+
+    if (activeProductsSaveTimerRef.current !== null) {
+      window.clearTimeout(activeProductsSaveTimerRef.current);
+    }
+
+    activeProductsSaveTimerRef.current = window.setTimeout(() => {
+      saveActiveProductsToCloud(currentUserId, rangeKey, activeProducts).catch((error) => {
+        console.error("[menu] failed to persist active products", error);
+      });
+    }, 450);
+
+    return () => {
+      if (activeProductsSaveTimerRef.current !== null) {
+        window.clearTimeout(activeProductsSaveTimerRef.current);
+        activeProductsSaveTimerRef.current = null;
+      }
+    };
+  }, [
+    activeProducts,
+    activeProductsCloudHydrated,
+    authResolved,
+    currentUserId,
+    hasLoaded,
+    rangeKey,
+    saveActiveProductsToCloud,
+  ]);
+
+  useEffect(() => {
+    return () => {
+      if (activeProductsSaveTimerRef.current !== null && typeof window !== "undefined") {
+        window.clearTimeout(activeProductsSaveTimerRef.current);
+        activeProductsSaveTimerRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!hasLoaded) return;
@@ -2477,33 +2618,65 @@ function MenuPageContent() {
                 key={product.id}
                 style={{
                   display: "inline-flex",
-                  alignItems: "center",
-                  gap: "8px",
+                  flexDirection: "column",
+                  alignItems: "stretch",
+                  gap: "6px",
                   border: "1px solid var(--border-default)",
-                  borderRadius: "999px",
-                  padding: "6px 10px",
+                  borderRadius: "12px",
+                  padding: "8px 10px",
                   background: "var(--background-primary)",
                 }}
               >
-                <span style={{ fontSize: "13px" }}>
-                  {product.name} до {formatDisplayDate(parseDateSafe(product.untilDate) || new Date())}
-                </span>
-                <label style={{ display: "inline-flex", gap: "4px", alignItems: "center", fontSize: "12px" }}>
-                  <input
-                    type="checkbox"
-                    checked={product.prefer}
-                    onChange={() => toggleActiveProductPriority(product.id)}
-                  />
-                  В приоритете
-                </label>
-                <button
-                  type="button"
-                  className="btn"
-                  onClick={() => removeActiveProduct(product.id)}
-                  style={{ padding: "2px 8px" }}
-                >
-                  ×
-                </button>
+                <div style={{ display: "inline-flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                  <span style={{ fontSize: "13px" }}>
+                    {product.name} до {formatDisplayDate(parseDateSafe(product.untilDate) || new Date())}
+                  </span>
+                  <label style={{ display: "inline-flex", gap: "4px", alignItems: "center", fontSize: "12px" }}>
+                    <input
+                      type="checkbox"
+                      checked={product.prefer}
+                      onChange={() => toggleActiveProductPriority(product.id)}
+                    />
+                    В приоритете
+                  </label>
+                  <button
+                    type="button"
+                    className="btn"
+                    title={expandedActiveProductNoteId === product.id ? "Скрыть заметку" : "Добавить заметку"}
+                    aria-label={expandedActiveProductNoteId === product.id ? "Скрыть заметку" : "Добавить заметку"}
+                    onClick={() =>
+                      setExpandedActiveProductNoteId((prev) => (prev === product.id ? null : product.id))
+                    }
+                    style={{ padding: "2px 8px", minWidth: "30px" }}
+                  >
+                    ✎
+                  </button>
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={() => removeActiveProduct(product.id)}
+                    style={{ padding: "2px 8px" }}
+                  >
+                    ×
+                  </button>
+                </div>
+
+                {expandedActiveProductNoteId === product.id ? (
+                  <div style={{ display: "grid", gap: "4px" }}>
+                    <label style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Заметка</label>
+                    <input
+                      className="input"
+                      type="text"
+                      placeholder="купить 2 упаковки / только безлактозное / для Дана"
+                      value={product.note}
+                      onChange={(e) => updateActiveProductNote(product.id, e.target.value)}
+                    />
+                  </div>
+                ) : product.note.trim() ? (
+                  <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
+                    Заметка: {product.note}
+                  </div>
+                ) : null}
               </div>
             ))}
           </div>
