@@ -1284,6 +1284,13 @@ function MenuPageContent() {
     if (!name) return;
     const normalizedName = name.toLowerCase();
 
+    if (typeof document !== "undefined") {
+      const activeElement = document.activeElement as HTMLElement | null;
+      if (activeElement && typeof activeElement.blur === "function") {
+        activeElement.blur();
+      }
+    }
+
     setActiveProducts((prev) => {
       const existing = prev.find((item) => item.name.toLowerCase() === normalizedName);
       if (existing) {
@@ -2948,7 +2955,12 @@ function MenuPageContent() {
               placeholder="Например: лосось, йогурт, курица"
             />
           </div>
-          <button type="button" className="btn btn-primary" onClick={addActiveProduct}>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={addActiveProduct}
+            disabled={activeProductName.trim().length === 0}
+          >
             Добавить
           </button>
         </div>

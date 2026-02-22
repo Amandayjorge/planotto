@@ -2,6 +2,34 @@ const PRODUCT_SUGGESTIONS_KEY = "productSuggestions";
 
 const normalizeName = (value: string) => value.trim().replace(/\s+/g, " ");
 
+const extractSuggestionName = (value: string): string | null => {
+  let normalized = normalizeName(value);
+  if (!normalized) return null;
+
+  normalized = normalized.replace(/^создать новый продукт:\s*/iu, "");
+  normalized = normalized.split(/[|•;]/u)[0]?.trim() || "";
+  if (!normalized) return null;
+
+  normalized = normalized
+    .replace(/\s+до\s+\d{1,2}[./-]\d{1,2}([./-]\d{2,4})?$/iu, "")
+    .replace(/\s+\d{4}-\d{2}-\d{2}$/u, "")
+    .trim();
+
+  if (!normalized) return null;
+  if (/https?:\/\//iu.test(normalized)) return null;
+  if (!/\p{L}/u.test(normalized)) return null;
+  if (normalized.length > 48) return null;
+
+  const serviceNoisePattern =
+    /(schema cache|api-|error|ошибк|не удалось|добавить в мои|список обновлен|подтвердите действие|failed|stack trace)/iu;
+  if (serviceNoisePattern.test(normalized)) return null;
+
+  const words = normalized.split(/\s+/u).filter(Boolean);
+  if (words.length > 6) return null;
+
+  return normalized;
+};
+
 const STARTER_PRODUCT_SUGGESTIONS = [
   "Курица",
   "Индейка",
@@ -83,7 +111,7 @@ const uniqueSuggestions = (items: string[]): string[] => {
   const unique = new Map<string, string>();
 
   items.forEach((item) => {
-    const normalized = normalizeName(item);
+    const normalized = extractSuggestionName(item);
     if (!normalized) return;
     const key = normalized.toLowerCase();
     if (!unique.has(key)) unique.set(key, normalized);
