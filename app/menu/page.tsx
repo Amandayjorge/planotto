@@ -36,6 +36,7 @@ const ACTIVE_PRODUCTS_CLOUD_META_KEY = "planotto_active_products_v1";
 const ACTIVE_PRODUCT_NOTE_MAX_LENGTH = 40;
 const DAY_STRUCTURE_MODE_KEY = "menuDayStructureMode";
 const MEAL_STRUCTURE_SETTINGS_KEY = "menuMealStructureSettings";
+const MEAL_STRUCTURE_DEFAULT_SETTINGS_KEY = "menuMealStructureDefaults";
 const DEFAULT_DAY_MEALS = ["Завтрак", "Обед", "Ужин"] as const;
 type DayStructureMode = "list" | "meals";
 
@@ -56,13 +57,11 @@ const createDefaultMealSlots = (): MealSlotSetting[] =>
 
 const normalizeMealSlotName = (value: string): string => value.trim().replace(/\s+/g, " ");
 
-const loadMealSlotsFromStorage = (): MealSlotSetting[] => {
-  if (typeof window === "undefined") return createDefaultMealSlots();
+const parseMealSlots = (raw: string | null): MealSlotSetting[] | null => {
+  if (!raw) return null;
   try {
-    const raw = window.localStorage.getItem(MEAL_STRUCTURE_SETTINGS_KEY);
-    if (!raw) return createDefaultMealSlots();
     const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return createDefaultMealSlots();
+    if (!Array.isArray(parsed)) return null;
     const rows = parsed
       .map((item) => item as Partial<MealSlotSetting>)
       .filter((item) => typeof item.name === "string" && normalizeMealSlotName(item.name).length > 0)
@@ -72,11 +71,30 @@ const loadMealSlotsFromStorage = (): MealSlotSetting[] => {
         visible: item.visible !== false,
         order: Number.isFinite(item.order) ? Number(item.order) : index,
       }));
-    if (rows.length === 0) return createDefaultMealSlots();
+    if (rows.length === 0) return null;
     return rows.sort((a, b) => a.order - b.order).map((item, index) => ({ ...item, order: index }));
   } catch {
-    return createDefaultMealSlots();
+    return null;
   }
+};
+
+const loadDefaultMealSlotsFromStorage = (): MealSlotSetting[] => {
+  if (typeof window === "undefined") return createDefaultMealSlots();
+  const defaults = parseMealSlots(window.localStorage.getItem(MEAL_STRUCTURE_DEFAULT_SETTINGS_KEY));
+  if (defaults) return defaults;
+
+  // Backward compatibility with old single-key storage.
+  const legacy = parseMealSlots(window.localStorage.getItem(MEAL_STRUCTURE_SETTINGS_KEY));
+  if (legacy) return legacy;
+
+  return createDefaultMealSlots();
+};
+
+const loadMealSlotsFromStorage = (rangeKey: string): MealSlotSetting[] => {
+  if (typeof window === "undefined") return createDefaultMealSlots();
+  const byRange = parseMealSlots(window.localStorage.getItem(`${MEAL_STRUCTURE_SETTINGS_KEY}:${rangeKey}`));
+  if (byRange) return byRange;
+  return loadDefaultMealSlotsFromStorage();
 };
 
 const splitCellKey = (cellKey: string): { dayKey: string; mealLabel: string } | null => {
@@ -787,14 +805,21 @@ const AddEditDialog = memo(({
 AddEditDialog.displayName = "AddEditDialog";
 
 function MenuPageContent() {
+  const initialRangeStart = formatDate(getMonday(new Date()));
+  const initialRangeEnd = formatDate(addDays(getMonday(new Date()), 6));
+  const initialMealRangeKey = `${initialRangeStart}__${initialRangeEnd}`;
+
   const [dayStructureMode, setDayStructureMode] = useState<DayStructureMode>(() => {
     if (typeof window === "undefined") return "list";
     const raw = window.localStorage.getItem(DAY_STRUCTURE_MODE_KEY);
     return raw === "meals" ? "meals" : "list";
   });
-  const [mealSlots, setMealSlots] = useState<MealSlotSetting[]>(() => loadMealSlotsFromStorage());
+  const [mealSlots, setMealSlots] = useState<MealSlotSetting[]>(() => loadMealSlotsFromStorage(initialMealRangeKey));
+  const [mealSlotsHydrated, setMealSlotsHydrated] = useState(false);
   const [showMealSettings, setShowMealSettings] = useState(false);
   const [newMealSlotName, setNewMealSlotName] = useState("");
+  const [saveMealSlotsAsDefault, setSaveMealSlotsAsDefault] = useState(false);
+  const [mealSettingsMessage, setMealSettingsMessage] = useState<string | null>(null);
 
   const orderedMealSlots = useMemo(
     () => [...mealSlots].sort((a, b) => a.order - b.order),
@@ -818,8 +843,6 @@ function MenuPageContent() {
   );
 
   const [mealData, setMealData] = useState<Record<string, MenuItem[]>>({});
-  const initialRangeStart = formatDate(getMonday(new Date()));
-  const initialRangeEnd = formatDate(addDays(getMonday(new Date()), 6));
 
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [hasLoaded, setHasLoaded] = useState(false);
@@ -855,6 +878,7 @@ function MenuPageContent() {
   const [moveTargetDay, setMoveTargetDay] = useState<string>("");
   const [moveTargetMeal, setMoveTargetMeal] = useState<string>("");
   const dialogMouseDownRef = useRef(false);
+  const mealSlotsRangeKey = `${weekStart}__${periodEnd}`;
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -873,8 +897,14 @@ function MenuPageContent() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    localStorage.setItem(MEAL_STRUCTURE_SETTINGS_KEY, JSON.stringify(mealSlots));
-  }, [mealSlots]);
+    setMealSlots(loadMealSlotsFromStorage(mealSlotsRangeKey));
+    setMealSlotsHydrated(true);
+  }, [mealSlotsRangeKey]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !mealSlotsHydrated) return;
+    localStorage.setItem(`${MEAL_STRUCTURE_SETTINGS_KEY}:${mealSlotsRangeKey}`, JSON.stringify(mealSlots));
+  }, [mealSlots, mealSlotsHydrated, mealSlotsRangeKey]);
 
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -908,6 +938,7 @@ function MenuPageContent() {
   const guestVisitTrackedRef = useRef(false);
   const activeProductsSaveTimerRef = useRef<number | null>(null);
   const activeProductSavedNoteTimerRef = useRef<number | null>(null);
+  const mealSettingsMessageTimerRef = useRef<number | null>(null);
 
   const rangeKey = `${weekStart}__${periodEnd}`;
   const periodDays = getRangeLengthDays(weekStart, periodEnd);
@@ -1024,6 +1055,7 @@ function MenuPageContent() {
   };
 
   const closeMealSettingsDialog = () => {
+    setSaveMealSlotsAsDefault(false);
     setShowMealSettings(false);
   };
 
@@ -1078,6 +1110,32 @@ function MenuPageContent() {
       { id: crypto.randomUUID(), name: normalized, visible: true, order: nextOrder },
     ]);
     setNewMealSlotName("");
+  };
+
+  const showMealSettingsSavedMessage = (text: string) => {
+    setMealSettingsMessage(text);
+    if (typeof window !== "undefined") {
+      if (mealSettingsMessageTimerRef.current !== null) {
+        window.clearTimeout(mealSettingsMessageTimerRef.current);
+      }
+      mealSettingsMessageTimerRef.current = window.setTimeout(() => {
+        setMealSettingsMessage(null);
+        mealSettingsMessageTimerRef.current = null;
+      }, 1400);
+    }
+  };
+
+  const saveMealSlotsAsDefaults = () => {
+    if (typeof window === "undefined") return;
+    localStorage.setItem(MEAL_STRUCTURE_DEFAULT_SETTINGS_KEY, JSON.stringify(mealSlots));
+    showMealSettingsSavedMessage("Сохранено по умолчанию для новых периодов.");
+  };
+
+  const handleMealSettingsDone = () => {
+    if (saveMealSlotsAsDefault) {
+      saveMealSlotsAsDefaults();
+    }
+    closeMealSettingsDialog();
   };
 
   const handleOnboardingAddFirstRecipe = () => {
@@ -1889,6 +1947,10 @@ function MenuPageContent() {
         window.clearTimeout(activeProductSavedNoteTimerRef.current);
         activeProductSavedNoteTimerRef.current = null;
       }
+      if (mealSettingsMessageTimerRef.current !== null && typeof window !== "undefined") {
+        window.clearTimeout(mealSettingsMessageTimerRef.current);
+        mealSettingsMessageTimerRef.current = null;
+      }
     };
   }, []);
 
@@ -2556,8 +2618,23 @@ function MenuPageContent() {
             </button>
           </div>
 
-          <div style={{ marginTop: "12px", display: "flex", justifyContent: "flex-end" }}>
+          <label style={{ marginTop: "12px", display: "inline-flex", gap: "8px", alignItems: "center", fontSize: "13px" }}>
+            <input
+              type="checkbox"
+              checked={saveMealSlotsAsDefault}
+              onChange={(e) => setSaveMealSlotsAsDefault(e.target.checked)}
+            />
+            Сделать по умолчанию для всех новых периодов
+          </label>
+          <p className="muted" style={{ margin: "6px 0 0 0", fontSize: "12px" }}>
+            Для нового пользователя по умолчанию используются 3 приема: Завтрак, Обед, Ужин.
+          </p>
+
+          <div style={{ marginTop: "12px", display: "flex", justifyContent: "flex-end", gap: "8px" }}>
             <button type="button" className="btn" onClick={closeMealSettingsDialog}>
+              Отмена
+            </button>
+            <button type="button" className="btn btn-primary" onClick={handleMealSettingsDone}>
               Готово
             </button>
           </div>
@@ -2853,6 +2930,11 @@ function MenuPageContent() {
             </button>
           ) : null}
         </div>
+        {mealSettingsMessage ? (
+          <p className="muted" style={{ margin: "8px 0 0 0", fontSize: "13px" }}>
+            {mealSettingsMessage}
+          </p>
+        ) : null}
       </div>
 
       <div className="card" style={{ marginBottom: "14px", padding: "12px" }}>
