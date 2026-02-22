@@ -236,6 +236,11 @@ function RecipesPageContent() {
           setRecipes(localMine());
           return;
         }
+        const localSnapshot = localMine();
+        if (localSnapshot.length > 0) {
+          // Show cached list immediately while cloud sync is in progress.
+          setRecipes(localSnapshot);
+        }
 
         try {
           if (importedForUser.current !== userId) {
@@ -780,6 +785,7 @@ function RecipesPageContent() {
     onlyWithoutPhoto ||
     onlyWithNotes ||
     searchQuery.trim().length > 0;
+  const showBlockingLoading = isLoading && recipes.length === 0;
   const isEmptyState = !isLoading && !hasAnyRecipes;
   const isFilteredEmpty = !isLoading && hasAnyRecipes && filteredRecipes.length === 0;
   const showFirstRecipePrompt = isFirstRecipeFlow && !showFirstRecipeSuccess;
@@ -1120,7 +1126,7 @@ function RecipesPageContent() {
         </div>
       )}
 
-      {isLoading ? (
+      {showBlockingLoading ? (
         <div className="empty-state">
           <div className="empty-state__title">Загрузка...</div>
         </div>
@@ -1187,16 +1193,16 @@ function RecipesPageContent() {
                 : "Из примеров"
               : "Мой рецепт";
             const mainActionLabel = isPublicSourceRecipe
-              ? isAdding
+              ? addDone
+                ? "Уже в моих"
+                : isAdding
                 ? "Добавляю..."
                 : "Добавить в мои"
               : "Открыть";
             const mainActionClassName = `btn ${isPublicSourceRecipe ? "btn-primary" : ""}`.trim();
             const handleMainAction = () => {
               if (isPublicSourceRecipe) {
-                if (addDone && existingMineRecipeId) {
-                  showAddedFeedback(recipe.title || "", true);
-                  router.push(`/recipes/${existingMineRecipeId}`);
+                if (addDone) {
                   return;
                 }
                 handleCopyToMine(recipe.id);
@@ -1267,7 +1273,7 @@ function RecipesPageContent() {
                       <button
                         className={mainActionClassName}
                         onClick={handleMainAction}
-                        disabled={isPublicSourceRecipe && isAdding}
+                        disabled={isPublicSourceRecipe && (isAdding || addDone)}
                       >
                         {mainActionLabel}
                       </button>
