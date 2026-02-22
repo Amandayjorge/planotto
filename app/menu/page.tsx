@@ -2533,22 +2533,6 @@ function MenuPageContent() {
                 <span className="menu-day-card__date">{dayEntry.displayDate}</span>
               </header>
 
-              <div className="menu-day-card__slot-controls">
-                {getDayMeals(dayEntry.dateKey).map((slot) => (
-                  <button
-                    key={`${dayEntry.dateKey}-${slot}`}
-                    type="button"
-                    className="menu-day-card__slot-pill"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      toggleDaySlot(dayEntry.dateKey, slot);
-                    }}
-                  >
-                    {slot}
-                  </button>
-                ))}
-              </div>
-
               <div className="menu-day-card__meals">
                 {dayMeals.map((meal) => {
                   const key = getCellKey(dayEntry.dateKey, meal);
