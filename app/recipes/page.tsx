@@ -378,6 +378,23 @@ function RecipesPageContent() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+    const queryFromUrl = (searchParams.get("q") || "").trim();
+    if (!queryFromUrl) return;
+
+    setSearchQuery(queryFromUrl);
+    setViewMode("mine");
+
+    const url = new URL(window.location.href);
+    if (url.searchParams.has("q")) {
+      url.searchParams.delete("q");
+      const nextSearch = url.searchParams.toString();
+      const nextUrl = nextSearch ? `${url.pathname}?${nextSearch}` : url.pathname;
+      window.history.replaceState({}, "", nextUrl);
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
     if (isLoading || showFirstRecipeSuccess) return;
     if (recipes.length !== 1) return;
 

@@ -32,27 +32,58 @@ const GUEST_REMINDER_PERIOD_ATTEMPTS_KEY = "guestReminderPeriodAttempts";
 const GUEST_REMINDER_PENDING_KEY = "guestReminderPending";
 const GUEST_REMINDER_VISITS_THRESHOLD = 3;
 const GUEST_REMINDER_RECIPES_THRESHOLD = 3;
-const DAY_MEAL_SLOTS_KEY = "dayMealSlots";
 const ACTIVE_PRODUCTS_CLOUD_META_KEY = "planotto_active_products_v1";
+const ACTIVE_PRODUCT_NOTE_MAX_LENGTH = 40;
+const DAY_STRUCTURE_MODE_KEY = "menuDayStructureMode";
+const MEAL_STRUCTURE_SETTINGS_KEY = "menuMealStructureSettings";
 const DEFAULT_DAY_MEALS = ["Завтрак", "Обед", "Ужин"] as const;
-const loadDayMealSlotsFromStorage = (): Record<string, string[]> => {
-  if (typeof window === "undefined") return {};
+type DayStructureMode = "list" | "meals";
+
+interface MealSlotSetting {
+  id: string;
+  name: string;
+  visible: boolean;
+  order: number;
+}
+
+const createDefaultMealSlots = (): MealSlotSetting[] =>
+  DEFAULT_DAY_MEALS.map((name, index) => ({
+    id: `default-${index}`,
+    name,
+    visible: true,
+    order: index,
+  }));
+
+const normalizeMealSlotName = (value: string): string => value.trim().replace(/\s+/g, " ");
+
+const loadMealSlotsFromStorage = (): MealSlotSetting[] => {
+  if (typeof window === "undefined") return createDefaultMealSlots();
   try {
-    const raw = window.localStorage.getItem(DAY_MEAL_SLOTS_KEY);
-    if (!raw) return {};
+    const raw = window.localStorage.getItem(MEAL_STRUCTURE_SETTINGS_KEY);
+    if (!raw) return createDefaultMealSlots();
     const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== "object") return {};
-    return Object.entries(parsed).reduce<Record<string, string[]>>((acc, [key, value]) => {
-      if (Array.isArray(value)) {
-        acc[key] = value.filter((slot): slot is string => typeof slot === "string");
-      }
-      return acc;
-    }, {});
+    if (!Array.isArray(parsed)) return createDefaultMealSlots();
+    const rows = parsed
+      .map((item) => item as Partial<MealSlotSetting>)
+      .filter((item) => typeof item.name === "string" && normalizeMealSlotName(item.name).length > 0)
+      .map((item, index) => ({
+        id: typeof item.id === "string" && item.id ? item.id : crypto.randomUUID(),
+        name: normalizeMealSlotName(String(item.name || "")),
+        visible: item.visible !== false,
+        order: Number.isFinite(item.order) ? Number(item.order) : index,
+      }));
+    if (rows.length === 0) return createDefaultMealSlots();
+    return rows.sort((a, b) => a.order - b.order).map((item, index) => ({ ...item, order: index }));
   } catch {
-    return {};
+    return createDefaultMealSlots();
   }
 };
-const MEAL_LIBRARY = [...DEFAULT_DAY_MEALS, "Суп", "Заготовки", "Выпечка"] as const;
+
+const splitCellKey = (cellKey: string): { dayKey: string; mealLabel: string } | null => {
+  const match = cellKey.match(/^(\d{4}-\d{2}-\d{2})-(.+)$/);
+  if (!match) return null;
+  return { dayKey: match[1], mealLabel: match[2] };
+};
 
 const INGREDIENT_UNITS = ["г", "кг", "мл", "л", "шт", "ч.л.", "ст.л.", "по вкусу"];
 const DEFAULT_UNIT = "г";
@@ -117,9 +148,9 @@ const normalizeActivePeriodProducts = (
       id: typeof item.id === "string" && item.id ? item.id : crypto.randomUUID(),
       name: String(item.name || "").trim(),
       scope: isActiveProductScope(item.scope) ? item.scope : "this_week",
-      untilDate: typeof item.untilDate === "string" && item.untilDate ? item.untilDate : fallbackUntilDate,
+      untilDate: typeof item.untilDate === "string" ? item.untilDate : fallbackUntilDate,
       prefer: item.prefer !== false,
-      note: typeof item.note === "string" ? item.note : "",
+      note: typeof item.note === "string" ? item.note.slice(0, ACTIVE_PRODUCT_NOTE_MAX_LENGTH) : "",
     }));
 };
 
@@ -763,79 +794,37 @@ const AddEditDialog = memo(({
 AddEditDialog.displayName = "AddEditDialog";
 
 function MenuPageContent() {
-  const [dayMealSlots, setDayMealSlots] = useState<Record<string, string[]>>(() => loadDayMealSlotsFromStorage());
-  const [daySlotInputs, setDaySlotInputs] = useState<Record<string, string>>({});
-  const persistDayMealSlots = useCallback((slots: Record<string, string[]>) => {
-    setDayMealSlots(slots);
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(DAY_MEAL_SLOTS_KEY, JSON.stringify(slots));
-    }
-  }, []);
+  const [dayStructureMode, setDayStructureMode] = useState<DayStructureMode>(() => {
+    if (typeof window === "undefined") return "list";
+    const raw = window.localStorage.getItem(DAY_STRUCTURE_MODE_KEY);
+    return raw === "meals" ? "meals" : "list";
+  });
+  const [mealSlots, setMealSlots] = useState<MealSlotSetting[]>(() => loadMealSlotsFromStorage());
+  const [showMealSettings, setShowMealSettings] = useState(false);
+  const [newMealSlotName, setNewMealSlotName] = useState("");
 
-  const getDayMeals = useCallback(
-    (dayKey: string) => dayMealSlots[dayKey] || [...DEFAULT_DAY_MEALS],
-    [dayMealSlots]
+  const orderedMealSlots = useMemo(
+    () => [...mealSlots].sort((a, b) => a.order - b.order),
+    [mealSlots]
   );
 
-  const setDayMealsForKey = useCallback(
-    (dayKey: string, meals: string[]) => {
-      const next = {
-        ...dayMealSlots,
-        [dayKey]: meals,
-      };
-      persistDayMealSlots(next);
+  const getDayMeals = useCallback(
+    (_dayKey: string) => {
+      const visible = orderedMealSlots.filter((slot) => slot.visible).map((slot) => slot.name);
+      return visible.length > 0 ? visible : [...DEFAULT_DAY_MEALS];
     },
-    [dayMealSlots, persistDayMealSlots]
+    [orderedMealSlots]
+  );
+
+  const getAllMealsForDay = useCallback(
+    (_dayKey: string) => {
+      const all = orderedMealSlots.map((slot) => slot.name);
+      return all.length > 0 ? all : [...DEFAULT_DAY_MEALS];
+    },
+    [orderedMealSlots]
   );
 
   const [mealData, setMealData] = useState<Record<string, MenuItem[]>>({});
-  const removeDaySlotItems = useCallback(
-    (dayKey: string, slotLabel: string) => {
-      setMealData((prev) => {
-        const next = { ...prev };
-        const slotKey = `${dayKey}-${slotLabel}`;
-        if (next[slotKey]) {
-          delete next[slotKey];
-        }
-        return next;
-      });
-    },
-    [setMealData]
-  );
-
-
-
-  const toggleDaySlot = useCallback(
-    (dayKey: string, slotLabel: string) => {
-      const current = getDayMeals(dayKey);
-      const exists = current.includes(slotLabel);
-      const nextSlots = exists
-        ? current.filter((slot) => slot !== slotLabel)
-        : [...current, slotLabel];
-      if (exists) {
-        removeDaySlotItems(dayKey, slotLabel);
-      }
-      setDayMealsForKey(dayKey, nextSlots);
-    },
-    [getDayMeals, setDayMealsForKey, removeDaySlotItems]
-  );
-
-  const handleAddSlotToDay = useCallback(
-    (dayKey: string) => {
-      const raw = (daySlotInputs[dayKey] || "").trim();
-      if (!raw) return;
-      const normalized = raw.replace(/\s+/g, " ").replace(/(^\s+|\s+$)/g, "");
-      const current = getDayMeals(dayKey);
-      if (current.includes(normalized)) {
-        setDaySlotInputs((prev) => ({ ...prev, [dayKey]: "" }));
-        return;
-      }
-      const next = [...current, normalized];
-      setDayMealsForKey(dayKey, next);
-      setDaySlotInputs((prev) => ({ ...prev, [dayKey]: "" }));
-    },
-    [daySlotInputs, getDayMeals, setDayMealsForKey]
-  );
   const initialRangeStart = formatDate(getMonday(new Date()));
   const initialRangeEnd = formatDate(addDays(getMonday(new Date()), 6));
 
@@ -884,6 +873,16 @@ function MenuPageContent() {
     }
   }, [weekStart, periodEnd]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    localStorage.setItem(DAY_STRUCTURE_MODE_KEY, dayStructureMode);
+  }, [dayStructureMode]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    localStorage.setItem(MEAL_STRUCTURE_SETTINGS_KEY, JSON.stringify(mealSlots));
+  }, [mealSlots]);
+
   const router = useRouter();
   const searchParams = useSearchParams();
   const forceFirstFromQuery = searchParams.get("first") === "1";
@@ -899,8 +898,6 @@ function MenuPageContent() {
   const [menuSyncError, setMenuSyncError] = useState("");
   const [activeProducts, setActiveProducts] = useState<ActivePeriodProduct[]>([]);
   const [activeProductName, setActiveProductName] = useState("");
-  const [activeProductScope, setActiveProductScope] = useState<ActiveProductScope>("this_week");
-  const [activeProductUntilDate, setActiveProductUntilDate] = useState(() => formatDate(new Date()));
   const [expandedActiveProductNoteId, setExpandedActiveProductNoteId] = useState<string | null>(null);
   const [activeProductsCloudHydrated, setActiveProductsCloudHydrated] = useState(false);
   const [knownProductSuggestions, setKnownProductSuggestions] = useState<string[]>(() => loadProductSuggestions());
@@ -940,6 +937,57 @@ function MenuPageContent() {
   const getCookedStatusKey = () => `cookedStatus:${rangeKey}`;
   const getActiveProductsKey = () => `activeProducts:${rangeKey}`;
   const getCellKey = (day: string, meal: string) => `${day}-${meal}`;
+  const getListAppendMeal = useCallback(
+    (dayKey: string) => {
+      const meals = getAllMealsForDay(dayKey);
+      if (meals.length > 0) return meals[meals.length - 1];
+      return DEFAULT_DAY_MEALS[DEFAULT_DAY_MEALS.length - 1];
+    },
+    [getAllMealsForDay]
+  );
+
+  const getDayListEntries = useCallback(
+    (dayKey: string): Array<{ cellKey: string; meal: string; index: number; item: MenuItem }> => {
+      const entries: Array<{ cellKey: string; meal: string; index: number; item: MenuItem }> = [];
+      const meals = getAllMealsForDay(dayKey);
+      meals.forEach((meal) => {
+        const cellKey = getCellKey(dayKey, meal);
+        const items = mealData[cellKey] || [];
+        items.forEach((item, index) => entries.push({ cellKey, meal, index, item }));
+      });
+      return entries;
+    },
+    [getAllMealsForDay, mealData]
+  );
+
+  const migrateMealName = useCallback((fromName: string, toName: string) => {
+    if (!fromName || !toName || fromName === toName) return;
+
+    setMealData((prev) => {
+      const next = { ...prev };
+      Object.entries(prev).forEach(([cellKey, items]) => {
+        const parsed = splitCellKey(cellKey);
+        if (!parsed || parsed.mealLabel !== fromName) return;
+        const targetKey = getCellKey(parsed.dayKey, toName);
+        const merged = [...(next[targetKey] || []), ...(items || [])];
+        next[targetKey] = merged;
+        delete next[cellKey];
+      });
+      return next;
+    });
+
+    setCellPeopleCount((prev) => {
+      const next = { ...prev };
+      Object.entries(prev).forEach(([cellKey, count]) => {
+        const parsed = splitCellKey(cellKey);
+        if (!parsed || parsed.mealLabel !== fromName) return;
+        const targetKey = getCellKey(parsed.dayKey, toName);
+        next[targetKey] = count;
+        delete next[cellKey];
+      });
+      return next;
+    });
+  }, []);
   const persistMenuSnapshot = (
     nextMealData: Record<string, MenuItem[]>,
     nextCellPeopleCount: Record<string, number> = cellPeopleCount
@@ -953,20 +1001,6 @@ function MenuPageContent() {
     }
   };
   const isReadOnly = menuMode === "public";
-  const removeSlotMeals = useCallback(
-    (label: string) => {
-      setMealData((prev) => {
-        const next = { ...prev };
-        Object.keys(prev).forEach((key) => {
-          if (key.endsWith(`-${label}`)) {
-            delete next[key];
-          }
-        });
-        return next;
-      });
-    },
-    [setMealData]
-  );
 
 
   const closeDropdownMenu = () => {
@@ -998,11 +1032,62 @@ function MenuPageContent() {
     setShowPantryDialog(null);
   };
 
+  const closeMealSettingsDialog = () => {
+    setShowMealSettings(false);
+  };
+
   const resetAllModalStates = () => {
     closeDropdownMenu();
     closeAddEditDialog();
     closeMoveDialog();
     closePantryDialog();
+    closeMealSettingsDialog();
+  };
+
+  const toggleMealVisibility = (slotId: string) => {
+    setMealSlots((prev) => prev.map((slot) => (slot.id === slotId ? { ...slot, visible: !slot.visible } : slot)));
+  };
+
+  const renameMealSlot = (slotId: string, nextRawName: string) => {
+    const normalized = normalizeMealSlotName(nextRawName);
+    const current = mealSlots.find((slot) => slot.id === slotId);
+    if (!current || !normalized || normalized === current.name) return;
+
+    const exists = mealSlots.some(
+      (slot) => slot.id !== slotId && slot.name.toLocaleLowerCase("ru-RU") === normalized.toLocaleLowerCase("ru-RU")
+    );
+    if (exists) return;
+
+    migrateMealName(current.name, normalized);
+    setMealSlots((prev) => prev.map((slot) => (slot.id === slotId ? { ...slot, name: normalized } : slot)));
+  };
+
+  const moveMealSlot = (slotId: string, direction: -1 | 1) => {
+    setMealSlots((prev) => {
+      const ordered = [...prev].sort((a, b) => a.order - b.order);
+      const index = ordered.findIndex((slot) => slot.id === slotId);
+      if (index < 0) return prev;
+      const nextIndex = index + direction;
+      if (nextIndex < 0 || nextIndex >= ordered.length) return prev;
+      const swapped = [...ordered];
+      [swapped[index], swapped[nextIndex]] = [swapped[nextIndex], swapped[index]];
+      return swapped.map((slot, idx) => ({ ...slot, order: idx }));
+    });
+  };
+
+  const addMealSlot = () => {
+    const normalized = normalizeMealSlotName(newMealSlotName);
+    if (!normalized) return;
+    const exists = mealSlots.some(
+      (slot) => slot.name.toLocaleLowerCase("ru-RU") === normalized.toLocaleLowerCase("ru-RU")
+    );
+    if (exists) return;
+    const nextOrder = mealSlots.length;
+    setMealSlots((prev) => [
+      ...prev,
+      { id: crypto.randomUUID(), name: normalized, visible: true, order: nextOrder },
+    ]);
+    setNewMealSlotName("");
   };
 
   const handleOnboardingAddFirstRecipe = () => {
@@ -1097,12 +1182,6 @@ function MenuPageContent() {
     shiftPeriod(1);
   };
 
-  const resolveUntilDateByScope = (scope: ActiveProductScope): string => {
-    if (scope === "today") return formatDate(new Date());
-    if (scope === "this_week") return periodEnd;
-    return activeProductUntilDate || periodEnd;
-  };
-
   const loadActiveProductsFromCloud = useCallback(
     async (ownerId: string, key: string): Promise<ActivePeriodProduct[] | null> => {
       if (!isSupabaseConfigured()) return null;
@@ -1114,9 +1193,9 @@ function MenuPageContent() {
       if (!rawByRange || typeof rawByRange !== "object") return null;
       const byRange = rawByRange as Record<string, unknown>;
       if (!(key in byRange)) return null;
-      return normalizeActivePeriodProducts(byRange[key], periodEnd);
+      return normalizeActivePeriodProducts(byRange[key], "");
     },
-    [periodEnd]
+    []
   );
 
   const saveActiveProductsToCloud = useCallback(
@@ -1155,8 +1234,6 @@ function MenuPageContent() {
   const addActiveProduct = () => {
     const name = activeProductName.trim();
     if (!name) return;
-
-    const untilDate = resolveUntilDateByScope(activeProductScope);
     const normalizedName = name.toLowerCase();
 
     setActiveProducts((prev) => {
@@ -1164,7 +1241,7 @@ function MenuPageContent() {
       if (existing) {
         return prev.map((item) =>
           item.id === existing.id
-            ? { ...item, name, scope: activeProductScope, untilDate, prefer: true, note: item.note || "" }
+            ? { ...item, name, prefer: true, note: item.note || "" }
             : item
         );
       }
@@ -1173,8 +1250,8 @@ function MenuPageContent() {
         {
           id: crypto.randomUUID(),
           name,
-          scope: activeProductScope,
-          untilDate,
+          scope: "this_week",
+          untilDate: "",
           prefer: true,
           note: "",
         },
@@ -1198,7 +1275,12 @@ function MenuPageContent() {
   };
 
   const updateActiveProductNote = (id: string, note: string) => {
-    setActiveProducts((prev) => prev.map((item) => (item.id === id ? { ...item, note } : item)));
+    const normalized = note.slice(0, ACTIVE_PRODUCT_NOTE_MAX_LENGTH);
+    setActiveProducts((prev) => prev.map((item) => (item.id === id ? { ...item, note: normalized } : item)));
+  };
+
+  const updateActiveProductUntilDate = (id: string, untilDate: string) => {
+    setActiveProducts((prev) => prev.map((item) => (item.id === id ? { ...item, untilDate } : item)));
   };
 
   const handleAiMenuSuggestion = useCallback(async (prompt = "") => {
@@ -1351,7 +1433,9 @@ function MenuPageContent() {
 
   const getMenuItemIngredients = (cellKey: string, menuItem: MenuItem): Ingredient[] => {
     if (menuItem.ingredients && menuItem.ingredients.length > 0) {
-      return menuItem.ingredients;
+      return menuItem.ingredients.filter(
+        (ingredient) => ingredient.name.trim().length > 0 && ingredient.unit !== "по вкусу" && ingredient.amount > 0
+      );
     }
 
     if (menuItem.type !== "recipe" || !menuItem.recipeId) {
@@ -1368,7 +1452,9 @@ function MenuPageContent() {
     const scale = peopleCount / baseServings;
 
     return recipe.ingredients
-      .filter((ingredient) => ingredient.name.trim().length > 0 && ingredient.amount > 0)
+      .filter(
+        (ingredient) => ingredient.name.trim().length > 0 && ingredient.unit !== "по вкусу" && ingredient.amount > 0
+      )
       .map((ingredient) => ({
         ...ingredient,
         amount: ingredient.amount * scale,
@@ -1592,6 +1678,32 @@ function MenuPageContent() {
           converted[key] = items.map((it) => ensureTextItemCompatibility(it));
         }
         setMealData(converted);
+        const labelsFromData = Array.from(
+          new Set(
+            Object.keys(converted)
+              .map((cellKey) => splitCellKey(cellKey)?.mealLabel || "")
+              .filter(Boolean)
+          )
+        );
+        if (labelsFromData.length > 0) {
+          setMealSlots((prev) => {
+            const existing = new Set(prev.map((slot) => slot.name.toLocaleLowerCase("ru-RU")));
+            const missing = labelsFromData.filter(
+              (label) => !existing.has(label.toLocaleLowerCase("ru-RU"))
+            );
+            if (missing.length === 0) return prev;
+            const nextBase = [...prev];
+            missing.forEach((name) => {
+              nextBase.push({
+                id: crypto.randomUUID(),
+                name,
+                visible: true,
+                order: nextBase.length,
+              });
+            });
+            return nextBase;
+          });
+        }
       } catch (e) {
         console.error("Failed to load menu data:", e);
         setMealData({});
@@ -1628,7 +1740,7 @@ function MenuPageContent() {
     if (storedActiveProducts) {
       try {
         const parsed = JSON.parse(storedActiveProducts);
-        setActiveProducts(normalizeActivePeriodProducts(parsed, periodEnd));
+        setActiveProducts(normalizeActivePeriodProducts(parsed, ""));
       } catch (e) {
         console.error("Failed to load active products:", e);
         setActiveProducts([]);
@@ -2052,11 +2164,13 @@ function MenuPageContent() {
   };
 
   const handleMoveConfirm = () => {
-    if (!movingItem || !moveTargetDay || !moveTargetMeal) return;
+    if (!movingItem || !moveTargetDay) return;
 
     const fromKey = movingItem.cellKey;
     const fromIndex = movingItem.index;
-    const toKey = getCellKey(moveTargetDay, moveTargetMeal);
+    const resolvedMeal = dayStructureMode === "list" ? getListAppendMeal(moveTargetDay) : moveTargetMeal;
+    if (!resolvedMeal) return;
+    const toKey = getCellKey(moveTargetDay, resolvedMeal);
 
     setMealData((prev) => {
       const newData = { ...prev };
@@ -2106,7 +2220,8 @@ function MenuPageContent() {
         target.closest(".menu-grid__item-more") ||
         target.closest(".menu-dialog") ||
         target.closest(".move-dialog") ||
-        target.closest(".pantry-dialog");
+        target.closest(".pantry-dialog") ||
+        target.closest(".meal-settings-dialog");
 
       if (dialogMouseDownRef.current && !clickedInside) {
         dialogMouseDownRef.current = false;
@@ -2121,6 +2236,7 @@ function MenuPageContent() {
       if (movingItem) closeMoveDialog();
       if (addingItemCell) closeAddEditDialog();
       if (showPantryDialog) closePantryDialog();
+      if (showMealSettings) closeMealSettingsDialog();
     };
 
     const handleEscapeKey = (event: KeyboardEvent) => {
@@ -2128,7 +2244,7 @@ function MenuPageContent() {
       resetAllModalStates();
     };
 
-    if (openMoreMenu || movingItem || addingItemCell || showPantryDialog) {
+    if (openMoreMenu || movingItem || addingItemCell || showPantryDialog || showMealSettings) {
       document.addEventListener("pointerdown", handlePointerDown, true);
       document.addEventListener("click", handleOutsideClick, false);
       document.addEventListener("keydown", handleEscapeKey, true);
@@ -2139,7 +2255,7 @@ function MenuPageContent() {
       document.removeEventListener("click", handleOutsideClick, false);
       document.removeEventListener("keydown", handleEscapeKey, true);
     };
-  }, [openMoreMenu, movingItem, addingItemCell, showPantryDialog]);
+  }, [openMoreMenu, movingItem, addingItemCell, showPantryDialog, showMealSettings]);
 
   useEffect(() => {
     return () => {
@@ -2236,7 +2352,17 @@ function MenuPageContent() {
 
           <div className="move-dialog-row">
             <label>День:</label>
-            <select value={moveTargetDay} onChange={(e) => setMoveTargetDay(e.target.value)} className="move-dialog-select">
+            <select
+              value={moveTargetDay}
+              onChange={(e) => {
+                const nextDay = e.target.value;
+                setMoveTargetDay(nextDay);
+                if (dayStructureMode === "list") {
+                  setMoveTargetMeal(nextDay ? getListAppendMeal(nextDay) : "");
+                }
+              }}
+              className="move-dialog-select"
+            >
               <option value="">Выберите...</option>
               {dayEntries.map((dayEntry) => (
                 <option key={dayEntry.dateKey} value={dayEntry.dateKey}>
@@ -2246,24 +2372,146 @@ function MenuPageContent() {
             </select>
           </div>
 
-          <div className="move-dialog-row">
-            <label>Прием:</label>
-            <select value={moveTargetMeal} onChange={(e) => setMoveTargetMeal(e.target.value)} className="move-dialog-select">
-              <option value="">Выберите...</option>
-              {(moveTargetDay ? getDayMeals(moveTargetDay) : [...DEFAULT_DAY_MEALS]).map((meal) => (
-                <option key={meal} value={meal}>
-                  {meal}
-                </option>
-              ))}
-            </select>
-          </div>
+          {dayStructureMode === "meals" ? (
+            <div className="move-dialog-row">
+              <label>Прием:</label>
+              <select value={moveTargetMeal} onChange={(e) => setMoveTargetMeal(e.target.value)} className="move-dialog-select">
+                <option value="">Выберите...</option>
+                {(moveTargetDay ? getDayMeals(moveTargetDay) : [...DEFAULT_DAY_MEALS]).map((meal) => (
+                  <option key={meal} value={meal}>
+                    {meal}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
 
           <div className="move-dialog-actions">
-            <button type="button" onClick={handleMoveConfirm} disabled={!moveTargetDay || !moveTargetMeal} className="move-dialog-confirm">
+            <button
+              type="button"
+              onClick={handleMoveConfirm}
+              disabled={!moveTargetDay || (dayStructureMode === "meals" && !moveTargetMeal)}
+              className="move-dialog-confirm"
+            >
               Переместить
             </button>
             <button type="button" onClick={closeMoveDialog} className="move-dialog-cancel">
               Отмена
+            </button>
+          </div>
+        </div>
+      </div>,
+      document.body
+    );
+  };
+
+  const MealSettingsDialog = () => {
+    if (!showMealSettings) return null;
+
+    return createPortal(
+      <div
+        className="move-dialog-overlay"
+        style={{
+          position: "fixed",
+          inset: 0,
+          zIndex: 10000,
+          background: "rgba(0, 0, 0, 0.5)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+        onMouseDown={(e) => {
+          if (e.target === e.currentTarget) closeMealSettingsDialog();
+        }}
+      >
+        <div
+          className="meal-settings-dialog"
+          style={{
+            background: "white",
+            border: "1px solid #ddd",
+            borderRadius: "10px",
+            padding: "16px",
+            minWidth: "320px",
+            width: "min(640px, 94vw)",
+            maxHeight: "80vh",
+            overflow: "auto",
+          }}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          <h3 style={{ marginTop: 0 }}>Настроить приемы</h3>
+          <div style={{ display: "grid", gap: "8px" }}>
+            {orderedMealSlots.map((slot, index) => (
+              <div
+                key={slot.id}
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "auto 1fr auto auto",
+                  gap: "8px",
+                  alignItems: "center",
+                  border: "1px solid var(--border-default)",
+                  borderRadius: "8px",
+                  padding: "8px",
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={slot.visible}
+                  onChange={() => toggleMealVisibility(slot.id)}
+                  title="Показывать прием"
+                />
+                <input
+                  className="input"
+                  defaultValue={slot.name}
+                  onBlur={(e) => renameMealSlot(slot.id, e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      renameMealSlot(slot.id, (e.target as HTMLInputElement).value);
+                      (e.target as HTMLInputElement).blur();
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => moveMealSlot(slot.id, -1)}
+                  disabled={index === 0}
+                  style={{ padding: "2px 8px" }}
+                >
+                  ↑
+                </button>
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => moveMealSlot(slot.id, 1)}
+                  disabled={index === orderedMealSlots.length - 1}
+                  style={{ padding: "2px 8px" }}
+                >
+                  ↓
+                </button>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ marginTop: "10px", display: "flex", gap: "8px", flexWrap: "wrap" }}>
+            <input
+              className="input"
+              type="text"
+              placeholder="Новый прием"
+              value={newMealSlotName}
+              onChange={(e) => setNewMealSlotName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") addMealSlot();
+              }}
+              style={{ flex: "1 1 220px" }}
+            />
+            <button type="button" className="btn btn-primary" onClick={addMealSlot}>
+              + Добавить прием
+            </button>
+          </div>
+
+          <div style={{ marginTop: "12px", display: "flex", justifyContent: "flex-end" }}>
+            <button type="button" className="btn" onClick={closeMealSettingsDialog}>
+              Готово
             </button>
           </div>
         </div>
@@ -2372,6 +2620,69 @@ function MenuPageContent() {
         </div>
       </div>,
       document.body
+    );
+  };
+
+  const renderMenuItemRow = (
+    cellKey: string,
+    menuItem: MenuItem,
+    index: number,
+    dayKey: string
+  ) => {
+    const menuKey = `${cellKey}-${index}`;
+    const title =
+      menuItem.type === "recipe" && menuItem.recipeId
+        ? recipes.find((r) => r.id === menuItem.recipeId)?.title || ""
+        : menuItem.value || "";
+    const hasIngredients = getMenuItemIngredients(cellKey, menuItem).length > 0;
+
+    return (
+      <div key={menuItem.id} className="menu-slot-item">
+        <span className="menu-slot-item__title" title={title}>
+          {title}
+        </span>
+
+        <div className="menu-slot-item__icons">
+          <label className="menu-slot-item__icon-toggle" title="Приготовлено">
+            <input
+              type="checkbox"
+              checked={getDefaultCookedStatus(dayKey, menuItem.id)}
+              onChange={(e) => {
+                if (e.target.checked) {
+                  setShowPantryDialog({ cellKey, index });
+                } else {
+                  const updatedItems = [...(mealData[cellKey] || [])];
+                  updatedItems[index] = { ...updatedItems[index], cooked: false };
+
+                  setMealData((prev) => ({ ...prev, [cellKey]: updatedItems }));
+                  setCookedStatus((prev) => ({ ...prev, [menuItem.id]: false }));
+                }
+              }}
+              className="menu-slot-item__checkbox"
+            />
+          </label>
+
+          {menuItem.type === "text" ? (
+            <span className="menu-slot-item__icon" title="Без рецепта">
+              T
+            </span>
+          ) : null}
+
+          {hasIngredients ? (
+            <span className="menu-slot-item__icon" title="Есть ингредиенты">
+              I
+            </span>
+          ) : null}
+
+          <button
+            className="menu-grid__item-more menu-slot-item__more"
+            onClick={(e) => handleMoreMenuToggle(e, menuKey, cellKey, index)}
+            title="Действия"
+          >
+            ...
+          </button>
+        </div>
+      </div>
     );
   };
 
@@ -2575,6 +2886,28 @@ function MenuPageContent() {
             </>
           )}
         </div>
+        <div style={{ marginTop: "10px", display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+          <span style={{ fontWeight: 600 }}>Структура дня:</span>
+          <button
+            type="button"
+            className={`btn ${dayStructureMode === "list" ? "btn-primary" : ""}`.trim()}
+            onClick={() => setDayStructureMode("list")}
+          >
+            Список
+          </button>
+          <button
+            type="button"
+            className={`btn ${dayStructureMode === "meals" ? "btn-primary" : ""}`.trim()}
+            onClick={() => setDayStructureMode("meals")}
+          >
+            По приемам пищи
+          </button>
+          {dayStructureMode === "meals" ? (
+            <button type="button" className="btn" onClick={() => setShowMealSettings(true)}>
+              Настроить приемы
+            </button>
+          ) : null}
+        </div>
       </div>
 
       <div className="card" style={{ marginBottom: "14px", padding: "12px" }}>
@@ -2588,25 +2921,6 @@ function MenuPageContent() {
               placeholder="Например: лосось, йогурт, курица"
             />
           </div>
-          <select
-            className="input"
-            value={activeProductScope}
-            onChange={(e) => setActiveProductScope(e.target.value as ActiveProductScope)}
-            style={{ width: "170px" }}
-          >
-            <option value="today">Сегодня</option>
-            <option value="this_week">Эта неделя</option>
-            <option value="until_date">До даты</option>
-          </select>
-          {activeProductScope === "until_date" ? (
-            <input
-              className="input"
-              type="date"
-              value={activeProductUntilDate}
-              onChange={(e) => setActiveProductUntilDate(e.target.value)}
-              style={{ width: "170px" }}
-            />
-          ) : null}
           <button type="button" className="btn btn-primary" onClick={addActiveProduct}>
             Добавить
           </button>
@@ -2614,42 +2928,53 @@ function MenuPageContent() {
         {activeProducts.length > 0 ? (
           <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
             {activeProducts.map((product) => (
-              <div
-                key={product.id}
-                style={{
-                  display: "inline-flex",
-                  flexDirection: "column",
-                  alignItems: "stretch",
-                  gap: "6px",
-                  border: "1px solid var(--border-default)",
-                  borderRadius: "12px",
-                  padding: "8px 10px",
-                  background: "var(--background-primary)",
-                }}
-              >
-                <div style={{ display: "inline-flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
-                  <span style={{ fontSize: "13px" }}>
-                    {product.name} до {formatDisplayDate(parseDateSafe(product.untilDate) || new Date())}
+              <div key={product.id} style={{ display: "grid", gap: "6px" }}>
+                <div
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    border: "1px solid var(--border-default)",
+                    borderRadius: "999px",
+                    padding: "6px 10px",
+                    background: "var(--background-primary)",
+                    maxWidth: "100%",
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: "13px",
+                      maxWidth: "320px",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                    title={product.note ? `${product.name} ${product.untilDate ? `до ${product.untilDate}` : ""} ${product.note}` : product.name}
+                  >
+                    <strong>{product.name}</strong>
+                    {product.untilDate ? ` • до ${formatDisplayDate(parseDateSafe(product.untilDate) || new Date())}` : ""}
+                    {product.note.trim() ? ` • ${product.note}` : ""}
                   </span>
-                  <label style={{ display: "inline-flex", gap: "4px", alignItems: "center", fontSize: "12px" }}>
-                    <input
-                      type="checkbox"
-                      checked={product.prefer}
-                      onChange={() => toggleActiveProductPriority(product.id)}
-                    />
-                    В приоритете
-                  </label>
                   <button
                     type="button"
                     className="btn"
-                    title={expandedActiveProductNoteId === product.id ? "Скрыть заметку" : "Добавить заметку"}
-                    aria-label={expandedActiveProductNoteId === product.id ? "Скрыть заметку" : "Добавить заметку"}
+                    title={expandedActiveProductNoteId === product.id ? "Скрыть" : "Редактировать"}
+                    aria-label={expandedActiveProductNoteId === product.id ? "Скрыть" : "Редактировать"}
                     onClick={() =>
                       setExpandedActiveProductNoteId((prev) => (prev === product.id ? null : product.id))
                     }
                     style={{ padding: "2px 8px", minWidth: "30px" }}
                   >
                     ✎
+                  </button>
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={() => router.push(`/recipes?q=${encodeURIComponent(product.name)}`)}
+                    style={{ padding: "2px 8px" }}
+                    title="Найти блюда с этим продуктом"
+                  >
+                    Найти
                   </button>
                   <button
                     type="button"
@@ -2662,19 +2987,43 @@ function MenuPageContent() {
                 </div>
 
                 {expandedActiveProductNoteId === product.id ? (
-                  <div style={{ display: "grid", gap: "4px" }}>
-                    <label style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Заметка</label>
+                  <div
+                    style={{
+                      display: "grid",
+                      gap: "6px",
+                      border: "1px solid var(--border-default)",
+                      borderRadius: "10px",
+                      padding: "8px",
+                      background: "var(--background-primary)",
+                      maxWidth: "360px",
+                    }}
+                  >
+                    <label style={{ fontSize: "12px", color: "var(--text-secondary)" }}>До</label>
+                    <input
+                      className="input"
+                      type="date"
+                      value={product.untilDate}
+                      onChange={(e) => updateActiveProductUntilDate(product.id, e.target.value)}
+                    />
+                    <label style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
+                      Заметка (до {ACTIVE_PRODUCT_NOTE_MAX_LENGTH} символов)
+                    </label>
                     <input
                       className="input"
                       type="text"
-                      placeholder="купить 2 упаковки / только безлактозное / для Дана"
+                      placeholder="купить 2 упаковки / безлактозное / для Дана"
+                      maxLength={ACTIVE_PRODUCT_NOTE_MAX_LENGTH}
                       value={product.note}
                       onChange={(e) => updateActiveProductNote(product.id, e.target.value)}
                     />
-                  </div>
-                ) : product.note.trim() ? (
-                  <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
-                    Заметка: {product.note}
+                    <label style={{ display: "inline-flex", gap: "6px", alignItems: "center", fontSize: "12px" }}>
+                      <input
+                        type="checkbox"
+                        checked={product.prefer}
+                        onChange={() => toggleActiveProductPriority(product.id)}
+                      />
+                      В приоритете
+                    </label>
                   </div>
                 ) : null}
               </div>
@@ -2699,6 +3048,8 @@ function MenuPageContent() {
       <div className="menu-board">
         {dayEntries.map((dayEntry) => {
           const dayMeals = getDayMeals(dayEntry.dateKey);
+          const dayListEntries = getDayListEntries(dayEntry.dateKey);
+          const listAddCellKey = getCellKey(dayEntry.dateKey, getListAppendMeal(dayEntry.dateKey));
           return (
             <article key={dayEntry.dateKey} className="menu-day-card">
               <header className="menu-day-card__header">
@@ -2706,102 +3057,83 @@ function MenuPageContent() {
                 <span className="menu-day-card__date">{dayEntry.displayDate}</span>
               </header>
 
-              <div className="menu-day-card__meals">
-                {dayMeals.map((meal) => {
-                  const key = getCellKey(dayEntry.dateKey, meal);
-                  const items = mealData[key] || [];
-
-                  return (
-                    <section key={key} className="menu-slot" data-cell-key={key}>
-                      <div className="menu-slot__header">
-                        <span className="menu-slot__meal">{meal}</span>
+              {dayStructureMode === "list" ? (
+                <div className="menu-day-card__meals">
+                  <section className="menu-slot" data-cell-key={listAddCellKey}>
+                    <div className="menu-slot__header">
+                      <span className="menu-slot__meal">Блюда дня</span>
+                      <button
+                        className="menu-slot__add"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleAddItemClick(listAddCellKey);
+                        }}
+                        title="Добавить блюдо в день"
+                      >
+                        +
+                      </button>
+                    </div>
+                    <div className="menu-slot__items">
+                      {dayListEntries.length > 0 ? (
+                        dayListEntries.map((entry) =>
+                          renderMenuItemRow(entry.cellKey, entry.item, entry.index, dayEntry.dateKey)
+                        )
+                      ) : (
                         <button
-                          className="menu-slot__add"
+                          className="menu-slot__empty"
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleAddItemClick(key);
+                            handleAddItemClick(listAddCellKey);
                           }}
-                          title={`Добавить блюдо (${meal})`}
                         >
-                          +
+                          + Добавить блюдо
                         </button>
-                      </div>
+                      )}
+                    </div>
+                  </section>
+                </div>
+              ) : (
+                <div className="menu-day-card__meals">
+                  {dayMeals.map((meal) => {
+                    const key = getCellKey(dayEntry.dateKey, meal);
+                    const items = mealData[key] || [];
 
-                      <div className="menu-slot__items">
-                        {items.length > 0 ? (
-                          items.map((menuItem, index) => {
-                            const menuKey = `${key}-${index}`;
-                            const title =
-                              menuItem.type === "recipe" && menuItem.recipeId
-                                ? recipes.find((r) => r.id === menuItem.recipeId)?.title || ""
-                                : menuItem.value || "";
-                            const hasIngredients = getMenuItemIngredients(key, menuItem).length > 0;
-
-                            return (
-                              <div key={menuItem.id} className="menu-slot-item">
-                                <span className="menu-slot-item__title" title={title}>
-                                  {title}
-                                </span>
-
-                                <div className="menu-slot-item__icons">
-                                  <label className="menu-slot-item__icon-toggle" title="Приготовлено">
-                                    <input
-                                      type="checkbox"
-                                      checked={getDefaultCookedStatus(dayEntry.dateKey, menuItem.id)}
-                                      onChange={(e) => {
-                                        if (e.target.checked) {
-                                          setShowPantryDialog({ cellKey: key, index });
-                                        } else {
-                                          const updatedItems = [...(mealData[key] || [])];
-                                          updatedItems[index] = { ...updatedItems[index], cooked: false };
-
-                                          setMealData((prev) => ({ ...prev, [key]: updatedItems }));
-                                          setCookedStatus((prev) => ({ ...prev, [menuItem.id]: false }));
-                                        }
-                                      }}
-                                      className="menu-slot-item__checkbox"
-                                    />
-                                  </label>
-
-                                  {menuItem.type === "text" && (
-                                    <span className="menu-slot-item__icon" title="Без рецепта">
-                                      T
-                                    </span>
-                                  )}
-
-                                  {hasIngredients && (
-                                    <span className="menu-slot-item__icon" title="Есть ингредиенты">
-                                      I
-                                    </span>
-                                  )}
-
-                                  <button
-                                    className="menu-grid__item-more menu-slot-item__more"
-                                    onClick={(e) => handleMoreMenuToggle(e, menuKey, key, index)}
-                                    title="Действия"
-                                  >
-                                    ...
-                                  </button>
-                                </div>
-                              </div>
-                            );
-                          })
-                        ) : (
+                    return (
+                      <section key={key} className="menu-slot" data-cell-key={key}>
+                        <div className="menu-slot__header">
+                          <span className="menu-slot__meal">{meal}</span>
                           <button
-                            className="menu-slot__empty"
+                            className="menu-slot__add"
                             onClick={(e) => {
                               e.stopPropagation();
                               handleAddItemClick(key);
                             }}
+                            title={`Добавить блюдо (${meal})`}
                           >
-                            + Добавить блюдо
+                            +
                           </button>
-                        )}
-                      </div>
-                    </section>
-                  );
-                })}
-              </div>
+                        </div>
+
+                        <div className="menu-slot__items">
+                          {items.length > 0 ? (
+                            items.map((menuItem, index) => renderMenuItemRow(key, menuItem, index, dayEntry.dateKey))
+                          ) : (
+                            <button
+                              className="menu-slot__empty"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleAddItemClick(key);
+                              }}
+                            >
+                              + Добавить блюдо
+                            </button>
+                          )}
+                        </div>
+                      </section>
+                    );
+                  })}
+                </div>
+              )}
             </article>
           );
         })}
@@ -2809,6 +3141,7 @@ function MenuPageContent() {
 
       <DropdownMenu />
       <MoveDialog />
+      <MealSettingsDialog />
 
       <AddEditDialog
         addingItemCell={addingItemCell}
