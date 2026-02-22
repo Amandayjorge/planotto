@@ -17,7 +17,16 @@ const NAV_ITEMS = [
 export default function Header() {
   const pathname = usePathname();
   const [highlightShopping, setHighlightShopping] = useState(false);
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [mobileMenuOpenedForPath, setMobileMenuOpenedForPath] = useState<string | null>(null);
+  const isMobileMenuOpen = mobileMenuOpenedForPath === pathname;
+
+  const closeMobileMenu = () => {
+    setMobileMenuOpenedForPath(null);
+  };
+
+  const toggleMobileMenu = () => {
+    setMobileMenuOpenedForPath((prev) => (prev === pathname ? null : pathname));
+  };
 
   useEffect(() => {
     const updateHighlight = () => {
@@ -34,14 +43,10 @@ export default function Header() {
   }, []);
 
   useEffect(() => {
-    setIsMobileMenuOpen(false);
-  }, [pathname]);
-
-  useEffect(() => {
     if (!isMobileMenuOpen) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        setIsMobileMenuOpen(false);
+        setMobileMenuOpenedForPath(null);
       }
     };
     window.addEventListener("keydown", onKeyDown);
@@ -99,7 +104,7 @@ export default function Header() {
         </nav>
         <button
           className="header__menu-btn"
-          onClick={() => setIsMobileMenuOpen((prev) => !prev)}
+          onClick={toggleMobileMenu}
           type="button"
           aria-label="Открыть меню"
         >
@@ -108,14 +113,14 @@ export default function Header() {
       </div>
 
       {isMobileMenuOpen && (
-        <div className="mobile-menu-overlay" onClick={() => setIsMobileMenuOpen(false)}>
+        <div className="mobile-menu-overlay" onClick={closeMobileMenu}>
           <div className="mobile-menu" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Навигация">
             <div className="mobile-menu__header">
               <span className="mobile-menu__title">Навигация</span>
               <button
                 type="button"
                 className="mobile-menu__close"
-                onClick={() => setIsMobileMenuOpen(false)}
+                onClick={closeMobileMenu}
                 aria-label="Закрыть меню"
                 title="Закрыть"
               >
@@ -129,7 +134,7 @@ export default function Header() {
                   href={item.path}
                   className={mobileLinkClass(item.path)}
                   onClick={() => {
-                    setIsMobileMenuOpen(false);
+                    closeMobileMenu();
                     if (item.path === "/shopping-list") clearShoppingHighlight();
                   }}
                 >

@@ -122,7 +122,7 @@ interface Recipe {
   servings?: number;
 }
 
-type ActiveProductScope = "today" | "this_week" | "until_date";
+type ActiveProductScope = "in_period" | "persistent" | "until_date";
 
 interface ActivePeriodProduct {
   id: string;
@@ -133,8 +133,16 @@ interface ActivePeriodProduct {
   note: string;
 }
 
-const isActiveProductScope = (value: unknown): value is ActiveProductScope =>
-  value === "today" || value === "this_week" || value === "until_date";
+const normalizeActiveProductScope = (value: unknown): ActiveProductScope => {
+  if (value === "in_period" || value === "persistent" || value === "until_date") {
+    return value;
+  }
+  // Backward compatibility for old scope values.
+  if (value === "today" || value === "this_week") {
+    return "in_period";
+  }
+  return "in_period";
+};
 
 const normalizeActivePeriodProducts = (
   value: unknown,
@@ -147,7 +155,7 @@ const normalizeActivePeriodProducts = (
     .map((item) => ({
       id: typeof item.id === "string" && item.id ? item.id : crypto.randomUUID(),
       name: String(item.name || "").trim(),
-      scope: isActiveProductScope(item.scope) ? item.scope : "this_week",
+      scope: normalizeActiveProductScope(item.scope),
       untilDate: typeof item.untilDate === "string" ? item.untilDate : fallbackUntilDate,
       prefer: item.prefer !== false,
       note: typeof item.note === "string" ? item.note.slice(0, ACTIVE_PRODUCT_NOTE_MAX_LENGTH) : "",
@@ -191,12 +199,11 @@ const getRecipeFromLocalStorageById = (recipeId: string): Recipe | null => {
   }
 };
 
-// Helper function to format ingredient display
-const formatIngredient = (ingredient: Ingredient): string => {
-  if (ingredient.unit === "по вкусу") {
-    return `${ingredient.name} — по вкусу`;
-  }
-  return `${ingredient.amount} ${ingredient.unit} ${ingredient.name}`;
+const isCountableIngredient = (ingredient: Ingredient): boolean => {
+  const unit = String(ingredient.unit || "").trim().toLocaleLowerCase("ru-RU");
+  if (!ingredient.name.trim()) return false;
+  if (!unit || unit === "по вкусу" || unit === "немного") return false;
+  return Number.isFinite(ingredient.amount) && ingredient.amount > 0;
 };
 
 const readGuestCounter = (key: string): number => {
@@ -366,62 +373,48 @@ const AddEditDialog = memo(({
   onClose, 
   onConfirm 
 }: AddEditDialogProps) => {
-  // Local form state
-  const [localItemType, setLocalItemType] = useState<"recipe" | "text">("recipe");
-  const [localText, setLocalText] = useState("");
-  const [localRecipeId, setLocalRecipeId] = useState("");
-  const [localIncludeInShopping, setLocalIncludeInShopping] = useState(true);
-  const [localIngredients, setLocalIngredients] = useState<Ingredient[]>([
-    { id: crypto.randomUUID(), name: "", amount: 0, unit: DEFAULT_UNIT },
-  ]);
-  const productSuggestions = loadProductSuggestions();
-  const [activeSuggestionIndex, setActiveSuggestionIndex] = useState<number | null>(null);
-  const [localPeopleInput, setLocalPeopleInput] = useState("1");
-  const [localCategoryFilter, setLocalCategoryFilter] = useState<string>("Все");
+  const getDefaultIngredient = (): Ingredient => ({
+    id: crypto.randomUUID(),
+    name: "",
+    amount: 0,
+    unit: DEFAULT_UNIT,
+  });
 
   const getEffectivePeopleCount = (cellKey: string) => {
     return cellPeopleCount[cellKey] || 1;
   };
 
-  // Initialize form when opening or editing
-  // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => {
-    if (!addingItemCell) return;
+  const editingMenuItem = editingItem
+    ? mealData[editingItem.cellKey]?.[editingItem.index] || null
+    : null;
+  const initialDialogCellKey = editingItem?.cellKey || addingItemCell || "";
 
-    if (editingItem) {
-      // Edit mode - load existing data
-      const item = mealData[editingItem.cellKey]?.[editingItem.index];
-      if (item) {
-        if (item.type === "recipe") {
-          setLocalItemType("recipe");
-          setLocalRecipeId(item.recipeId || "");
-          setLocalText("");
-          setLocalIncludeInShopping(item.includeInShopping ?? true);
-          setLocalIngredients(item.ingredients || [{ id: crypto.randomUUID(), name: "", amount: 0, unit: DEFAULT_UNIT }]);
-        } else {
-          setLocalItemType("text");
-          setLocalText(item.value || "");
-          setLocalRecipeId("");
-          setLocalIncludeInShopping(item.includeInShopping ?? true);
-          setLocalIngredients(item.ingredients || [{ id: crypto.randomUUID(), name: "", amount: 0, unit: DEFAULT_UNIT }]);
-        }
-
-        const count = getEffectivePeopleCount(editingItem.cellKey);
-        setLocalPeopleInput(count.toString());
-      }
-    } else {
-      // Add mode - reset to defaults
-      setLocalItemType("recipe");
-      setLocalText("");
-      setLocalRecipeId("");
-      setLocalIncludeInShopping(true);
-      setLocalIngredients([{ id: crypto.randomUUID(), name: "", amount: 0, unit: DEFAULT_UNIT }]);
-      const count = getEffectivePeopleCount(addingItemCell);
-      setLocalPeopleInput(count.toString());
+  // Local form state
+  const [localItemType, setLocalItemType] = useState<"recipe" | "text">(() =>
+    editingMenuItem?.type === "text" ? "text" : "recipe"
+  );
+  const [localText, setLocalText] = useState(() =>
+    editingMenuItem?.type === "text" ? editingMenuItem.value || "" : ""
+  );
+  const [localRecipeId, setLocalRecipeId] = useState(() =>
+    editingMenuItem?.type === "recipe" ? editingMenuItem.recipeId || "" : ""
+  );
+  const [localIncludeInShopping, setLocalIncludeInShopping] = useState(
+    () => editingMenuItem?.includeInShopping ?? true
+  );
+  const [localIngredients, setLocalIngredients] = useState<Ingredient[]>(() => {
+    if (editingMenuItem?.ingredients?.length) {
+      return editingMenuItem.ingredients.map((ingredient) => ({ ...ingredient }));
     }
-    setLocalCategoryFilter("Все");
-    setActiveSuggestionIndex(null);
-  }, [addingItemCell, editingItem, mealData, cellPeopleCount]);
+    return [getDefaultIngredient()];
+  });
+  const productSuggestions = loadProductSuggestions();
+  const [activeSuggestionIndex, setActiveSuggestionIndex] = useState<number | null>(null);
+  const [localPeopleInput, setLocalPeopleInput] = useState(() => {
+    if (!initialDialogCellKey) return "1";
+    return String(getEffectivePeopleCount(initialDialogCellKey));
+  });
+  const [localCategoryFilter, setLocalCategoryFilter] = useState<string>("Все");
 
   const getFilteredRecipes = () => {
     if (localCategoryFilter === "Все") return recipes;
@@ -889,7 +882,6 @@ function MenuPageContent() {
 
   const [cookedStatus, setCookedStatus] = useState<Record<string, boolean>>({});
   const [pantry, setPantry] = useState<PantryItem[]>([]);
-  const [showPantryDialog, setShowPantryDialog] = useState<{ cellKey: string; index: number } | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [menuMode, setMenuMode] = useState<"mine" | "public">("mine");
   const [weekVisibility, setWeekVisibility] = useState<MenuWeekVisibility>("private");
@@ -899,6 +891,8 @@ function MenuPageContent() {
   const [activeProducts, setActiveProducts] = useState<ActivePeriodProduct[]>([]);
   const [activeProductName, setActiveProductName] = useState("");
   const [expandedActiveProductNoteId, setExpandedActiveProductNoteId] = useState<string | null>(null);
+  const [activeProductNoteDrafts, setActiveProductNoteDrafts] = useState<Record<string, string>>({});
+  const [activeProductSavedNoteId, setActiveProductSavedNoteId] = useState<string | null>(null);
   const [activeProductsCloudHydrated, setActiveProductsCloudHydrated] = useState(false);
   const [knownProductSuggestions, setKnownProductSuggestions] = useState<string[]>(() => loadProductSuggestions());
   const [showFirstVisitOnboarding, setShowFirstVisitOnboarding] = useState(() => forceFirstFromQuery);
@@ -913,6 +907,7 @@ function MenuPageContent() {
   const [authResolved, setAuthResolved] = useState(false);
   const guestVisitTrackedRef = useRef(false);
   const activeProductsSaveTimerRef = useRef<number | null>(null);
+  const activeProductSavedNoteTimerRef = useRef<number | null>(null);
 
   const rangeKey = `${weekStart}__${periodEnd}`;
   const periodDays = getRangeLengthDays(weekStart, periodEnd);
@@ -1028,10 +1023,6 @@ function MenuPageContent() {
     setMoveTargetMeal("");
   };
 
-  const closePantryDialog = () => {
-    setShowPantryDialog(null);
-  };
-
   const closeMealSettingsDialog = () => {
     setShowMealSettings(false);
   };
@@ -1040,7 +1031,6 @@ function MenuPageContent() {
     closeDropdownMenu();
     closeAddEditDialog();
     closeMoveDialog();
-    closePantryDialog();
     closeMealSettingsDialog();
   };
 
@@ -1250,7 +1240,7 @@ function MenuPageContent() {
         {
           id: crypto.randomUUID(),
           name,
-          scope: "this_week",
+          scope: "in_period",
           untilDate: "",
           prefer: true,
           note: "",
@@ -1266,6 +1256,13 @@ function MenuPageContent() {
   const removeActiveProduct = (id: string) => {
     setActiveProducts((prev) => prev.filter((item) => item.id !== id));
     setExpandedActiveProductNoteId((prev) => (prev === id ? null : prev));
+    setActiveProductSavedNoteId((prev) => (prev === id ? null : prev));
+    setActiveProductNoteDrafts((prev) => {
+      if (!(id in prev)) return prev;
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
   };
 
   const toggleActiveProductPriority = (id: string) => {
@@ -1279,8 +1276,75 @@ function MenuPageContent() {
     setActiveProducts((prev) => prev.map((item) => (item.id === id ? { ...item, note: normalized } : item)));
   };
 
+  const getActiveProductNoteValue = (product: ActivePeriodProduct): string => {
+    if (product.id in activeProductNoteDrafts) {
+      return activeProductNoteDrafts[product.id] || "";
+    }
+    return product.note || "";
+  };
+
+  const handleActiveProductNoteDraftChange = (id: string, note: string) => {
+    const normalized = note.slice(0, ACTIVE_PRODUCT_NOTE_MAX_LENGTH);
+    setActiveProductNoteDrafts((prev) => ({ ...prev, [id]: normalized }));
+  };
+
+  const showActiveProductSavedHint = (id: string) => {
+    setActiveProductSavedNoteId(id);
+    if (typeof window !== "undefined") {
+      if (activeProductSavedNoteTimerRef.current !== null) {
+        window.clearTimeout(activeProductSavedNoteTimerRef.current);
+      }
+      activeProductSavedNoteTimerRef.current = window.setTimeout(() => {
+        setActiveProductSavedNoteId((prev) => (prev === id ? null : prev));
+        activeProductSavedNoteTimerRef.current = null;
+      }, 1000);
+    }
+  };
+
+  const handleActiveProductNoteBlur = (id: string) => {
+    const product = activeProducts.find((item) => item.id === id);
+    if (!product) return;
+
+    const draftRaw = id in activeProductNoteDrafts ? activeProductNoteDrafts[id] : product.note || "";
+    const draft = draftRaw.slice(0, ACTIVE_PRODUCT_NOTE_MAX_LENGTH);
+    const current = product.note || "";
+    if (draft !== current) {
+      updateActiveProductNote(id, draft);
+      showActiveProductSavedHint(id);
+    }
+
+    setActiveProductNoteDrafts((prev) => {
+      if (!(id in prev)) return prev;
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+  };
+
   const updateActiveProductUntilDate = (id: string, untilDate: string) => {
     setActiveProducts((prev) => prev.map((item) => (item.id === id ? { ...item, untilDate } : item)));
+  };
+
+  const updateActiveProductScope = (id: string, scope: ActiveProductScope) => {
+    setActiveProducts((prev) =>
+      prev.map((item) => {
+        if (item.id !== id) return item;
+        if (scope === "until_date") {
+          return { ...item, scope, untilDate: item.untilDate || formatDate(new Date()) };
+        }
+        return { ...item, scope };
+      })
+    );
+  };
+
+  const getActiveProductScopeLabel = (product: ActivePeriodProduct): string => {
+    if (product.scope === "persistent") return "до отмены";
+    if (product.scope === "until_date" && product.untilDate) {
+      const parsed = parseDateSafe(product.untilDate);
+      if (parsed) return `до ${formatDisplayDate(parsed)}`;
+      return "до даты";
+    }
+    return "в периоде";
   };
 
   const handleAiMenuSuggestion = useCallback(async (prompt = "") => {
@@ -1411,8 +1475,9 @@ function MenuPageContent() {
   };
 
   const getDefaultCookedStatus = (dayKey: string, itemId?: string): boolean => {
+    void dayKey;
     if (itemId && cookedStatus[itemId] !== undefined) return cookedStatus[itemId];
-    return isDayInPast(dayKey);
+    return false;
   };
 
   const getEffectivePeopleCount = (key: string) => cellPeopleCount[key] || 1;
@@ -1433,9 +1498,7 @@ function MenuPageContent() {
 
   const getMenuItemIngredients = (cellKey: string, menuItem: MenuItem): Ingredient[] => {
     if (menuItem.ingredients && menuItem.ingredients.length > 0) {
-      return menuItem.ingredients.filter(
-        (ingredient) => ingredient.name.trim().length > 0 && ingredient.unit !== "по вкусу" && ingredient.amount > 0
-      );
+      return menuItem.ingredients.filter((ingredient) => isCountableIngredient(ingredient));
     }
 
     if (menuItem.type !== "recipe" || !menuItem.recipeId) {
@@ -1452,9 +1515,7 @@ function MenuPageContent() {
     const scale = peopleCount / baseServings;
 
     return recipe.ingredients
-      .filter(
-        (ingredient) => ingredient.name.trim().length > 0 && ingredient.unit !== "по вкусу" && ingredient.amount > 0
-      )
+      .filter((ingredient) => isCountableIngredient(ingredient))
       .map((ingredient) => ({
         ...ingredient,
         amount: ingredient.amount * scale,
@@ -1474,6 +1535,7 @@ function MenuPageContent() {
     setPantry((prev) => {
       const updated = [...prev];
       ingredients.forEach((ingredient) => {
+        if (!isCountableIngredient(ingredient)) return;
         const normalized = ingredient.name.toLowerCase().trim();
         const idx = updated.findIndex(
           (item) => item.name.toLowerCase().trim() === normalized && item.unit === ingredient.unit
@@ -1486,9 +1548,7 @@ function MenuPageContent() {
     });
   };
 
-  const handleConfirmCooked = () => {
-    if (!showPantryDialog) return;
-    const { cellKey, index } = showPantryDialog;
+  const markMenuItemCooked = (cellKey: string, index: number, deductPantry = true) => {
     const items = mealData[cellKey];
     if (!items || !items[index]) return;
 
@@ -1499,28 +1559,12 @@ function MenuPageContent() {
     setMealData((prev) => ({ ...prev, [cellKey]: updatedItems }));
     setCookedStatus((prev) => ({ ...prev, [menuItem.id]: true }));
 
-    const ingredientsToDeduct = getMenuItemIngredients(cellKey, menuItem);
-    if (ingredientsToDeduct.length > 0) {
-      deductFromPantry(ingredientsToDeduct);
+    if (deductPantry) {
+      const ingredientsToDeduct = getMenuItemIngredients(cellKey, menuItem);
+      if (ingredientsToDeduct.length > 0) {
+        deductFromPantry(ingredientsToDeduct);
+      }
     }
-
-    closePantryDialog();
-  };
-
-  const handleCancelCooked = () => {
-    if (!showPantryDialog) return;
-    const { cellKey, index } = showPantryDialog;
-    const items = mealData[cellKey];
-    if (!items || !items[index]) return;
-
-    const menuItem = items[index];
-    const updatedItems = [...items];
-    updatedItems[index] = { ...updatedItems[index], cooked: true };
-
-    setMealData((prev) => ({ ...prev, [cellKey]: updatedItems }));
-    setCookedStatus((prev) => ({ ...prev, [menuItem.id]: true }));
-
-    closePantryDialog();
   };
 
   useEffect(() => {
@@ -1841,6 +1885,10 @@ function MenuPageContent() {
         window.clearTimeout(activeProductsSaveTimerRef.current);
         activeProductsSaveTimerRef.current = null;
       }
+      if (activeProductSavedNoteTimerRef.current !== null && typeof window !== "undefined") {
+        window.clearTimeout(activeProductSavedNoteTimerRef.current);
+        activeProductSavedNoteTimerRef.current = null;
+      }
     };
   }, []);
 
@@ -1924,6 +1972,7 @@ function MenuPageContent() {
     persistMenuSnapshot(mealData);
     sessionStorage.setItem("menuDishes", JSON.stringify(dishNames));
     sessionStorage.setItem("cellPeopleCount", JSON.stringify(cellPeopleCount));
+    sessionStorage.setItem("shoppingListUpdatedFromMenu", "1");
     router.push("/shopping-list");
   };
 
@@ -2220,7 +2269,6 @@ function MenuPageContent() {
         target.closest(".menu-grid__item-more") ||
         target.closest(".menu-dialog") ||
         target.closest(".move-dialog") ||
-        target.closest(".pantry-dialog") ||
         target.closest(".meal-settings-dialog");
 
       if (dialogMouseDownRef.current && !clickedInside) {
@@ -2235,7 +2283,6 @@ function MenuPageContent() {
       if (openMoreMenu) closeDropdownMenu();
       if (movingItem) closeMoveDialog();
       if (addingItemCell) closeAddEditDialog();
-      if (showPantryDialog) closePantryDialog();
       if (showMealSettings) closeMealSettingsDialog();
     };
 
@@ -2244,7 +2291,7 @@ function MenuPageContent() {
       resetAllModalStates();
     };
 
-    if (openMoreMenu || movingItem || addingItemCell || showPantryDialog || showMealSettings) {
+    if (openMoreMenu || movingItem || addingItemCell || showMealSettings) {
       document.addEventListener("pointerdown", handlePointerDown, true);
       document.addEventListener("click", handleOutsideClick, false);
       document.addEventListener("keydown", handleEscapeKey, true);
@@ -2255,7 +2302,7 @@ function MenuPageContent() {
       document.removeEventListener("click", handleOutsideClick, false);
       document.removeEventListener("keydown", handleEscapeKey, true);
     };
-  }, [openMoreMenu, movingItem, addingItemCell, showPantryDialog, showMealSettings]);
+  }, [openMoreMenu, movingItem, addingItemCell, showMealSettings]);
 
   useEffect(() => {
     return () => {
@@ -2520,109 +2567,6 @@ function MenuPageContent() {
     );
   };
 
-  const PantryDialog = () => {
-    if (!showPantryDialog) return null;
-
-    const { cellKey, index } = showPantryDialog;
-    const items = mealData[cellKey];
-    const menuItem = items?.[index];
-    const hasIngredients = !!(menuItem?.ingredients && menuItem.ingredients.length > 0);
-
-    return createPortal(
-      <div
-        className="menu-dialog-overlay"
-        style={{
-          position: "fixed",
-          inset: 0,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          background: "rgba(0, 0, 0, 0.5)",
-          zIndex: 10000,
-        }}
-        onMouseDown={(e) => {
-          if (e.target === e.currentTarget) closePantryDialog(); // закрытие
-        }}
-      >
-        <div
-          className="pantry-dialog"
-          style={{
-            position: "relative",
-            zIndex: 10001,
-            backgroundColor: "#fff",
-            border: "1px solid #ddd",
-            borderRadius: "8px",
-            padding: "20px",
-            boxShadow: "0 4px 16px rgba(0,0,0,0.2)",
-            minWidth: "400px",
-            maxWidth: "90vw",
-          }}
-          onMouseDown={(e) => e.stopPropagation()}
-          onPointerDown={(e) => e.stopPropagation()}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <h3 style={{ margin: "0 0 16px 0", color: "#333" }}>Отметить приготовленным и списать продукты?</h3>
-
-          {hasIngredients ? (
-            <div style={{ marginBottom: "16px" }}>
-              <p style={{ margin: "0 0 8px 0", color: "#666" }}>Ингредиенты для списания:</p>
-              <div
-                style={{
-                  backgroundColor: "#f8f9fa",
-                  padding: "12px",
-                  borderRadius: "4px",
-                  border: "1px solid #e9ecef",
-                }}
-              >
-                {menuItem!.ingredients!.map((ing, idx) => (
-                  <div key={idx} style={{ color: "#495057", fontSize: "14px" }}>
-                    {formatIngredient(ing)}
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <p style={{ margin: "0 0 16px 0", color: "#666" }}>У этого блюда нет ингредиентов для списания.</p>
-          )}
-
-          <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
-            <button
-              type="button"
-              onClick={handleCancelCooked}
-              style={{
-                background: "#6c757d",
-                color: "white",
-                border: "none",
-                padding: "8px 16px",
-                borderRadius: "4px",
-                cursor: "pointer",
-                fontSize: "14px",
-              }}
-            >
-              Нет
-            </button>
-            <button
-              type="button"
-              onClick={handleConfirmCooked}
-              style={{
-                background: "#28a745",
-                color: "white",
-                border: "none",
-                padding: "8px 16px",
-                borderRadius: "4px",
-                cursor: "pointer",
-                fontSize: "14px",
-              }}
-            >
-              Да
-            </button>
-          </div>
-        </div>
-      </div>,
-      document.body
-    );
-  };
-
   const renderMenuItemRow = (
     cellKey: string,
     menuItem: MenuItem,
@@ -2649,7 +2593,7 @@ function MenuPageContent() {
               checked={getDefaultCookedStatus(dayKey, menuItem.id)}
               onChange={(e) => {
                 if (e.target.checked) {
-                  setShowPantryDialog({ cellKey, index });
+                  markMenuItemCooked(cellKey, index, true);
                 } else {
                   const updatedItems = [...(mealData[cellKey] || [])];
                   updatedItems[index] = { ...updatedItems[index], cooked: false };
@@ -2741,6 +2685,7 @@ function MenuPageContent() {
                 persistMenuSnapshot(mealData);
                 if (typeof window !== "undefined") {
                   window.sessionStorage.setItem(GUEST_REMINDER_PENDING_KEY, "1");
+                  window.sessionStorage.setItem("shoppingListUpdatedFromMenu", "1");
                 }
                 router.push("/shopping-list");
               }}
@@ -2926,108 +2871,160 @@ function MenuPageContent() {
           </button>
         </div>
         {activeProducts.length > 0 ? (
-          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-            {activeProducts.map((product) => (
-              <div key={product.id} style={{ display: "grid", gap: "6px" }}>
+          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "flex-start" }}>
+            {activeProducts.map((product) => {
+              const isExpanded = expandedActiveProductNoteId === product.id;
+              const scopeLabel = getActiveProductScopeLabel(product);
+              const trimmedNote = product.note.trim();
+              const notePreview = trimmedNote.length > 20 ? `${trimmedNote.slice(0, 20)}...` : trimmedNote;
+              const chipTitle = product.note
+                ? `${product.name} ${scopeLabel} ${product.note}`
+                : `${product.name} ${scopeLabel}`;
+
+              return (
                 <div
+                  key={product.id}
                   style={{
-                    display: "inline-flex",
-                    alignItems: "center",
+                    display: "grid",
                     gap: "6px",
-                    border: "1px solid var(--border-default)",
-                    borderRadius: "999px",
-                    padding: "6px 10px",
-                    background: "var(--background-primary)",
-                    maxWidth: "100%",
+                    flex: "1 1 180px",
+                    minWidth: "150px",
+                    maxWidth: "280px",
                   }}
                 >
-                  <span
+                  <button
+                    type="button"
+                    title={chipTitle}
+                    onClick={() => setExpandedActiveProductNoteId((prev) => (prev === product.id ? null : product.id))}
                     style={{
-                      fontSize: "13px",
-                      maxWidth: "320px",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                    }}
-                    title={product.note ? `${product.name} ${product.untilDate ? `до ${product.untilDate}` : ""} ${product.note}` : product.name}
-                  >
-                    <strong>{product.name}</strong>
-                    {product.untilDate ? ` • до ${formatDisplayDate(parseDateSafe(product.untilDate) || new Date())}` : ""}
-                    {product.note.trim() ? ` • ${product.note}` : ""}
-                  </span>
-                  <button
-                    type="button"
-                    className="btn"
-                    title={expandedActiveProductNoteId === product.id ? "Скрыть" : "Редактировать"}
-                    aria-label={expandedActiveProductNoteId === product.id ? "Скрыть" : "Редактировать"}
-                    onClick={() =>
-                      setExpandedActiveProductNoteId((prev) => (prev === product.id ? null : product.id))
-                    }
-                    style={{ padding: "2px 8px", minWidth: "30px" }}
-                  >
-                    ✎
-                  </button>
-                  <button
-                    type="button"
-                    className="btn"
-                    onClick={() => router.push(`/recipes?q=${encodeURIComponent(product.name)}`)}
-                    style={{ padding: "2px 8px" }}
-                    title="Найти блюда с этим продуктом"
-                  >
-                    Найти
-                  </button>
-                  <button
-                    type="button"
-                    className="btn"
-                    onClick={() => removeActiveProduct(product.id)}
-                    style={{ padding: "2px 8px" }}
-                  >
-                    ×
-                  </button>
-                </div>
-
-                {expandedActiveProductNoteId === product.id ? (
-                  <div
-                    style={{
-                      display: "grid",
+                      display: "flex",
+                      alignItems: "center",
                       gap: "6px",
                       border: "1px solid var(--border-default)",
-                      borderRadius: "10px",
-                      padding: "8px",
-                      background: "var(--background-primary)",
-                      maxWidth: "360px",
+                      borderRadius: "999px",
+                      padding: "7px 10px",
+                      background: isExpanded
+                        ? "color-mix(in srgb, var(--background-primary) 82%, var(--accent-primary) 18%)"
+                        : "var(--background-primary)",
+                      cursor: "pointer",
+                      textAlign: "left",
+                      width: "100%",
+                      fontSize: "13px",
+                      color: "inherit",
                     }}
                   >
-                    <label style={{ fontSize: "12px", color: "var(--text-secondary)" }}>До</label>
-                    <input
-                      className="input"
-                      type="date"
-                      value={product.untilDate}
-                      onChange={(e) => updateActiveProductUntilDate(product.id, e.target.value)}
-                    />
-                    <label style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
-                      Заметка (до {ACTIVE_PRODUCT_NOTE_MAX_LENGTH} символов)
-                    </label>
-                    <input
-                      className="input"
-                      type="text"
-                      placeholder="купить 2 упаковки / безлактозное / для Дана"
-                      maxLength={ACTIVE_PRODUCT_NOTE_MAX_LENGTH}
-                      value={product.note}
-                      onChange={(e) => updateActiveProductNote(product.id, e.target.value)}
-                    />
-                    <label style={{ display: "inline-flex", gap: "6px", alignItems: "center", fontSize: "12px" }}>
+                    <strong style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {product.name}
+                    </strong>
+                    <span style={{ color: "var(--text-secondary)", whiteSpace: "nowrap" }}>
+                      {scopeLabel}
+                    </span>
+                    {notePreview ? (
+                      <span
+                        style={{
+                          color: "var(--text-secondary)",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {notePreview}
+                      </span>
+                    ) : null}
+                  </button>
+
+                  {isExpanded ? (
+                    <div
+                      style={{
+                        display: "grid",
+                        gap: "6px",
+                        border: "1px solid var(--border-default)",
+                        borderRadius: "10px",
+                        padding: "8px",
+                        background: "var(--background-primary)",
+                      }}
+                    >
+                      <label style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Тип действия</label>
+                      <select
+                        className="input"
+                        value={product.scope}
+                        onChange={(e) => updateActiveProductScope(product.id, e.target.value as ActiveProductScope)}
+                      >
+                        <option value="in_period">В этом периоде</option>
+                        <option value="persistent">До отмены</option>
+                        <option value="until_date">До даты</option>
+                      </select>
+                      {product.scope === "until_date" ? (
+                        <>
+                          <label style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Дата</label>
+                          <input
+                            className="input"
+                            type="date"
+                            value={product.untilDate}
+                            onChange={(e) => updateActiveProductUntilDate(product.id, e.target.value)}
+                          />
+                        </>
+                      ) : null}
+                      <label style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
+                        Заметка (до {ACTIVE_PRODUCT_NOTE_MAX_LENGTH} символов)
+                      </label>
                       <input
-                        type="checkbox"
-                        checked={product.prefer}
-                        onChange={() => toggleActiveProductPriority(product.id)}
+                        className="input"
+                        type="text"
+                        placeholder="Например: по акции / использовать остаток"
+                        maxLength={ACTIVE_PRODUCT_NOTE_MAX_LENGTH}
+                        value={getActiveProductNoteValue(product)}
+                        onChange={(e) => handleActiveProductNoteDraftChange(product.id, e.target.value)}
+                        onBlur={() => handleActiveProductNoteBlur(product.id)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            (e.currentTarget as HTMLInputElement).blur();
+                          }
+                        }}
                       />
-                      В приоритете
-                    </label>
-                  </div>
-                ) : null}
-              </div>
-            ))}
+                      {activeProductSavedNoteId === product.id ? (
+                        <span style={{ fontSize: "12px", color: "var(--accent-primary)" }}>Сохранено</span>
+                      ) : null}
+                      <label style={{ display: "inline-flex", gap: "6px", alignItems: "center", fontSize: "12px" }}>
+                        <input
+                          type="checkbox"
+                          checked={product.prefer}
+                          onChange={() => toggleActiveProductPriority(product.id)}
+                        />
+                        В приоритете
+                      </label>
+                      <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                        <button
+                          type="button"
+                          className="btn"
+                          onClick={() => router.push(`/recipes?q=${encodeURIComponent(product.name)}`)}
+                          style={{ padding: "2px 8px" }}
+                          title="Найти блюда с этим продуктом"
+                        >
+                          Найти
+                        </button>
+                        <button
+                          type="button"
+                          className="btn"
+                          onClick={() => setExpandedActiveProductNoteId(null)}
+                          style={{ padding: "2px 8px" }}
+                        >
+                          Скрыть
+                        </button>
+                        <button
+                          type="button"
+                          className="btn"
+                          onClick={() => removeActiveProduct(product.id)}
+                          style={{ padding: "2px 8px" }}
+                        >
+                          Удалить
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
           </div>
         ) : (
           <p className="muted" style={{ margin: 0 }}>
@@ -3144,6 +3141,11 @@ function MenuPageContent() {
       <MealSettingsDialog />
 
       <AddEditDialog
+        key={
+          editingItem
+            ? `edit:${editingItem.cellKey}:${editingItem.index}`
+            : `add:${addingItemCell ?? "closed"}`
+        }
         addingItemCell={addingItemCell}
         editingItem={editingItem}
         recipes={recipes}
@@ -3184,8 +3186,6 @@ function MenuPageContent() {
           }
         }}
       />
-
-      <PantryDialog />
 
       <div className="menu-actions">
         <button

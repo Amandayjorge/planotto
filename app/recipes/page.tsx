@@ -651,6 +651,14 @@ function RecipesPageContent() {
     if (!source) return;
     setPendingCopyRecipeId(recipeId);
     const showOverlayForThisCopy = shouldShowFirstRecipeOverlay();
+    const sourceTitleKey = normalizeRecipeTitle(source.title || "");
+    const findExistingMineLocal = (): RecipeModel | null => {
+      const existing = loadLocalRecipes().find((item) => {
+        if (isSeedTemplateId(item.id)) return false;
+        return normalizeRecipeTitle(item.title || "") === sourceTitleKey;
+      });
+      return existing || null;
+    };
 
     try {
       let targetUserId = currentUserId;
@@ -664,11 +672,7 @@ function RecipesPageContent() {
       }
 
       if (!targetUserId) {
-        const existingLocal = loadLocalRecipes().find(
-          (item) =>
-            !isSeedTemplateId(item.id) &&
-            normalizeRecipeTitle(item.title || "") === normalizeRecipeTitle(source.title || "")
-        );
+        const existingLocal = findExistingMineLocal();
         if (existingLocal) {
           if (showOverlayForThisCopy) {
             showFirstRecipeOverlay(existingLocal.id);
@@ -698,6 +702,16 @@ function RecipesPageContent() {
         return;
       }
 
+      const existingLocal = findExistingMineLocal();
+      if (existingLocal) {
+        if (showOverlayForThisCopy) {
+          showFirstRecipeOverlay(existingLocal.id);
+        } else {
+          showAddedFeedback(source.title || "", true);
+        }
+        return;
+      }
+
       const copied = await copyPublicRecipeToMine(targetUserId, source.id);
       upsertRecipeInLocalCache(copied);
       if (showOverlayForThisCopy) {
@@ -708,6 +722,17 @@ function RecipesPageContent() {
       }
     } catch (copyError) {
       if (isMissingRecipesTableError(copyError)) {
+        const existingLocal = findExistingMineLocal();
+        if (existingLocal) {
+          if (showOverlayForThisCopy) {
+            showFirstRecipeOverlay(existingLocal.id);
+          } else {
+            setActionMessage("Таблица рецептов в Supabase не инициализирована. Рецепт уже есть локально.");
+            showAddedFeedback(source.title || "", true);
+          }
+          return;
+        }
+
         const localCopy: RecipeModel = {
           ...source,
           id: crypto.randomUUID(),

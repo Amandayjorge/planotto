@@ -526,6 +526,13 @@ export default function RecipeDetailPage() {
       typeof window !== "undefined" &&
       (localStorage.getItem(RECIPES_FIRST_FLOW_KEY) === "1" ||
         localStorage.getItem(FIRST_RECIPE_SUCCESS_SHOWN_KEY) !== "1");
+    const sourceTitleKey = normalizeRecipeTitle(recipe.title || "");
+    const findExistingMineLocal = (): RecipeModel | null => {
+      const existing = loadLocalRecipes().find(
+        (item) => normalizeRecipeTitle(item.title || "") === sourceTitleKey
+      );
+      return existing || null;
+    };
 
     let targetUserId = currentUserId;
     if (!targetUserId && isSupabaseConfigured()) {
@@ -538,9 +545,7 @@ export default function RecipeDetailPage() {
     }
 
     if (!targetUserId) {
-      const existingLocal = loadLocalRecipes().find(
-        (item) => normalizeRecipeTitle(item.title || "") === normalizeRecipeTitle(recipe.title || "")
-      );
+      const existingLocal = findExistingMineLocal();
       if (existingLocal) {
         if (shouldShowFirstRecipeOverlay && typeof window !== "undefined") {
           localStorage.setItem(FIRST_RECIPE_ADDED_KEY, existingLocal.id);
@@ -573,6 +578,18 @@ export default function RecipeDetailPage() {
     }
 
     try {
+      const existingLocal = findExistingMineLocal();
+      if (existingLocal) {
+        if (shouldShowFirstRecipeOverlay && typeof window !== "undefined") {
+          localStorage.setItem(FIRST_RECIPE_ADDED_KEY, existingLocal.id);
+          localStorage.setItem(FIRST_RECIPE_SUCCESS_PENDING_KEY, "1");
+          router.push(`/recipes?firstAdded=1&recipe=${encodeURIComponent(existingLocal.id)}`);
+        } else {
+          router.push(`/recipes/${existingLocal.id}`);
+        }
+        return;
+      }
+
       const copied = await copyPublicRecipeToMine(targetUserId, recipe.id);
       upsertRecipeInLocalCache(copied);
       if (shouldShowFirstRecipeOverlay && typeof window !== "undefined") {
@@ -584,6 +601,18 @@ export default function RecipeDetailPage() {
       }
     } catch (error) {
       if (isMissingRecipesTableError(error)) {
+        const existingLocal = findExistingMineLocal();
+        if (existingLocal) {
+          if (shouldShowFirstRecipeOverlay && typeof window !== "undefined") {
+            localStorage.setItem(FIRST_RECIPE_ADDED_KEY, existingLocal.id);
+            localStorage.setItem(FIRST_RECIPE_SUCCESS_PENDING_KEY, "1");
+            router.push(`/recipes?firstAdded=1&recipe=${encodeURIComponent(existingLocal.id)}`);
+          } else {
+            router.push(`/recipes/${existingLocal.id}`);
+          }
+          return;
+        }
+
         const localCopy: RecipeModel = {
           ...recipe,
           id: crypto.randomUUID(),

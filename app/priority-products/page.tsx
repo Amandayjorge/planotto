@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import ProductAutocompleteInput from "../components/ProductAutocompleteInput";
 import { appendProductSuggestions, loadProductSuggestions } from "../lib/productSuggestions";
 import {
   addPriorityProduct,
-  getActivePriorityProducts,
+  isPriorityProductActive,
   loadPriorityProducts,
   removePriorityProduct,
   resolveUntilDate,
@@ -31,17 +31,13 @@ export default function PriorityProductsPage() {
   const [message, setMessage] = useState("");
   const [productSuggestions] = useState<string[]>(() => loadProductSuggestions());
 
-  const activeProducts = useMemo(() => getActivePriorityProducts(), [products]);
+  const activeProducts = useMemo(() => products.filter((item) => isPriorityProductActive(item)), [products]);
   const archivedProducts = useMemo(
     () => products.filter((item) => !activeProducts.some((active) => active.id === item.id)),
     [products, activeProducts]
   );
 
   const refreshProducts = () => setProducts(loadPriorityProducts());
-
-  useEffect(() => {
-    refreshProducts();
-  }, []);
 
   const handleAdd = () => {
     if (!name.trim()) {

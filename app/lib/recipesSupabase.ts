@@ -333,7 +333,31 @@ const isDuplicateKeyError = (error: unknown): boolean => {
   return typed.code === "23505" || message.includes("duplicate key");
 };
 
-const normalizeTitle = (value: string): string => value.trim().toLocaleLowerCase("ru-RU");
+const normalizeTitle = (value: string): string =>
+  value.trim().toLocaleLowerCase("ru-RU").replace(/\s+/g, " ");
+
+const getRecipeSortTimestamp = (recipe: RecipeModel): number => {
+  const updatedAt = Date.parse(recipe.updatedAt || "");
+  if (Number.isFinite(updatedAt) && updatedAt > 0) return updatedAt;
+  const createdAt = Date.parse(recipe.createdAt || "");
+  if (Number.isFinite(createdAt) && createdAt > 0) return createdAt;
+  return 0;
+};
+
+const dedupeRecipesByTitle = (recipes: RecipeModel[]): RecipeModel[] => {
+  const sorted = [...recipes].sort((a, b) => getRecipeSortTimestamp(b) - getRecipeSortTimestamp(a));
+  const byKey = new Map<string, RecipeModel>();
+
+  sorted.forEach((recipe) => {
+    const titleKey = normalizeTitle(recipe.title || "");
+    const key = titleKey || `id:${recipe.id}`;
+    if (!byKey.has(key)) {
+      byKey.set(key, recipe);
+    }
+  });
+
+  return Array.from(byKey.values());
+};
 
 const findOwnedRecipeByTitle = async (ownerId: string, title: string): Promise<RecipeModel | null> => {
   const supabase = getSupabaseClient();
@@ -443,10 +467,11 @@ const loadCloudFallbackRecipes = async (ownerId: string): Promise<RecipeModel[]>
   const metadata = (data.user.user_metadata || {}) as Record<string, unknown>;
   const rawList = metadata[RECIPES_CLOUD_FALLBACK_KEY];
   if (!Array.isArray(rawList)) return [];
-  return rawList
+  return dedupeRecipesByTitle(
+    rawList
     .map((item) => mapCloudFallbackItemToRecipe(ownerId, item))
     .filter((item): item is RecipeModel => Boolean(item))
-    .sort((a, b) => Date.parse(b.updatedAt || "") - Date.parse(a.updatedAt || ""));
+  );
 };
 
 const saveCloudFallbackRecipes = async (ownerId: string, recipes: RecipeModel[]): Promise<void> => {
@@ -511,7 +536,7 @@ const toPayload = (input: RecipeUpsertInput) => {
 
 export const syncRecipesToLocalCache = (recipes: RecipeModel[]): void => {
   if (typeof window === "undefined") return;
-  const mapped = recipes.map((item) => ({
+  const mapped = dedupeRecipesByTitle(recipes).map((item) => ({
     id: item.id,
     title: item.title,
     shortDescription: item.shortDescription || "",
@@ -531,7 +556,12 @@ export const syncRecipesToLocalCache = (recipes: RecipeModel[]): void => {
 export const upsertRecipeInLocalCache = (recipe: RecipeModel): void => {
   if (typeof window === "undefined") return;
   const current = loadLocalRecipes();
-  const withoutCurrent = current.filter((item) => item.id !== recipe.id);
+  const recipeTitleKey = normalizeTitle(recipe.title || "");
+  const withoutCurrent = current.filter((item) => {
+    if (item.id === recipe.id) return false;
+    if (!recipeTitleKey) return true;
+    return normalizeTitle(item.title || "") !== recipeTitleKey;
+  });
   syncRecipesToLocalCache([recipe, ...withoutCurrent]);
 };
 
@@ -548,7 +578,7 @@ export const loadLocalRecipes = (): RecipeModel[] => {
   try {
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    return parsed.map((item) => {
+    return dedupeRecipesByTitle(parsed.map((item) => {
       const row = item as Record<string, unknown>;
       return {
         id: String(row.id || crypto.randomUUID()),
@@ -567,7 +597,7 @@ export const loadLocalRecipes = (): RecipeModel[] => {
         tags: normalizeStringArray(row.tags ?? row.categories),
         visibility: (row.visibility === "public" ? "public" : "private") as RecipeVisibility,
       };
-    });
+    }));
   } catch {
     return [];
   }
@@ -618,7 +648,7 @@ export const listMyRecipes = async (ownerId: string): Promise<RecipeModel[]> => 
     notesMap.set(row.recipe_id, row.notes || "");
   });
 
-  return rows.map((row) => mapRow(row, notesMap.get(row.id)));
+  return dedupeRecipesByTitle(rows.map((row) => mapRow(row, notesMap.get(row.id))));
 };
 
 export const listPublicRecipes = async (): Promise<RecipeModel[]> => {

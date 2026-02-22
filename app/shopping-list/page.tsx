@@ -18,11 +18,13 @@ interface Recipe {
 }
 
 interface MenuItem {
+  id?: string;
   type: "recipe" | "text";
   recipeId?: string;
   value?: string;
   includeInShopping?: boolean;
   ingredients?: Ingredient[];
+  cooked?: boolean;
 }
 
 interface GroupedIngredient {
@@ -354,6 +356,13 @@ export default function ShoppingListPage() {
     if (fromMenuAdded) window.sessionStorage.removeItem("shoppingFromMenuAdded");
     return fromMenuAdded;
   });
+  const [showShoppingUpdatedHint] = useState(() => {
+    if (typeof window === "undefined") return false;
+    const updated = window.sessionStorage.getItem("shoppingListUpdatedFromMenu") === "1";
+    if (updated) window.sessionStorage.removeItem("shoppingListUpdatedFromMenu");
+    return updated;
+  });
+  const [includeCookedDishes, setIncludeCookedDishes] = useState(false);
 
   const guestReminderState = useMemo(() => readGuestReminderState(), []);
   const [showGuestReminder, setShowGuestReminder] = useState(guestReminderState.show);
@@ -424,17 +433,42 @@ export default function ShoppingListPage() {
         }
       })();
       const allIngredients: Ingredient[] = [];
-      const menuBuckets: Array<{ menuData: Record<string, MenuItem[]>; cellPeopleCountMap: Record<string, number> }> = [];
+      const menuBuckets: Array<{
+        menuData: Record<string, MenuItem[]>;
+        cellPeopleCountMap: Record<string, number>;
+        cookedStatusMap: Record<string, boolean>;
+      }> = [];
       const periodDaysForList = buildPeriodDates(weekStart, rangeWeeks);
       const effectiveDays =
         selectedDates.length > 0 ? selectedDates : periodDaysForList;
       const activeDaySet = new Set(effectiveDays);
+      const isCountableIngredient = (ing: Ingredient): boolean => {
+        const unit = String(ing.unit || "").trim().toLowerCase();
+        if (!ing.name || !ing.name.trim()) return false;
+        if (!unit || unit === "по вкусу" || unit === "немного") return false;
+        return Number.isFinite(ing.amount) && ing.amount > 0;
+      };
 
       const parseCellPeopleCount = (raw: string | null): Record<string, number> => {
         if (!raw) return {};
         try {
           const parsed = JSON.parse(raw) as Record<string, number>;
           return parsed && typeof parsed === "object" ? parsed : {};
+        } catch {
+          return {};
+        }
+      };
+
+      const parseCookedStatus = (raw: string | null): Record<string, boolean> => {
+        if (!raw) return {};
+        try {
+          const parsed = JSON.parse(raw) as Record<string, unknown>;
+          if (!parsed || typeof parsed !== "object") return {};
+          const mapped: Record<string, boolean> = {};
+          Object.entries(parsed).forEach(([key, value]) => {
+            mapped[key] = value === true;
+          });
+          return mapped;
         } catch {
           return {};
         }
@@ -458,6 +492,7 @@ export default function ShoppingListPage() {
               menuBuckets.push({
                 menuData: normalizedRangeMenu,
                 cellPeopleCountMap: parseCellPeopleCount(localStorage.getItem(`cellPeopleCount:${suffix}`)),
+                cookedStatusMap: parseCookedStatus(localStorage.getItem(`cookedStatus:${suffix}`)),
               });
             }
           }
@@ -488,21 +523,28 @@ export default function ShoppingListPage() {
           menuBuckets.push({
             menuData: normalizedMenuData,
             cellPeopleCountMap: parseCellPeopleCount(localStorage.getItem(cellPeopleCountKey)),
+            cookedStatusMap: parseCookedStatus(localStorage.getItem(`cookedStatus:${currentWeekKey}`)),
           });
         }
       }
 
-      menuBuckets.forEach(({ menuData, cellPeopleCountMap }) => {
+      menuBuckets.forEach(({ menuData, cellPeopleCountMap, cookedStatusMap }) => {
         Object.entries(menuData).forEach(([menuKey, menuItems]) => {
           const dayKey = menuKey.substring(0, 10);
           if (activeDaySet.size > 0 && !activeDaySet.has(dayKey)) {
             return;
           }
           menuItems.forEach((menuItem) => {
+            const cookedFromMap = Boolean(menuItem.id && cookedStatusMap[menuItem.id]);
+            const isCooked = menuItem.cooked === true || cookedFromMap;
+            if (!includeCookedDishes && isCooked) {
+              return;
+            }
+
             if (menuItem.type === "recipe" && menuItem.recipeId) {
               if (menuItem.ingredients?.length) {
                 menuItem.ingredients.forEach((ing) => {
-                  if (ing.unit !== "по вкусу") {
+                  if (isCountableIngredient(ing)) {
                     allIngredients.push({
                       name: ing.name,
                       unit: ing.unit,
@@ -519,7 +561,7 @@ export default function ShoppingListPage() {
                 const scale = peopleCount / baseServings;
 
                 recipe.ingredients.forEach((ing) => {
-                  if (ing.unit !== "по вкусу") {
+                  if (isCountableIngredient(ing)) {
                     allIngredients.push({
                       name: ing.name,
                       unit: ing.unit,
@@ -532,7 +574,7 @@ export default function ShoppingListPage() {
 
             if (menuItem.type === "text" && menuItem.includeInShopping && menuItem.ingredients) {
               menuItem.ingredients.forEach((ing) => {
-                if (ing.unit !== "по вкусу") {
+                if (isCountableIngredient(ing)) {
                   allIngredients.push({
                     name: ing.name,
                     unit: ing.unit,
@@ -577,7 +619,7 @@ export default function ShoppingListPage() {
       console.error("Failed to generate shopping list:", error);
       return [];
     }
-  }, [rangeWeeks, selectedDates]);
+  }, [includeCookedDishes, rangeWeeks, selectedDates]);
 
   // сохраняем pantryItems
   useEffect(() => {
@@ -920,6 +962,23 @@ export default function ShoppingListPage() {
           >
             Выбрать дни
           </button>
+
+          <label
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
+              fontSize: "13px",
+              color: "var(--text-secondary)",
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={includeCookedDishes}
+              onChange={(e) => setIncludeCookedDishes(e.target.checked)}
+            />
+            Учитывать приготовленные блюда
+          </label>
         </div>
 
         {isDatePickerOpen && periodDates.length > 0 && (
@@ -948,6 +1007,11 @@ export default function ShoppingListPage() {
         {showMenuAddedHint && (
           <p className="muted" style={{ marginTop: "8px", marginBottom: 0, fontSize: "13px" }}>
             Ингредиенты из меню уже добавлены. Можно отмечать купленные товары.
+          </p>
+        )}
+        {showShoppingUpdatedHint && (
+          <p className="muted" style={{ marginTop: "8px", marginBottom: 0, fontSize: "13px" }}>
+            Список обновлен.
           </p>
         )}
 
