@@ -105,7 +105,6 @@ const splitCellKey = (cellKey: string): { dayKey: string; mealLabel: string } | 
 
 const INGREDIENT_UNITS = ["г", "кг", "мл", "л", "шт", "ч.л.", "ст.л.", "по вкусу"];
 const DEFAULT_UNIT = "г";
-const RECIPE_CATEGORIES = ["Завтрак", "Обед", "Ужин", "Десерт", "Дополнительно"];
 
 interface Ingredient {
   id: string;
@@ -432,14 +431,45 @@ const AddEditDialog = memo(({
     if (!initialDialogCellKey) return "1";
     return String(getEffectivePeopleCount(initialDialogCellKey));
   });
-  const [localCategoryFilter, setLocalCategoryFilter] = useState<string>("Все");
+  const [isMobileSheet, setIsMobileSheet] = useState(false);
+  const [sheetOffsetY, setSheetOffsetY] = useState(0);
+  const sheetSwipeStartYRef = useRef<number | null>(null);
 
-  const getFilteredRecipes = () => {
-    if (localCategoryFilter === "Все") return recipes;
-    if (localCategoryFilter === "Без категории") {
-      return recipes.filter((recipe) => !recipe.categories || recipe.categories.length === 0);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const media = window.matchMedia("(max-width: 720px)");
+    const sync = () => setIsMobileSheet(media.matches);
+    sync();
+
+    if (typeof media.addEventListener === "function") {
+      media.addEventListener("change", sync);
+      return () => media.removeEventListener("change", sync);
     }
-    return recipes.filter((recipe) => recipe.categories?.includes(localCategoryFilter));
+
+    media.addListener(sync);
+    return () => media.removeListener(sync);
+  }, []);
+
+  const handleSheetSwipeStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (!isMobileSheet || e.touches.length !== 1) return;
+    sheetSwipeStartYRef.current = e.touches[0].clientY;
+  };
+
+  const handleSheetSwipeMove = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (!isMobileSheet || sheetSwipeStartYRef.current === null || e.touches.length !== 1) return;
+    const deltaY = e.touches[0].clientY - sheetSwipeStartYRef.current;
+    setSheetOffsetY(deltaY > 0 ? deltaY : 0);
+  };
+
+  const handleSheetSwipeEnd = () => {
+    if (!isMobileSheet) return;
+    if (sheetOffsetY > 90) {
+      onClose();
+      return;
+    }
+    setSheetOffsetY(0);
+    sheetSwipeStartYRef.current = null;
   };
 
   const handleIngredientChange = (index: number, field: keyof Ingredient, value: string | number) => {
@@ -539,10 +569,11 @@ const AddEditDialog = memo(({
         position: "fixed",
         inset: 0,
         display: "flex",
-        alignItems: "center",
+        alignItems: isMobileSheet ? "flex-end" : "center",
         justifyContent: "center",
         background: "rgba(0, 0, 0, 0.5)",
         zIndex: 10000,
+        padding: isMobileSheet ? "0" : "16px",
       }}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
@@ -558,18 +589,43 @@ const AddEditDialog = memo(({
           opacity: 1,
           color: "inherit",
           border: "1px solid #ddd",
-          borderRadius: "8px",
-          padding: "20px",
+          borderRadius: isMobileSheet ? "16px 16px 0 0" : "8px",
+          padding: isMobileSheet ? "12px 14px calc(12px + env(safe-area-inset-bottom, 0px))" : "20px",
           boxShadow: "0 4px 16px rgba(0,0,0,0.2)",
-          minWidth: "400px",
-          maxWidth: "90vw",
-          maxHeight: "90vh",
+          minWidth: isMobileSheet ? "100%" : "400px",
+          maxWidth: isMobileSheet ? "100%" : "90vw",
+          width: isMobileSheet ? "100%" : undefined,
+          height: isMobileSheet ? "70vh" : undefined,
+          maxHeight: isMobileSheet ? "70vh" : "90vh",
           overflowY: "auto",
+          transform: isMobileSheet ? `translateY(${sheetOffsetY}px)` : undefined,
+          transition: isMobileSheet ? "transform 0.18s ease-out" : undefined,
         }}
         onPointerDown={(e) => e.stopPropagation()}
         onMouseDown={(e) => e.stopPropagation()}
         onClick={(e) => e.stopPropagation()}
       >
+        {isMobileSheet ? (
+          <div
+            style={{ display: "flex", justifyContent: "center", padding: "0 0 6px 0", cursor: "grab" }}
+            onTouchStart={handleSheetSwipeStart}
+            onTouchMove={handleSheetSwipeMove}
+            onTouchEnd={handleSheetSwipeEnd}
+            onTouchCancel={handleSheetSwipeEnd}
+          >
+            <span
+              aria-hidden="true"
+              style={{
+                width: "44px",
+                height: "4px",
+                borderRadius: "999px",
+                background: "var(--border-default)",
+                display: "inline-block",
+              }}
+            />
+          </div>
+        ) : null}
+
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
           <h3 style={{ margin: 0, color: "#333" }}>{editingItem ? "Редактировать блюдо" : "Добавить блюдо"}</h3>
 
@@ -622,52 +678,46 @@ const AddEditDialog = memo(({
           </label>
         </div>
 
-        <div className="menu-dialog__people-count">
-          <label>
-            Сколько порций?
-            <input
-              type="number"
-              value={localPeopleInput}
-              onChange={(e) => setLocalPeopleInput(e.target.value)}
-              className="menu-dialog__people-input"
-              min="1"
-              step="1"
-            />
-          </label>
-        </div>
-
         {localItemType === "recipe" ? (
           <div className="menu-dialog__recipe-selector">
-            <div className="menu-dialog__category-filter">
-              <label>
-                Категория:
-                <select
-                  value={localCategoryFilter}
-                  onChange={(e) => setLocalCategoryFilter(e.target.value)}
-                  className="menu-dialog__select"
-                >
-                  <option value="Все">Все</option>
-                  {RECIPE_CATEGORIES.map((category) => (
-                    <option key={category} value={category}>
-                      {category}
-                    </option>
-                  ))}
-                  <option value="Без категории">Без категории</option>
-                </select>
-              </label>
-            </div>
-
-            <select value={localRecipeId} onChange={(e) => setLocalRecipeId(e.target.value)} className="menu-dialog__select">
-              <option value="">Выберите рецепт...</option>
-              {getFilteredRecipes().map((recipe) => (
-                <option key={recipe.id} value={recipe.id}>
-                  {recipe.title}
-                </option>
-              ))}
-            </select>
+            <label style={{ display: "flex", flexDirection: "column", gap: "4px", marginBottom: "12px" }}>
+              Выберите рецепт
+              <select value={localRecipeId} onChange={(e) => setLocalRecipeId(e.target.value)} className="menu-dialog__select">
+                <option value="">Выберите рецепт...</option>
+                {recipes.map((recipe) => (
+                  <option key={recipe.id} value={recipe.id}>
+                    {recipe.title}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+              Количество порций
+              <input
+                type="number"
+                value={localPeopleInput}
+                onChange={(e) => setLocalPeopleInput(e.target.value)}
+                className="menu-dialog__people-input"
+                min="1"
+                step="1"
+              />
+            </label>
           </div>
         ) : (
           <div className="menu-dialog__text-input">
+            <div className="menu-dialog__people-count">
+              <label>
+                Сколько порций?
+                <input
+                  type="number"
+                  value={localPeopleInput}
+                  onChange={(e) => setLocalPeopleInput(e.target.value)}
+                  className="menu-dialog__people-input"
+                  min="1"
+                  step="1"
+                />
+              </label>
+            </div>
             <input
               type="text"
               value={localText}
