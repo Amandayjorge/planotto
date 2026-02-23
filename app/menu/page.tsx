@@ -2864,14 +2864,22 @@ function MenuPageContent() {
                           color: "inherit",
                         }}
                       >
-                        <strong>{product.name}</strong>{" "}
-                        <span style={{ color: "var(--text-secondary)", fontSize: "13px" }}>{scopeLabel}</span>
-                        {notePreview ? (
-                          <span style={{ color: "var(--text-secondary)", fontSize: "13px" }}> • {notePreview}</span>
-                        ) : null}
-                        {activeProductSavedNoteId === product.id ? (
-                          <span style={{ color: "var(--accent-primary)", whiteSpace: "nowrap", fontSize: "12px" }}> • Сохранено</span>
-                        ) : null}
+                        <span style={{ display: "grid", gap: "2px" }}>
+                          <span style={{ display: "inline-flex", gap: "6px", alignItems: "baseline", flexWrap: "wrap" }}>
+                            <strong>{product.name}</strong>
+                            <span style={{ color: "var(--text-secondary)", fontSize: "13px" }}>{scopeLabel}</span>
+                          </span>
+                          {notePreview || activeProductSavedNoteId === product.id ? (
+                            <span style={{ display: "inline-flex", gap: "6px", alignItems: "center", minHeight: "16px" }}>
+                              {notePreview ? (
+                                <span style={{ color: "var(--text-secondary)", fontSize: "12px" }}>{notePreview}</span>
+                              ) : null}
+                              {activeProductSavedNoteId === product.id ? (
+                                <span style={{ color: "var(--accent-primary)", whiteSpace: "nowrap", fontSize: "11px" }}>Сохранено</span>
+                              ) : null}
+                            </span>
+                          ) : null}
+                        </span>
                       </button>
 
                       <button
