@@ -4,7 +4,7 @@ import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState, mem
 import { useRouter, useSearchParams } from "next/navigation";
 import { createPortal } from "react-dom";
 import ProductAutocompleteInput from "../components/ProductAutocompleteInput";
-import { appendProductSuggestions, loadProductSuggestions } from "../lib/productSuggestions";
+import { STARTER_PRODUCT_SUGGESTIONS, appendProductSuggestions, loadProductSuggestions } from "../lib/productSuggestions";
 import { getMenuSuggestion } from "../lib/aiAssistantClient";
 import { getCurrentUserId, listMyRecipes } from "../lib/recipesSupabase";
 import { getSupabaseClient, isSupabaseConfigured } from "../lib/supabaseClient";
@@ -56,6 +56,7 @@ const createDefaultMealSlots = (): MealSlotSetting[] =>
   }));
 
 const normalizeMealSlotName = (value: string): string => value.trim().replace(/\s+/g, " ");
+const normalizeProductName = (value: string): string => value.trim().replace(/\s+/g, " ");
 
 const parseMealSlots = (raw: string | null): MealSlotSetting[] | null => {
   if (!raw) return null;
@@ -978,7 +979,6 @@ function MenuPageContent() {
   const [activeProductNoteDrafts, setActiveProductNoteDrafts] = useState<Record<string, string>>({});
   const [activeProductSavedNoteId, setActiveProductSavedNoteId] = useState<string | null>(null);
   const [activeProductsCloudHydrated, setActiveProductsCloudHydrated] = useState(false);
-  const [knownProductSuggestions, setKnownProductSuggestions] = useState<string[]>(() => loadProductSuggestions());
   const [showFirstVisitOnboarding, setShowFirstVisitOnboarding] = useState(() => forceFirstFromQuery);
   const [showCalendarInlineHint, setShowCalendarInlineHint] = useState(false);
   const [forcedOnboardingFlow, setForcedOnboardingFlow] = useState(() => forceFirstFromQuery);
@@ -1029,6 +1029,23 @@ function MenuPageContent() {
       return inName || inNote;
     });
   }, [activeProducts, normalizedActiveProductsSearch]);
+  const activeProductAutocompleteSuggestions = useMemo(() => {
+    const unique = new Map<string, string>();
+    const pushSuggestion = (rawName: string) => {
+      const normalized = normalizeProductName(rawName);
+      if (!normalized) return;
+      const key = normalized.toLocaleLowerCase("ru-RU");
+      if (!unique.has(key)) {
+        unique.set(key, normalized);
+      }
+    };
+
+    STARTER_PRODUCT_SUGGESTIONS.forEach((item) => pushSuggestion(item));
+    pantry.forEach((item) => pushSuggestion(item.name));
+    activeProducts.forEach((item) => pushSuggestion(item.name));
+
+    return Array.from(unique.values()).sort((a, b) => a.localeCompare(b, "ru-RU", { sensitivity: "base" }));
+  }, [activeProducts, pantry]);
 
   const getMenuStorageKey = () => `${MENU_STORAGE_KEY}:${rangeKey}`;
   const getCellPeopleCountKey = () => `${CELL_PEOPLE_COUNT_KEY}:${rangeKey}`;
@@ -1388,7 +1405,6 @@ function MenuPageContent() {
     }
 
     appendProductSuggestions([name]);
-    setKnownProductSuggestions(loadProductSuggestions());
     setActiveProductsSearch("");
     setActiveProductName("");
   };
@@ -2775,7 +2791,7 @@ function MenuPageContent() {
               <ProductAutocompleteInput
                 value={activeProductName}
                 onChange={setActiveProductName}
-                suggestions={knownProductSuggestions}
+                suggestions={activeProductAutocompleteSuggestions}
                 placeholder="Добавить продукт"
               />
             </div>
@@ -2951,15 +2967,6 @@ function MenuPageContent() {
                             style={{ padding: "2px 8px" }}
                           >
                             Готово
-                          </button>
-                          <button
-                            type="button"
-                            className="btn"
-                            onClick={() => router.push(`/recipes?q=${encodeURIComponent(product.name)}`)}
-                            style={{ padding: "2px 8px" }}
-                            title="Найти блюда с этим продуктом"
-                          >
-                            Найти
                           </button>
                         </div>
                       </div>

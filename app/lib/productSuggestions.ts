@@ -38,7 +38,7 @@ const extractSuggestionName = (value: string): string | null => {
   return normalized;
 };
 
-const STARTER_PRODUCT_SUGGESTIONS = [
+export const STARTER_PRODUCT_SUGGESTIONS = [
   "Курица",
   "Индейка",
   "Говядина",
