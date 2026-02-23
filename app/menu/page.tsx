@@ -1017,11 +1017,12 @@ function MenuPageContent() {
     [activeProducts]
   );
   const shouldEnableActiveProductsSearch = activeProducts.length >= 8;
+  const shouldShowActiveProductsSearch = shouldEnableActiveProductsSearch && expandedActiveProductNoteId === null;
   const hiddenActiveProductsCount = useMemo(
     () => activeProducts.filter((item) => item.hidden).length,
     [activeProducts]
   );
-  const normalizedActiveProductsSearch = shouldEnableActiveProductsSearch
+  const normalizedActiveProductsSearch = shouldShowActiveProductsSearch
     ? activeProductsSearch.trim().toLocaleLowerCase("ru-RU")
     : "";
   const filteredActiveProducts = useMemo(() => {
@@ -2810,7 +2811,7 @@ function MenuPageContent() {
             </button>
           </div>
 
-          {shouldEnableActiveProductsSearch ? (
+          {shouldShowActiveProductsSearch ? (
             <div style={{ marginTop: "10px" }}>
               <input
                 className="input"
@@ -2830,6 +2831,19 @@ function MenuPageContent() {
                 const scopeLabel = getActiveProductScopeLabel(product);
                 const trimmedNote = (product.note || "").trim();
                 const notePreview = trimmedNote.length > 40 ? `${trimmedNote.slice(0, 40)}...` : trimmedNote;
+                const actionIconButtonStyle: React.CSSProperties = {
+                  width: "28px",
+                  height: "28px",
+                  border: "1px solid var(--border-default)",
+                  borderRadius: "8px",
+                  background: "var(--background-primary)",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  cursor: "pointer",
+                  padding: 0,
+                  color: "var(--text-secondary)",
+                };
 
                 return (
                   <div
@@ -2872,19 +2886,48 @@ function MenuPageContent() {
 
                       <button
                         type="button"
-                        className="btn"
-                        onClick={() => toggleActiveProductHidden(product.id)}
-                        style={{ padding: "2px 8px" }}
+                        onClick={() => setExpandedActiveProductNoteId(product.id)}
+                        style={actionIconButtonStyle}
+                        title="Редактировать"
+                        aria-label="Редактировать"
                       >
-                        {product.hidden ? "Показать" : "Скрыть"}
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                          <path d="M3 17.25V21h3.75L17.8 9.94l-3.75-3.75L3 17.25z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+                          <path d="M14.06 6.19l3.75 3.75" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                        </svg>
                       </button>
                       <button
                         type="button"
-                        className="btn"
-                        onClick={() => removeActiveProduct(product.id)}
-                        style={{ padding: "2px 8px" }}
+                        onClick={() => toggleActiveProductHidden(product.id)}
+                        style={actionIconButtonStyle}
+                        title={product.hidden ? "Показать" : "Скрыть"}
+                        aria-label={product.hidden ? "Показать" : "Скрыть"}
                       >
-                        Удалить
+                        {product.hidden ? (
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                            <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" stroke="currentColor" strokeWidth="1.8" />
+                            <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.8" />
+                          </svg>
+                        ) : (
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                            <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" stroke="currentColor" strokeWidth="1.8" />
+                            <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.8" />
+                            <path d="M4 4l16 16" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                          </svg>
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => removeActiveProduct(product.id)}
+                        style={actionIconButtonStyle}
+                        title="Удалить"
+                        aria-label="Удалить"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                          <path d="M4 7h16" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                          <path d="M9 7V5h6v2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                          <path d="M7 7l1 12h8l1-12" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+                        </svg>
                       </button>
                     </div>
 
