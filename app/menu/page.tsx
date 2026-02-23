@@ -2943,7 +2943,7 @@ function MenuPageContent() {
                           background: "var(--background-primary)",
                         }}
                       >
-                        <label style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Тип действия</label>
+                        <label style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Действует</label>
                         <select
                           className="input"
                           value={product.scope}

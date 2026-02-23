@@ -1,6 +1,8 @@
 const PRODUCT_SUGGESTIONS_KEY = "productSuggestions";
 
 const normalizeName = (value: string) => value.trim().replace(/\s+/g, " ");
+const NON_PRODUCT_WORD_PATTERN =
+  /\b(можно|нужно|нельзя|например|или|если|когда|чтобы|потом|затем|сразу|вручную|сервис|временно|недоступен|распознавание|распознать|рецепт|меню|добавить|открыть|удалить|сохранено|шаг|основное|ингредиент|ингредиенты|способ|приготовления|копировать|импорт|фото|камера|очистить|сергей)\b/iu;
 
 const extractSuggestionName = (value: string): string | null => {
   let normalized = normalizeName(value);
@@ -22,6 +24,8 @@ const extractSuggestionName = (value: string): string | null => {
   if (normalized.length > 48) return null;
   if (/\d/u.test(normalized)) return null;
   if (!/^[\p{L}\s\-]+$/u.test(normalized)) return null;
+  if (/\b\p{L}{4,}(ть|ться)\b/iu.test(normalized)) return null;
+  if (NON_PRODUCT_WORD_PATTERN.test(normalized)) return null;
   if (/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/iu.test(normalized)) return null;
 
   const serviceNoisePattern =
@@ -29,7 +33,7 @@ const extractSuggestionName = (value: string): string | null => {
   if (serviceNoisePattern.test(normalized)) return null;
 
   const words = normalized.split(/\s+/u).filter(Boolean);
-  if (words.length > 4) return null;
+  if (words.length > 3) return null;
 
   return normalized;
 };
