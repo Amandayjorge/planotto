@@ -7,7 +7,8 @@ const extractSuggestionName = (value: string): string | null => {
   if (!normalized) return null;
 
   normalized = normalized.replace(/^создать новый продукт:\s*/iu, "");
-  normalized = normalized.split(/[|•;]/u)[0]?.trim() || "";
+  normalized = normalized.replace(/^например:\s*/iu, "");
+  normalized = normalized.split(/[|•;/:,]+/u)[0]?.trim() || "";
   if (!normalized) return null;
 
   normalized = normalized
@@ -19,15 +20,16 @@ const extractSuggestionName = (value: string): string | null => {
   if (/https?:\/\//iu.test(normalized)) return null;
   if (!/\p{L}/u.test(normalized)) return null;
   if (normalized.length > 48) return null;
+  if (/\d/u.test(normalized)) return null;
+  if (!/^[\p{L}\s\-]+$/u.test(normalized)) return null;
   if (/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/iu.test(normalized)) return null;
-  if (/\b\d{3,}\b/u.test(normalized)) return null;
 
   const serviceNoisePattern =
-    /(schema cache|api-|error|ошибк|не удалось|добавить в мои|список обновлен|подтвердите действие|failed|stack trace|completed|imported|copied|service unavailable|временно недоступен|recipe recognized|распознан|planotto)/iu;
+    /(schema cache|api-|error|ошибк|не удалось|добавить|список|подтвердите|failed|stack trace|completed|imported|copied|service unavailable|временно недоступен|recipe recognized|распознан|planotto|рецепт|меню|период|открыть|закрыть|найти|удалить|сохранено|шаг|основное|ингредиент|способ|импорт|фото)/iu;
   if (serviceNoisePattern.test(normalized)) return null;
 
   const words = normalized.split(/\s+/u).filter(Boolean);
-  if (words.length > 6) return null;
+  if (words.length > 4) return null;
 
   return normalized;
 };
@@ -138,8 +140,20 @@ const readCustomSuggestions = (): string[] => {
 };
 
 export const loadProductSuggestions = (): string[] => {
-  const custom = readCustomSuggestions();
-  return uniqueSuggestions([...STARTER_PRODUCT_SUGGESTIONS, ...custom]).sort((a, b) =>
+  const customRaw = readCustomSuggestions();
+  const customClean = uniqueSuggestions(customRaw).filter(
+    (item) => !STARTER_PRODUCT_SET.has(normalizeName(item).toLowerCase())
+  );
+
+  if (typeof window !== "undefined") {
+    try {
+      localStorage.setItem(PRODUCT_SUGGESTIONS_KEY, JSON.stringify(customClean));
+    } catch {
+      // ignore localStorage write issues
+    }
+  }
+
+  return uniqueSuggestions([...STARTER_PRODUCT_SUGGESTIONS, ...customClean]).sort((a, b) =>
     a.localeCompare(b, "ru", { sensitivity: "base" })
   );
 };
