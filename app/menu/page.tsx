@@ -1012,24 +1012,14 @@ function MenuPageContent() {
         .filter((entry): entry is { dateKey: string; dayLabel: string; displayDate: string } => Boolean(entry)),
     [dayKeys]
   );
-  const visibleActiveProductsCount = useMemo(
-    () => activeProducts.filter((item) => !item.hidden).length,
-    [activeProducts]
-  );
+  const visibleActiveProductsCount = activeProducts.length;
   const shouldEnableActiveProductsSearch = activeProducts.length >= 8;
   const shouldShowActiveProductsSearch = shouldEnableActiveProductsSearch && expandedActiveProductNoteId === null;
-  const hiddenActiveProductsCount = useMemo(
-    () => activeProducts.filter((item) => item.hidden).length,
-    [activeProducts]
-  );
   const normalizedActiveProductsSearch = shouldShowActiveProductsSearch
     ? activeProductsSearch.trim().toLocaleLowerCase("ru-RU")
     : "";
   const filteredActiveProducts = useMemo(() => {
-    const ordered = [...activeProducts].sort((a, b) => {
-      if (a.hidden !== b.hidden) return a.hidden ? 1 : -1;
-      return a.name.localeCompare(b.name, "ru-RU");
-    });
+    const ordered = [...activeProducts].sort((a, b) => a.name.localeCompare(b.name, "ru-RU"));
     if (!normalizedActiveProductsSearch) return ordered;
     return ordered.filter((item) => {
       const safeName = typeof item.name === "string" ? item.name : "";
@@ -1377,11 +1367,7 @@ function MenuPageContent() {
 
     if (existing) {
       setActiveProducts((prev) =>
-        prev.map((item) =>
-          item.id === existing.id
-            ? { ...item, name, prefer: true, note: item.note || "", hidden: false }
-            : item
-        )
+        prev.map((item) => (item.id === existing.id ? { ...item, name, prefer: true, note: item.note || "" } : item))
       );
       setExpandedActiveProductNoteId(existing.id);
     } else {
@@ -1423,13 +1409,6 @@ function MenuPageContent() {
     setActiveProducts((prev) =>
       prev.map((item) => (item.id === id ? { ...item, prefer: !item.prefer } : item))
     );
-  };
-
-  const toggleActiveProductHidden = (id: string) => {
-    setActiveProducts((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, hidden: !item.hidden } : item))
-    );
-    setExpandedActiveProductNoteId((prev) => (prev === id ? null : prev));
   };
 
   const updateActiveProductNote = (id: string, note: string) => {
@@ -1523,7 +1502,7 @@ function MenuPageContent() {
         ? Math.max(1, Math.round(peopleValues.reduce((sum, value) => sum + value, 0) / peopleValues.length))
         : 2;
       const prioritizedProducts = activeProducts
-        .filter((item) => item.prefer && !item.hidden)
+        .filter((item) => item.prefer)
         .map((item) => item.name)
         .join(", ");
       const composedConstraints = [prompt.trim(), prioritizedProducts ? `Приоритетные продукты: ${prioritizedProducts}.` : ""]
@@ -2789,7 +2768,6 @@ function MenuPageContent() {
 
           <p className="muted" style={{ margin: "8px 0 0 0", fontSize: "13px" }}>
             Активных: {visibleActiveProductsCount}
-            {hiddenActiveProductsCount > 0 ? `, скрытых: ${hiddenActiveProductsCount}` : ""}
           </p>
 
           <div style={{ marginTop: "12px", display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
@@ -2852,8 +2830,7 @@ function MenuPageContent() {
                       border: "1px solid var(--border-default)",
                       borderRadius: "10px",
                       padding: "8px",
-                      background: product.hidden ? "var(--background-secondary)" : "var(--background-primary)",
-                      opacity: product.hidden ? 0.8 : 1,
+                      background: "var(--background-primary)",
                     }}
                   >
                     <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
@@ -2876,9 +2853,6 @@ function MenuPageContent() {
                         {notePreview ? (
                           <span style={{ color: "var(--text-secondary)", fontSize: "13px" }}> • {notePreview}</span>
                         ) : null}
-                        {product.hidden ? (
-                          <span style={{ color: "var(--text-secondary)", fontSize: "12px" }}> • скрыт</span>
-                        ) : null}
                         {activeProductSavedNoteId === product.id ? (
                           <span style={{ color: "var(--accent-primary)", whiteSpace: "nowrap", fontSize: "12px" }}> • Сохранено</span>
                         ) : null}
@@ -2895,26 +2869,6 @@ function MenuPageContent() {
                           <path d="M3 17.25V21h3.75L17.8 9.94l-3.75-3.75L3 17.25z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
                           <path d="M14.06 6.19l3.75 3.75" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
                         </svg>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => toggleActiveProductHidden(product.id)}
-                        style={actionIconButtonStyle}
-                        title={product.hidden ? "Показать" : "Скрыть"}
-                        aria-label={product.hidden ? "Показать" : "Скрыть"}
-                      >
-                        {product.hidden ? (
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                            <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" stroke="currentColor" strokeWidth="1.8" />
-                            <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.8" />
-                          </svg>
-                        ) : (
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                            <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" stroke="currentColor" strokeWidth="1.8" />
-                            <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.8" />
-                            <path d="M4 4l16 16" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-                          </svg>
-                        )}
                       </button>
                       <button
                         type="button"
