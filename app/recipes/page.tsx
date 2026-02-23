@@ -36,6 +36,8 @@ const FIRST_RECIPE_SUCCESS_PENDING_KEY = "recipes:first-success-pending";
 const FIRST_RECIPE_CREATE_FLOW_KEY = "recipes:first-create-flow";
 const GUEST_RECIPES_REMINDER_DISMISSED_KEY = "recipes:guest-register-reminder-dismissed";
 const GUEST_RECIPES_REMINDER_THRESHOLD = 3;
+const MENU_RANGE_STATE_KEY = "selectedMenuRange";
+const ACTIVE_PRODUCTS_STORAGE_PREFIX = "activeProducts:";
 const TEMPLATE_IMAGE_FALLBACKS: Record<string, string> = {
   "Омлет с овощами": "/recipes/templates/omelet-vegetables.jpg",
   "Овсяная каша с фруктами": "/recipes/templates/oatmeal-fruits.jpg",
@@ -53,6 +55,93 @@ function looksLikeUrl(value: string): boolean {
 
 function normalizeRecipeTitle(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function normalizeMatchText(value: string): string {
+  return value
+    .toLocaleLowerCase("ru-RU")
+    .replace(/ё/g, "е")
+    .replace(/[^\p{L}\p{N}\s-]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function isValidDateKey(raw: unknown): raw is string {
+  return typeof raw === "string" && /^\d{4}-\d{2}-\d{2}$/.test(raw);
+}
+
+function resolveActiveProductsStorageKey(): string | null {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const rawRange = localStorage.getItem(MENU_RANGE_STATE_KEY);
+    if (rawRange) {
+      const parsed = JSON.parse(rawRange) as { start?: unknown; end?: unknown };
+      if (isValidDateKey(parsed?.start) && isValidDateKey(parsed?.end)) {
+        return `${ACTIVE_PRODUCTS_STORAGE_PREFIX}${parsed.start}__${parsed.end}`;
+      }
+    }
+  } catch {
+    // ignore malformed range state
+  }
+
+  const candidateKeys: string[] = [];
+  for (let i = 0; i < localStorage.length; i += 1) {
+    const key = localStorage.key(i);
+    if (key && key.startsWith(ACTIVE_PRODUCTS_STORAGE_PREFIX)) {
+      candidateKeys.push(key);
+    }
+  }
+
+  if (candidateKeys.length === 0) return null;
+  candidateKeys.sort();
+  return candidateKeys[candidateKeys.length - 1];
+}
+
+function loadActiveProductNamesForCurrentRange(): string[] {
+  if (typeof window === "undefined") return [];
+  const storageKey = resolveActiveProductsStorageKey();
+  if (!storageKey) return [];
+
+  try {
+    const raw = localStorage.getItem(storageKey);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+
+    const unique = new Map<string, string>();
+    parsed.forEach((item) => {
+      if (!item || typeof item !== "object") return;
+      const typed = item as { name?: unknown; hidden?: unknown };
+      if (typed.hidden === true) return;
+      if (typeof typed.name !== "string") return;
+      const name = typed.name.trim();
+      if (!name) return;
+      const normalized = normalizeMatchText(name);
+      if (!normalized) return;
+      if (!unique.has(normalized)) {
+        unique.set(normalized, name);
+      }
+    });
+
+    return Array.from(unique.values());
+  } catch {
+    return [];
+  }
+}
+
+function recipeHasProductMatch(ingredientNames: string[], productName: string): boolean {
+  const normalizedProduct = normalizeMatchText(productName);
+  if (!normalizedProduct) return false;
+
+  return ingredientNames.some((ingredientName) => {
+    if (!ingredientName) return false;
+    if (ingredientName.includes(normalizedProduct) || normalizedProduct.includes(ingredientName)) return true;
+
+    const productWords = normalizedProduct.split(" ").filter((word) => word.length >= 3);
+    if (productWords.length === 0) return false;
+    return productWords.every((word) => ingredientName.includes(word));
+  });
 }
 
 function toErrorText(error: unknown, fallback: string): string {
@@ -201,6 +290,7 @@ function RecipesPageContent() {
   const [onlyWithPhoto, setOnlyWithPhoto] = useState(false);
   const [onlyWithoutPhoto, setOnlyWithoutPhoto] = useState(false);
   const [onlyWithNotes, setOnlyWithNotes] = useState(false);
+  const [onlyWithActiveProducts, setOnlyWithActiveProducts] = useState(false);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>("mine");
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
@@ -217,6 +307,8 @@ function RecipesPageContent() {
   const [isFirstRecipeFlow, setIsFirstRecipeFlow] = useState(false);
   const [firstCopiedRecipeId, setFirstCopiedRecipeId] = useState<string | null>(null);
   const [showGuestRegisterReminder, setShowGuestRegisterReminder] = useState(false);
+  const [activeProductNames, setActiveProductNames] = useState<string[]>([]);
+  const [openActiveMatchesRecipeId, setOpenActiveMatchesRecipeId] = useState<string | null>(null);
 
   const importedForUser = useRef<string | null>(null);
   const addedToastTimerRef = useRef<number | null>(null);
@@ -438,6 +530,60 @@ function RecipesPageContent() {
     setShowGuestRegisterReminder(shouldShow);
   }, [currentUserId, isFirstRecipeFlow, isLoading, recipes.length, showFirstRecipeSuccess, viewMode]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const refreshActiveProducts = () => {
+      setActiveProductNames(loadActiveProductNamesForCurrentRange());
+    };
+
+    const handleStorageChange = (event: StorageEvent) => {
+      if (!event.key) {
+        refreshActiveProducts();
+        return;
+      }
+      if (event.key === MENU_RANGE_STATE_KEY || event.key.startsWith(ACTIVE_PRODUCTS_STORAGE_PREFIX)) {
+        refreshActiveProducts();
+      }
+    };
+
+    refreshActiveProducts();
+    window.addEventListener("storage", handleStorageChange);
+    window.addEventListener("focus", refreshActiveProducts);
+    return () => {
+      window.removeEventListener("storage", handleStorageChange);
+      window.removeEventListener("focus", refreshActiveProducts);
+    };
+  }, []);
+
+  const recipeActiveMatchMap = useMemo(() => {
+    const activeNames = activeProductNames.filter((name) => normalizeMatchText(name).length > 0);
+    const map = new Map<string, { matchCount: number; topMatches: string[]; extraMatches: number }>();
+    if (activeNames.length === 0) {
+      recipes.forEach((recipe) => {
+        map.set(recipe.id, { matchCount: 0, topMatches: [], extraMatches: 0 });
+      });
+      return map;
+    }
+
+    recipes.forEach((recipe) => {
+      const ingredientNames = (recipe.ingredients || [])
+        .map((ingredient) => normalizeMatchText(ingredient.name || ""))
+        .filter(Boolean);
+      const matchedNames = activeNames.filter((productName) =>
+        recipeHasProductMatch(ingredientNames, productName)
+      );
+      const topMatches = matchedNames.slice(0, 2);
+      map.set(recipe.id, {
+        matchCount: matchedNames.length,
+        topMatches,
+        extraMatches: Math.max(0, matchedNames.length - topMatches.length),
+      });
+    });
+
+    return map;
+  }, [activeProductNames, recipes]);
+
   const filteredRecipes = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     const getTimesCooked = (item: RecipeModel): number => {
@@ -452,6 +598,7 @@ function RecipesPageContent() {
       if (onlyWithPhoto && !item.image?.trim()) return false;
       if (onlyWithoutPhoto && item.image?.trim()) return false;
       if (onlyWithNotes && !item.notes?.trim()) return false;
+      if (onlyWithActiveProducts && (recipeActiveMatchMap.get(item.id)?.matchCount || 0) === 0) return false;
       if (!query) return true;
 
       const title = (item.title || "").toLowerCase();
@@ -492,11 +639,23 @@ function RecipesPageContent() {
       }
     });
 
-    return filtered;
+    const decorated = filtered.map((item, index) => ({
+      item,
+      index,
+      matchCount: recipeActiveMatchMap.get(item.id)?.matchCount || 0,
+    }));
+    const matched = decorated
+      .filter((row) => row.matchCount > 0)
+      .sort((a, b) => b.matchCount - a.matchCount || a.index - b.index);
+    const rest = decorated.filter((row) => row.matchCount === 0);
+
+    return [...matched, ...rest].map((row) => row.item);
   }, [
+    onlyWithActiveProducts,
     onlyWithNotes,
     onlyWithPhoto,
     onlyWithoutPhoto,
+    recipeActiveMatchMap,
     recipes,
     searchQuery,
     selectedTags,
@@ -833,6 +992,7 @@ function RecipesPageContent() {
     onlyWithPhoto ||
     onlyWithoutPhoto ||
     onlyWithNotes ||
+    onlyWithActiveProducts ||
     searchQuery.trim().length > 0;
   const showBlockingLoading = isLoading && recipes.length === 0;
   const isEmptyState = !isLoading && !hasAnyRecipes;
@@ -1026,6 +1186,19 @@ function RecipesPageContent() {
             >
               Есть заметки
             </button>
+            <button
+              type="button"
+              className={`btn ${onlyWithActiveProducts ? "btn-primary" : ""}`}
+              onClick={() => setOnlyWithActiveProducts((prev) => !prev)}
+              disabled={activeProductNames.length === 0}
+              title={
+                activeProductNames.length === 0
+                  ? "Добавьте активные продукты в Меню"
+                  : "Показывать только рецепты с совпадениями по активным продуктам"
+              }
+            >
+              Только с активными продуктами
+            </button>
             {hasActiveFilters && (
               <button
                 type="button"
@@ -1034,6 +1207,7 @@ function RecipesPageContent() {
                   setOnlyWithPhoto(false);
                   setOnlyWithoutPhoto(false);
                   setOnlyWithNotes(false);
+                  setOnlyWithActiveProducts(false);
                   setSelectedTags([]);
                   setSearchQuery("");
                 }}
@@ -1212,6 +1386,7 @@ function RecipesPageContent() {
                   setOnlyWithPhoto(false);
                   setOnlyWithoutPhoto(false);
                   setOnlyWithNotes(false);
+                  setOnlyWithActiveProducts(false);
                   setSelectedTags([]);
                   setSearchQuery("");
                 }}
@@ -1241,6 +1416,13 @@ function RecipesPageContent() {
                 ? "Из примеров • уже в моих рецептах"
                 : "Из примеров"
               : "Мой рецепт";
+            const matchMeta = recipeActiveMatchMap.get(recipe.id) || { matchCount: 0, topMatches: [], extraMatches: 0 };
+            const matchTooltip =
+              matchMeta.matchCount > 0
+                ? `Совпадает с активными: ${matchMeta.topMatches.join(", ")}${
+                  matchMeta.extraMatches > 0 ? ` (+${matchMeta.extraMatches})` : ""
+                }`
+                : "";
             const mainActionLabel = isPublicSourceRecipe
               ? addDone
                 ? "Уже в моих"
@@ -1290,9 +1472,35 @@ function RecipesPageContent() {
                     <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "flex-start" }}>
                       <div style={{ minWidth: 0 }}>
                         <h3 style={{ margin: 0 }}>{recipe.title}</h3>
-                        <div style={{ marginTop: "4px", fontSize: "12px", color: "var(--text-tertiary)" }}>
-                          {sourceLabel}
+                        <div style={{ marginTop: "4px", fontSize: "12px", color: "var(--text-tertiary)", display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                          <span>{sourceLabel}</span>
+                          {matchMeta.matchCount > 0 ? (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setOpenActiveMatchesRecipeId((prev) => (prev === recipe.id ? null : recipe.id))
+                              }
+                              title={matchTooltip}
+                              style={{
+                                border: "1px solid color-mix(in srgb, var(--accent-primary) 45%, var(--border-default) 55%)",
+                                background: "color-mix(in srgb, var(--accent-primary) 14%, var(--background-primary) 86%)",
+                                color: "var(--text-primary)",
+                                borderRadius: "999px",
+                                fontSize: "11px",
+                                padding: "1px 7px",
+                                lineHeight: 1.4,
+                                cursor: "pointer",
+                              }}
+                            >
+                              Совпадений: {matchMeta.matchCount}
+                            </button>
+                          ) : null}
                         </div>
+                        {openActiveMatchesRecipeId === recipe.id && matchTooltip ? (
+                          <div style={{ marginTop: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
+                            {matchTooltip}
+                          </div>
+                        ) : null}
                       </div>
                       <span style={{ fontSize: "13px", color: "var(--text-secondary)", flexShrink: 0 }}>
                         Порции: {recipe.servings || 2}
