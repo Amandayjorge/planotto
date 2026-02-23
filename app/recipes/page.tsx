@@ -38,6 +38,7 @@ const GUEST_RECIPES_REMINDER_DISMISSED_KEY = "recipes:guest-register-reminder-di
 const GUEST_RECIPES_REMINDER_THRESHOLD = 3;
 const MENU_RANGE_STATE_KEY = "selectedMenuRange";
 const ACTIVE_PRODUCTS_STORAGE_PREFIX = "activeProducts:";
+const PANTRY_STORAGE_KEY = "pantry";
 const TEMPLATE_IMAGE_FALLBACKS: Record<string, string> = {
   "Омлет с овощами": "/recipes/templates/omelet-vegetables.jpg",
   "Овсяная каша с фруктами": "/recipes/templates/oatmeal-fruits.jpg",
@@ -114,6 +115,35 @@ function loadActiveProductNamesForCurrentRange(): string[] {
       if (!item || typeof item !== "object") return;
       const typed = item as { name?: unknown; hidden?: unknown };
       if (typed.hidden === true) return;
+      if (typeof typed.name !== "string") return;
+      const name = typed.name.trim();
+      if (!name) return;
+      const normalized = normalizeMatchText(name);
+      if (!normalized) return;
+      if (!unique.has(normalized)) {
+        unique.set(normalized, name);
+      }
+    });
+
+    return Array.from(unique.values());
+  } catch {
+    return [];
+  }
+}
+
+function loadPantryProductNames(): string[] {
+  if (typeof window === "undefined") return [];
+
+  try {
+    const raw = localStorage.getItem(PANTRY_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+
+    const unique = new Map<string, string>();
+    parsed.forEach((item) => {
+      if (!item || typeof item !== "object") return;
+      const typed = item as { name?: unknown };
       if (typeof typed.name !== "string") return;
       const name = typed.name.trim();
       if (!name) return;
@@ -291,6 +321,7 @@ function RecipesPageContent() {
   const [onlyWithoutPhoto, setOnlyWithoutPhoto] = useState(false);
   const [onlyWithNotes, setOnlyWithNotes] = useState(false);
   const [onlyWithActiveProducts, setOnlyWithActiveProducts] = useState(false);
+  const [onlyFromPantry, setOnlyFromPantry] = useState(false);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>("mine");
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
@@ -308,6 +339,7 @@ function RecipesPageContent() {
   const [firstCopiedRecipeId, setFirstCopiedRecipeId] = useState<string | null>(null);
   const [showGuestRegisterReminder, setShowGuestRegisterReminder] = useState(false);
   const [activeProductNames, setActiveProductNames] = useState<string[]>([]);
+  const [pantryProductNames, setPantryProductNames] = useState<string[]>([]);
   const [openActiveMatchesRecipeId, setOpenActiveMatchesRecipeId] = useState<string | null>(null);
 
   const importedForUser = useRef<string | null>(null);
@@ -390,6 +422,28 @@ function RecipesPageContent() {
 
     return () => {
       sub.subscription.unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const refreshPantry = () => {
+      setPantryProductNames(loadPantryProductNames());
+    };
+
+    const handleStorageChange = (event: StorageEvent) => {
+      if (!event.key || event.key === PANTRY_STORAGE_KEY) {
+        refreshPantry();
+      }
+    };
+
+    refreshPantry();
+    window.addEventListener("storage", handleStorageChange);
+    window.addEventListener("focus", refreshPantry);
+    return () => {
+      window.removeEventListener("storage", handleStorageChange);
+      window.removeEventListener("focus", refreshPantry);
     };
   }, []);
 
@@ -584,6 +638,38 @@ function RecipesPageContent() {
     return map;
   }, [activeProductNames, recipes]);
 
+  const recipePantryCoverageMap = useMemo(() => {
+    const pantryNames = pantryProductNames.filter((name) => normalizeMatchText(name).length > 0);
+    const map = new Map<string, { totalIngredients: number; matchedIngredients: number; isFullyCovered: boolean }>();
+
+    recipes.forEach((recipe) => {
+      const ingredientNames = Array.from(
+        new Set(
+          (recipe.ingredients || [])
+            .map((ingredient) => normalizeMatchText(ingredient.name || ""))
+            .filter(Boolean)
+        )
+      );
+
+      if (ingredientNames.length === 0) {
+        map.set(recipe.id, { totalIngredients: 0, matchedIngredients: 0, isFullyCovered: false });
+        return;
+      }
+
+      const matchedIngredients = ingredientNames.filter((ingredientName) =>
+        pantryNames.some((pantryName) => recipeHasProductMatch([ingredientName], pantryName))
+      ).length;
+
+      map.set(recipe.id, {
+        totalIngredients: ingredientNames.length,
+        matchedIngredients,
+        isFullyCovered: matchedIngredients === ingredientNames.length,
+      });
+    });
+
+    return map;
+  }, [pantryProductNames, recipes]);
+
   const filteredRecipes = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     const getTimesCooked = (item: RecipeModel): number => {
@@ -599,6 +685,7 @@ function RecipesPageContent() {
       if (onlyWithoutPhoto && item.image?.trim()) return false;
       if (onlyWithNotes && !item.notes?.trim()) return false;
       if (onlyWithActiveProducts && (recipeActiveMatchMap.get(item.id)?.matchCount || 0) === 0) return false;
+      if (onlyFromPantry && !recipePantryCoverageMap.get(item.id)?.isFullyCovered) return false;
       if (!query) return true;
 
       const title = (item.title || "").toLowerCase();
@@ -651,11 +738,13 @@ function RecipesPageContent() {
 
     return [...matched, ...rest].map((row) => row.item);
   }, [
+    onlyFromPantry,
     onlyWithActiveProducts,
     onlyWithNotes,
     onlyWithPhoto,
     onlyWithoutPhoto,
     recipeActiveMatchMap,
+    recipePantryCoverageMap,
     recipes,
     searchQuery,
     selectedTags,
@@ -993,6 +1082,7 @@ function RecipesPageContent() {
     onlyWithoutPhoto ||
     onlyWithNotes ||
     onlyWithActiveProducts ||
+    onlyFromPantry ||
     searchQuery.trim().length > 0;
   const showBlockingLoading = isLoading && recipes.length === 0;
   const isEmptyState = !isLoading && !hasAnyRecipes;
@@ -1199,6 +1289,19 @@ function RecipesPageContent() {
             >
               Только с активными продуктами
             </button>
+            <button
+              type="button"
+              className={`btn ${onlyFromPantry ? "btn-primary" : ""}`}
+              onClick={() => setOnlyFromPantry((prev) => !prev)}
+              disabled={pantryProductNames.length === 0}
+              title={
+                pantryProductNames.length === 0
+                  ? "Кладовка пуста"
+                  : "Показывать только рецепты, которые можно собрать из кладовки"
+              }
+            >
+              Только из кладовки
+            </button>
             {hasActiveFilters && (
               <button
                 type="button"
@@ -1208,6 +1311,7 @@ function RecipesPageContent() {
                   setOnlyWithoutPhoto(false);
                   setOnlyWithNotes(false);
                   setOnlyWithActiveProducts(false);
+                  setOnlyFromPantry(false);
                   setSelectedTags([]);
                   setSearchQuery("");
                 }}
@@ -1387,6 +1491,7 @@ function RecipesPageContent() {
                   setOnlyWithoutPhoto(false);
                   setOnlyWithNotes(false);
                   setOnlyWithActiveProducts(false);
+                  setOnlyFromPantry(false);
                   setSelectedTags([]);
                   setSearchQuery("");
                 }}
