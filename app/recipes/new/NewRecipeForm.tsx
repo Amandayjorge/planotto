@@ -117,7 +117,6 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
   const [image, setImage] = useState("");
   const [servings, setServings] = useState(2);
   const [visibility, setVisibility] = useState<RecipeVisibility>("private");
-  const [publishConsentChecked, setPublishConsentChecked] = useState(false);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [ingredients, setIngredients] = useState<Ingredient[]>([{ name: "", amount: 0, unit: UNITS[0] }]);
   const [productSuggestions] = useState<string[]>(() => loadProductSuggestions());
@@ -149,6 +148,7 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
   const importPhotosTaskIdRef = useRef(0);
   const hasCoreInput = title.trim().length > 0 || ingredients.some((item) => item.name.trim().length > 0);
   const hasTitle = title.trim().length > 0;
+  const canChangeVisibility = Boolean(currentUserId);
 
   const optimizeImageFile = (file: File): Promise<string> =>
     new Promise((resolve) => {
@@ -564,26 +564,13 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
   };
 
   const handleVisibilityChange = (next: RecipeVisibility) => {
-    if (next === "public" && visibility !== "public") {
-      const approved = window.confirm(
-        "Публичные рецепты видны другим пользователям.\nУбедитесь, что вы имеете право публиковать этот рецепт."
-      );
-      if (!approved) return;
-    }
+    if (!canChangeVisibility && next === "public") return;
     setVisibility(next);
-    if (next !== "public") {
-      setPublishConsentChecked(false);
-    }
   };
 
   const saveRecipe = async () => {
     if (!title.trim()) {
       alert("Название рецепта обязательно");
-      return;
-    }
-
-    if (visibility === "public" && !publishConsentChecked) {
-      alert("Подтвердите право на публикацию рецепта.");
       return;
     }
 
@@ -844,6 +831,35 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
         </div>
 
         <div style={{ marginBottom: "16px" }}>
+          <label style={{ display: "block", marginBottom: "8px", fontWeight: "bold" }}>Видимость рецепта</label>
+          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+            <button
+              type="button"
+              className={`btn ${visibility === "private" ? "btn-primary" : ""}`}
+              onClick={() => handleVisibilityChange("private")}
+            >
+              Приватный
+            </button>
+            <button
+              type="button"
+              className={`btn ${visibility === "public" ? "btn-primary" : ""}`}
+              onClick={() => handleVisibilityChange("public")}
+              disabled={!canChangeVisibility}
+            >
+              Публичный
+            </button>
+          </div>
+          <p className="muted" style={{ margin: "8px 0 0 0" }}>
+            Публичный рецепт будет доступен другим пользователям для просмотра и копирования.
+          </p>
+          {!canChangeVisibility ? (
+            <p className="muted" style={{ margin: "6px 0 0 0" }}>
+              Для публикации войдите в аккаунт.
+            </p>
+          ) : null}
+        </div>
+
+        <div style={{ marginBottom: "16px" }}>
           <div style={{ display: "flex", gap: "10px", alignItems: "center", marginBottom: "8px", flexWrap: "wrap" }}>
             <label style={{ display: "block", fontWeight: "bold" }}>Ингредиенты</label>
           </div>
@@ -1007,25 +1023,6 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
                   style={{ width: "180px", marginTop: "8px" }}
                 />
               </label>
-
-              <label style={{ display: "block", fontWeight: "bold" }}>
-                Видимость
-                <select
-                  className="input"
-                  value={visibility}
-                  onChange={(e) => handleVisibilityChange(e.target.value as RecipeVisibility)}
-                  disabled={!currentUserId}
-                  style={{ width: "180px", marginTop: "8px" }}
-                >
-                  <option value="private">Приватный</option>
-                  <option value="public">Публичный</option>
-                </select>
-                {!currentUserId ? (
-                  <span className="muted" style={{ display: "block", marginTop: "6px", fontWeight: 400 }}>
-                    Публичный доступен после входа.
-                  </span>
-                ) : null}
-              </label>
             </div>
 
             <div style={{ marginBottom: "16px" }}>
@@ -1048,25 +1045,6 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
                 </p>
               ) : null}
             </div>
-
-            {visibility === "public" ? (
-              <div className="card" style={{ marginBottom: "16px", padding: "14px" }}>
-                <h3 style={{ margin: "0 0 10px 0" }}>Публикация рецепта</h3>
-                <p style={{ margin: "0 0 10px 0", whiteSpace: "pre-line" }}>
-                  Я подтверждаю, что имею право публиковать этот рецепт и что он не нарушает авторские права третьих лиц.
-                  {"\n"}
-                  Я понимаю, что в случае нарушения ответственность лежит на мне.
-                </p>
-                <label style={{ display: "inline-flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
-                  <input
-                    type="checkbox"
-                    checked={publishConsentChecked}
-                    onChange={(e) => setPublishConsentChecked(e.target.checked)}
-                  />
-                  <span>Согласен(на)</span>
-                </label>
-              </div>
-            ) : null}
 
             <div style={{ marginBottom: "16px" }}>
               <label style={{ display: "block", fontWeight: "bold", marginBottom: "8px" }}>Теги (необязательно)</label>
@@ -1150,9 +1128,9 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
         <button
           className="btn btn-primary"
           onClick={saveRecipe}
-          disabled={isSaving || !hasTitle || (visibility === "public" && !publishConsentChecked)}
+          disabled={isSaving || !hasTitle}
         >
-          {isSaving ? "Сохранение..." : visibility === "public" ? "Сделать публичным" : "Сохранить рецепт"}
+          {isSaving ? "Сохранение..." : "Сохранить рецепт"}
         </button>
         <button className="btn" onClick={() => router.push("/recipes")}>Отмена</button>
       </div>
