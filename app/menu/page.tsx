@@ -1016,11 +1016,14 @@ function MenuPageContent() {
     () => activeProducts.filter((item) => !item.hidden).length,
     [activeProducts]
   );
+  const shouldEnableActiveProductsSearch = activeProducts.length >= 8;
   const hiddenActiveProductsCount = useMemo(
     () => activeProducts.filter((item) => item.hidden).length,
     [activeProducts]
   );
-  const normalizedActiveProductsSearch = activeProductsSearch.trim().toLocaleLowerCase("ru-RU");
+  const normalizedActiveProductsSearch = shouldEnableActiveProductsSearch
+    ? activeProductsSearch.trim().toLocaleLowerCase("ru-RU")
+    : "";
   const filteredActiveProducts = useMemo(() => {
     const ordered = [...activeProducts].sort((a, b) => {
       if (a.hidden !== b.hidden) return a.hidden ? 1 : -1;
@@ -2807,16 +2810,18 @@ function MenuPageContent() {
             </button>
           </div>
 
-          <div style={{ marginTop: "10px" }}>
-            <input
-              className="input"
-              type="text"
-              placeholder="Поиск по названию и заметке"
-              value={activeProductsSearch}
-              onChange={(e) => setActiveProductsSearch(e.target.value)}
-              style={{ width: "100%" }}
-            />
-          </div>
+          {shouldEnableActiveProductsSearch ? (
+            <div style={{ marginTop: "10px" }}>
+              <input
+                className="input"
+                type="text"
+                placeholder="Поиск по названию и заметке"
+                value={activeProductsSearch}
+                onChange={(e) => setActiveProductsSearch(e.target.value)}
+                style={{ width: "100%" }}
+              />
+            </div>
+          ) : null}
 
           <div style={{ marginTop: "12px", display: "grid", gap: "8px" }}>
             {filteredActiveProducts.length > 0 ? (
