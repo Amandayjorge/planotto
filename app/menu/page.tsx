@@ -2966,7 +2966,7 @@ function MenuPageContent() {
                             onClick={() => setExpandedActiveProductNoteId(null)}
                             style={{ padding: "2px 8px" }}
                           >
-                            Готово
+                            Сохранить
                           </button>
                         </div>
                       </div>
