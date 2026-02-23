@@ -2833,13 +2833,13 @@ function MenuPageContent() {
                       background: "var(--background-primary)",
                     }}
                   >
-                    <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                       <button
                         type="button"
                         onClick={() => setExpandedActiveProductNoteId((prev) => (prev === product.id ? null : product.id))}
                         style={{
-                          flex: "1 1 260px",
-                          minWidth: "170px",
+                          flex: "1 1 auto",
+                          minWidth: 0,
                           border: "none",
                           background: "transparent",
                           padding: 0,
