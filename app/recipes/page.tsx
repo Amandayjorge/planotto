@@ -726,15 +726,31 @@ function RecipesPageContent() {
       }
     });
 
-    const decorated = filtered.map((item, index) => ({
-      item,
-      index,
-      matchCount: recipeActiveMatchMap.get(item.id)?.matchCount || 0,
-    }));
+    const decorated = filtered.map((item, index) => {
+      const coverage = recipePantryCoverageMap.get(item.id);
+      const totalIngredients = coverage?.totalIngredients || 0;
+      const matchedIngredients = coverage?.matchedIngredients || 0;
+      const coverageRatio =
+        totalIngredients > 0 ? matchedIngredients / totalIngredients : 0;
+
+      return {
+        item,
+        index,
+        matchCount: recipeActiveMatchMap.get(item.id)?.matchCount || 0,
+        coverageRatio,
+      };
+    });
     const matched = decorated
       .filter((row) => row.matchCount > 0)
-      .sort((a, b) => b.matchCount - a.matchCount || a.index - b.index);
-    const rest = decorated.filter((row) => row.matchCount === 0);
+      .sort(
+        (a, b) =>
+          b.matchCount - a.matchCount ||
+          b.coverageRatio - a.coverageRatio ||
+          a.index - b.index
+      );
+    const rest = decorated
+      .filter((row) => row.matchCount === 0)
+      .sort((a, b) => b.coverageRatio - a.coverageRatio || a.index - b.index);
 
     return [...matched, ...rest].map((row) => row.item);
   }, [
@@ -1522,6 +1538,15 @@ function RecipesPageContent() {
                 : "Из примеров"
               : "Мой рецепт";
             const matchMeta = recipeActiveMatchMap.get(recipe.id) || { matchCount: 0, topMatches: [], extraMatches: 0 };
+            const pantryMeta = recipePantryCoverageMap.get(recipe.id) || {
+              totalIngredients: 0,
+              matchedIngredients: 0,
+              isFullyCovered: false,
+            };
+            const pantryCoverageText =
+              pantryMeta.totalIngredients > 0
+                ? `${pantryMeta.matchedIngredients}/${pantryMeta.totalIngredients}`
+                : "";
             const matchTooltip =
               matchMeta.matchCount > 0
                 ? `Совпадает с активными: ${matchMeta.topMatches.join(", ")}${
@@ -1579,6 +1604,28 @@ function RecipesPageContent() {
                         <h3 style={{ margin: 0 }}>{recipe.title}</h3>
                         <div style={{ marginTop: "4px", fontSize: "12px", color: "var(--text-tertiary)", display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
                           <span>{sourceLabel}</span>
+                          {pantryCoverageText ? (
+                            <span
+                              title={`Ингредиентов в кладовке: ${pantryMeta.matchedIngredients} из ${pantryMeta.totalIngredients}`}
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "4px",
+                                border: "1px solid var(--border-default)",
+                                borderRadius: "999px",
+                                padding: "1px 7px",
+                                color: "var(--text-secondary)",
+                                fontSize: "11px",
+                                background: "var(--background-secondary)",
+                              }}
+                            >
+                              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                <path d="M3 10.5L12 3l9 7.5V21H3V10.5z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+                                <path d="M9 21v-6h6v6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                              </svg>
+                              <span>{pantryCoverageText}</span>
+                            </span>
+                          ) : null}
                           {matchMeta.matchCount > 0 ? (
                             <button
                               type="button"
