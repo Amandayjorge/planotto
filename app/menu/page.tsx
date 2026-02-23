@@ -1028,8 +1028,10 @@ function MenuPageContent() {
     });
     if (!normalizedActiveProductsSearch) return ordered;
     return ordered.filter((item) => {
-      const inName = item.name.toLocaleLowerCase("ru-RU").includes(normalizedActiveProductsSearch);
-      const inNote = item.note.toLocaleLowerCase("ru-RU").includes(normalizedActiveProductsSearch);
+      const safeName = typeof item.name === "string" ? item.name : "";
+      const safeNote = typeof item.note === "string" ? item.note : "";
+      const inName = safeName.toLocaleLowerCase("ru-RU").includes(normalizedActiveProductsSearch);
+      const inNote = safeNote.toLocaleLowerCase("ru-RU").includes(normalizedActiveProductsSearch);
       return inName || inNote;
     });
   }, [activeProducts, normalizedActiveProductsSearch]);
@@ -1368,15 +1370,8 @@ function MenuPageContent() {
     if (!name) return;
     const normalizedName = name.toLowerCase();
 
-    if (typeof document !== "undefined") {
-      const activeElement = document.activeElement as HTMLElement | null;
-      if (activeElement && typeof activeElement.blur === "function") {
-        activeElement.blur();
-      }
-    }
-
     setActiveProducts((prev) => {
-      const existing = prev.find((item) => item.name.toLowerCase() === normalizedName);
+      const existing = prev.find((item) => (item.name || "").toLowerCase() === normalizedName);
       if (existing) {
         return prev.map((item) =>
           item.id === existing.id
@@ -2825,7 +2820,7 @@ function MenuPageContent() {
               filteredActiveProducts.map((product) => {
                 const isExpanded = expandedActiveProductNoteId === product.id;
                 const scopeLabel = getActiveProductScopeLabel(product);
-                const trimmedNote = product.note.trim();
+                const trimmedNote = (product.note || "").trim();
                 const notePreview = trimmedNote.length > 40 ? `${trimmedNote.slice(0, 40)}...` : trimmedNote;
 
                 return (
@@ -3276,7 +3271,7 @@ function MenuPageContent() {
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", flexWrap: "wrap" }}>
           <strong style={{ fontSize: "16px" }}>Активные продукты: {visibleActiveProductsCount}</strong>
           <button type="button" className="btn" onClick={() => setShowActiveProductsDialog(true)}>
-            Открыть
+            {visibleActiveProductsCount === 0 ? "Добавить" : "Открыть"}
           </button>
         </div>
       </div>
