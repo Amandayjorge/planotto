@@ -19,9 +19,11 @@ const extractSuggestionName = (value: string): string | null => {
   if (/https?:\/\//iu.test(normalized)) return null;
   if (!/\p{L}/u.test(normalized)) return null;
   if (normalized.length > 48) return null;
+  if (/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/iu.test(normalized)) return null;
+  if (/\b\d{3,}\b/u.test(normalized)) return null;
 
   const serviceNoisePattern =
-    /(schema cache|api-|error|ошибк|не удалось|добавить в мои|список обновлен|подтвердите действие|failed|stack trace)/iu;
+    /(schema cache|api-|error|ошибк|не удалось|добавить в мои|список обновлен|подтвердите действие|failed|stack trace|completed|imported|copied|service unavailable|временно недоступен|recipe recognized|распознан|planotto)/iu;
   if (serviceNoisePattern.test(normalized)) return null;
 
   const words = normalized.split(/\s+/u).filter(Boolean);

@@ -1369,20 +1369,23 @@ function MenuPageContent() {
     const name = activeProductName.trim();
     if (!name) return;
     const normalizedName = name.toLowerCase();
+    const existing = activeProducts.find((item) => (item.name || "").toLowerCase() === normalizedName);
 
-    setActiveProducts((prev) => {
-      const existing = prev.find((item) => (item.name || "").toLowerCase() === normalizedName);
-      if (existing) {
-        return prev.map((item) =>
+    if (existing) {
+      setActiveProducts((prev) =>
+        prev.map((item) =>
           item.id === existing.id
             ? { ...item, name, prefer: true, note: item.note || "", hidden: false }
             : item
-        );
-      }
-      return [
+        )
+      );
+      setExpandedActiveProductNoteId(existing.id);
+    } else {
+      const newId = crypto.randomUUID();
+      setActiveProducts((prev) => [
         ...prev,
         {
-          id: crypto.randomUUID(),
+          id: newId,
           name,
           scope: "in_period",
           untilDate: "",
@@ -1390,11 +1393,13 @@ function MenuPageContent() {
           note: "",
           hidden: false,
         },
-      ];
-    });
+      ]);
+      setExpandedActiveProductNoteId(newId);
+    }
 
     appendProductSuggestions([name]);
     setKnownProductSuggestions(loadProductSuggestions());
+    setActiveProductsSearch("");
     setActiveProductName("");
   };
 
@@ -2741,10 +2746,8 @@ function MenuPageContent() {
     );
   };
 
-  const ActiveProductsDialog = () => {
-    if (!showActiveProductsDialog) return null;
-
-    return createPortal(
+  const activeProductsDialog = showActiveProductsDialog
+    ? createPortal(
       <div
         className="move-dialog-overlay"
         style={{
@@ -2971,8 +2974,8 @@ function MenuPageContent() {
         </div>
       </div>,
       document.body
-    );
-  };
+    )
+    : null;
 
   const renderMenuItemRow = (
     cellKey: string,
@@ -3382,7 +3385,7 @@ function MenuPageContent() {
       <DropdownMenu />
       <MoveDialog />
       <MealSettingsDialog />
-      <ActiveProductsDialog />
+      {activeProductsDialog}
 
       <AddEditDialog
         key={
