@@ -327,6 +327,8 @@ export default function SettingsPage() {
                 className="input"
                 style={{ minWidth: "180px", maxWidth: "320px" }}
                 value={nameDrafts[menu.id] || ""}
+                placeholder="Название меню (редактируется)"
+                aria-label={`Название меню ${menu.name}`}
                 onChange={(e) =>
                   setNameDrafts((prev) => ({
                     ...prev,

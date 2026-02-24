@@ -3521,30 +3521,37 @@ function MenuPageContent() {
       </div>
 
       <div className="card" style={{ marginBottom: "10px", padding: "8px 10px" }}>
-        <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "nowrap" }}>
-          <strong style={{ fontSize: "15px", whiteSpace: "nowrap" }}>Меню:</strong>
-          <select
-            className="input"
-            style={{ minWidth: "120px", maxWidth: "280px", flex: "1 1 auto" }}
-            value={activeMenuId}
-            onChange={(e) => handleSelectMenuProfile(e.target.value)}
-          >
-            {menuProfiles.map((menu) => (
-              <option key={menu.id} value={menu.id}>
-                {menu.name}
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            className="btn"
-            style={{ minWidth: "36px", padding: "6px 10px" }}
-            title="Настройки меню"
-            aria-label="Настройки меню"
-            onClick={() => router.push("/settings#menu-management")}
-          >
-            ⚙
-          </button>
+        <div style={{ display: "grid", gap: "4px" }}>
+          <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "nowrap" }}>
+            <strong style={{ fontSize: "15px", whiteSpace: "nowrap" }}>Меню:</strong>
+            <select
+              className="input"
+              style={{ minWidth: "120px", maxWidth: "280px", flex: "1 1 auto" }}
+              value={activeMenuId}
+              onChange={(e) => handleSelectMenuProfile(e.target.value)}
+              title="Выбор активного меню"
+              aria-label="Выбор активного меню"
+            >
+              {menuProfiles.map((menu) => (
+                <option key={menu.id} value={menu.id}>
+                  {menu.name}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              className="btn"
+              style={{ minWidth: "36px", padding: "6px 10px" }}
+              title="Настройки меню"
+              aria-label="Настройки меню"
+              onClick={() => router.push("/settings#menu-management")}
+            >
+              ⚙
+            </button>
+          </div>
+          <span className="muted" style={{ fontSize: "12px" }}>
+            Это выбор меню. Переименовать можно в «Настройки меню».
+          </span>
         </div>
       </div>
 
