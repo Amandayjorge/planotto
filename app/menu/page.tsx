@@ -35,7 +35,7 @@ const GUEST_REMINDER_RECIPES_THRESHOLD = 3;
 const ACTIVE_PRODUCTS_CLOUD_META_KEY = "planotto_active_products_v1";
 const ACTIVE_PRODUCT_NOTE_MAX_LENGTH = 40;
 const MENU_STORAGE_VERSION = 2;
-const DEFAULT_MENU_NAME = "Семья";
+const DEFAULT_MENU_NAME = "Меню 1";
 const DAY_STRUCTURE_MODE_KEY = "menuDayStructureMode";
 const MEAL_STRUCTURE_SETTINGS_KEY = "menuMealStructureSettings";
 const MEAL_STRUCTURE_DEFAULT_SETTINGS_KEY = "menuMealStructureDefaults";
@@ -1018,8 +1018,8 @@ function MenuPageContent() {
   const [mealData, setMealData] = useState<Record<string, MenuItem[]>>({});
   const [menuProfiles, setMenuProfiles] = useState<MenuProfileState[]>([]);
   const [activeMenuId, setActiveMenuId] = useState("");
+  const [activeMenuNameDraft, setActiveMenuNameDraft] = useState("");
   const [newMenuName, setNewMenuName] = useState("");
-  const [mergeShoppingWithAllMenus, setMergeShoppingWithAllMenus] = useState(false);
 
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [hasLoaded, setHasLoaded] = useState(false);
@@ -2142,6 +2142,11 @@ function MenuPageContent() {
   }, [activeMenuId, hasLoaded, menuProfiles]);
 
   useEffect(() => {
+    const activeMenu = menuProfiles.find((menu) => menu.id === activeMenuId);
+    setActiveMenuNameDraft(activeMenu?.name || "");
+  }, [activeMenuId, menuProfiles]);
+
+  useEffect(() => {
     if (!hasLoaded || !activeMenuId) return;
     persistMenuSnapshot(mealData, cellPeopleCount, cookedStatus, activeMenuId);
   }, [
@@ -2344,20 +2349,27 @@ function MenuPageContent() {
     setActiveMenuId(menuId);
   };
 
-  const handleRemoveMenuProfile = (menuId: string) => {
-    if (menuProfiles.length <= 1) {
-      alert("Нужно оставить минимум одно меню.");
-      return;
-    }
-    const target = menuProfiles.find((menu) => menu.id === menuId);
-    if (!target) return;
-    if (!confirm(`Удалить меню "${target.name}"?`)) return;
+  const handleRenameActiveMenu = (rawName: string) => {
+    const normalizedName = rawName.trim().replace(/\s+/g, " ");
+    if (!normalizedName || !activeMenuId) return;
 
-    const nextProfiles = menuProfiles.filter((menu) => menu.id !== menuId);
-    const nextActiveId = activeMenuId === menuId ? nextProfiles[0]?.id || "" : activeMenuId;
+    const target = menuProfiles.find((menu) => menu.id === activeMenuId);
+    if (!target) return;
+    if (target.name === normalizedName) return;
+
+    const duplicate = menuProfiles.some(
+      (menu) =>
+        menu.id !== activeMenuId &&
+        menu.name.toLocaleLowerCase("ru-RU") === normalizedName.toLocaleLowerCase("ru-RU")
+    );
+    if (duplicate) return;
+
+    const nextProfiles = menuProfiles.map((menu) =>
+      menu.id === activeMenuId ? { ...menu, name: normalizedName } : menu
+    );
     setMenuProfiles(nextProfiles);
-    setActiveMenuId(nextActiveId);
-    persistMenuBundleSnapshot(nextProfiles, nextActiveId);
+    setActiveMenuNameDraft(normalizedName);
+    persistMenuBundleSnapshot(nextProfiles, activeMenuId);
   };
 
   const generateShoppingListForMenu = (menuId: string) => {
@@ -2372,7 +2384,7 @@ function MenuPageContent() {
     });
     const targetMenu = menuProfilesWithCurrentState.find((menu) => menu.id === menuId);
     if (!targetMenu) return;
-    const sourceMenus = mergeShoppingWithAllMenus ? menuProfilesWithCurrentState : [targetMenu];
+    const sourceMenus = [targetMenu];
 
     const dishNames = sourceMenus
       .flatMap((menu) => Object.values(menu.mealData))
@@ -2383,13 +2395,10 @@ function MenuPageContent() {
 
     persistMenuBundleSnapshot(menuProfilesWithCurrentState, activeMenuId);
     sessionStorage.setItem("menuDishes", JSON.stringify(dishNames));
-    sessionStorage.setItem(
-      "cellPeopleCount",
-      JSON.stringify(mergeShoppingWithAllMenus ? {} : targetMenu.cellPeopleCount)
-    );
+    sessionStorage.setItem("cellPeopleCount", JSON.stringify(targetMenu.cellPeopleCount));
     sessionStorage.setItem("shoppingSelectedMenuId", menuId);
     sessionStorage.setItem("shoppingSelectedMenuName", targetMenu.name);
-    sessionStorage.setItem("shoppingUseMergedMenus", mergeShoppingWithAllMenus ? "1" : "0");
+    sessionStorage.setItem("shoppingUseMergedMenus", "0");
     sessionStorage.setItem("shoppingListUpdatedFromMenu", "1");
     router.push("/shopping-list");
   };
@@ -3551,54 +3560,48 @@ function MenuPageContent() {
 
       <div className="card" style={{ marginBottom: "14px", padding: "12px" }}>
         <div style={{ display: "grid", gap: "10px" }}>
-          <strong style={{ fontSize: "16px" }}>Меню периода</strong>
-          {menuProfiles.map((menu) => {
-            const dishCount = Object.values(menu.mealData)
-              .flatMap((rows) => rows || [])
-              .filter((item) => getDisplayText([item]).trim().length > 0).length;
-            return (
-              <div
-                key={menu.id}
-                style={{
-                  display: "flex",
-                  gap: "8px",
-                  alignItems: "center",
-                  flexWrap: "wrap",
-                  padding: "8px",
-                  border: "1px solid var(--border-default)",
-                  borderRadius: "10px",
-                  background:
-                    menu.id === activeMenuId
-                      ? "color-mix(in srgb, var(--accent-primary) 10%, var(--background-primary) 90%)"
-                      : "var(--background-primary)",
-                }}
-              >
-                <button
-                  type="button"
-                  className={`btn ${menu.id === activeMenuId ? "btn-primary" : ""}`.trim()}
-                  onClick={() => handleSelectMenuProfile(menu.id)}
-                >
-                  Меню: {menu.name}
-                </button>
-                <span className="muted" style={{ fontSize: "12px" }}>
-                  Блюд: {dishCount}
-                </span>
-                <button
-                  type="button"
-                  className="btn"
-                  onClick={() => generateShoppingListForMenu(menu.id)}
-                  disabled={dishCount === 0}
-                >
-                  Сформировать список покупок
-                </button>
-                {menuProfiles.length > 1 ? (
-                  <button type="button" className="btn btn-danger" onClick={() => handleRemoveMenuProfile(menu.id)}>
-                    Удалить меню
-                  </button>
-                ) : null}
-              </div>
-            );
-          })}
+          <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+            <strong style={{ fontSize: "16px" }}>Меню:</strong>
+            <select
+              className="input"
+              style={{ minWidth: "180px", maxWidth: "280px" }}
+              value={activeMenuId}
+              onChange={(e) => handleSelectMenuProfile(e.target.value)}
+            >
+              {menuProfiles.map((menu) => (
+                <option key={menu.id} value={menu.id}>
+                  {menu.name}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              className="btn"
+              onClick={generateShoppingList}
+              disabled={Object.values(mealData).filter((item) => getDisplayText(item).trim() !== "").length === 0}
+            >
+              Сформировать список покупок
+            </button>
+          </div>
+
+          <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+            <input
+              className="input"
+              style={{ maxWidth: "260px" }}
+              value={activeMenuNameDraft}
+              onChange={(e) => setActiveMenuNameDraft(e.target.value)}
+              onBlur={() => handleRenameActiveMenu(activeMenuNameDraft)}
+              placeholder="Название текущего меню"
+            />
+            <button
+              type="button"
+              className="btn"
+              onClick={() => handleRenameActiveMenu(activeMenuNameDraft)}
+              disabled={!activeMenuNameDraft.trim()}
+            >
+              Сохранить
+            </button>
+          </div>
 
           <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
             <input
@@ -3611,14 +3614,6 @@ function MenuPageContent() {
             <button type="button" className="btn" onClick={handleCreateMenuProfile} disabled={!newMenuName.trim()}>
               + Добавить меню
             </button>
-            <label style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "13px" }}>
-              <input
-                type="checkbox"
-                checked={mergeShoppingWithAllMenus}
-                onChange={(e) => setMergeShoppingWithAllMenus(e.target.checked)}
-              />
-              Объединить с общим списком
-            </label>
           </div>
         </div>
       </div>
