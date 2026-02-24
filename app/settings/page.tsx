@@ -387,7 +387,7 @@ export default function SettingsPage() {
         <div style={{ marginTop: "12px" }}>
           <button
             type="button"
-            className="btn"
+            className="btn btn-primary"
             onClick={() => {
               setNewMenuNameDraft("");
               setIsCreateMenuDialogOpen(true);
