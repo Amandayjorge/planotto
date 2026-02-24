@@ -8,8 +8,7 @@ const RANGE_STATE_KEY = "selectedMenuRange";
 const WEEK_START_KEY = "selectedWeekStart";
 const MENU_SHOPPING_MERGE_KEY_PREFIX = "menuShoppingMerge";
 const MENU_STORAGE_VERSION = 2;
-const DEFAULT_MENU_NAME_FALLBACK = "Основное";
-const DEFAULT_MENU_NAME_KEY = "menuDefaultName";
+const DEFAULT_MENU_NAME = "Основное";
 
 interface MenuProfileState {
   id: string;
@@ -50,25 +49,6 @@ const formatDisplayDate = (dateIso: string): string => {
 
 const normalizeMenuProfileName = (value: string): string => value.trim().replace(/\s+/g, " ");
 
-const getStoredDefaultMenuName = (): string => {
-  if (typeof window === "undefined") return DEFAULT_MENU_NAME_FALLBACK;
-  const stored = localStorage.getItem(DEFAULT_MENU_NAME_KEY) || "";
-  const normalized = normalizeMenuProfileName(stored);
-  return normalized || DEFAULT_MENU_NAME_FALLBACK;
-};
-
-const resolveDefaultMenuName = (): string => {
-  if (typeof window === "undefined") return DEFAULT_MENU_NAME_FALLBACK;
-  const storedName = getStoredDefaultMenuName();
-  if ((localStorage.getItem(DEFAULT_MENU_NAME_KEY) || "").trim()) {
-    return storedName;
-  }
-  const asked = window.prompt("Как назвать меню?", DEFAULT_MENU_NAME_FALLBACK);
-  const resolved = normalizeMenuProfileName(asked || "") || DEFAULT_MENU_NAME_FALLBACK;
-  localStorage.setItem(DEFAULT_MENU_NAME_KEY, resolved);
-  return resolved;
-};
-
 const normalizeMenuDataRecord = (value: unknown): Record<string, unknown[]> => {
   if (!value || typeof value !== "object") return {};
   const converted: Record<string, unknown[]> = {};
@@ -100,7 +80,7 @@ const normalizeCookedStatusMap = (value: unknown): Record<string, boolean> => {
 
 const createMenuProfileState = (name: string, id?: string): MenuProfileState => ({
   id: id || crypto.randomUUID(),
-  name: normalizeMenuProfileName(name) || DEFAULT_MENU_NAME_FALLBACK,
+  name: normalizeMenuProfileName(name) || DEFAULT_MENU_NAME,
   mealData: {},
   cellPeopleCount: {},
   cookedStatus: {},
@@ -208,7 +188,7 @@ export default function SettingsPage() {
     const nextRangeKey = getCurrentRangeKey();
     const parsed = parseMenuBundleFromStorage(
       localStorage.getItem(`${MENU_STORAGE_KEY}:${nextRangeKey}`),
-      resolveDefaultMenuName()
+      DEFAULT_MENU_NAME
     );
     const nextDrafts = buildNameDrafts(parsed.menus);
     return {
@@ -226,7 +206,8 @@ export default function SettingsPage() {
   const [menuProfiles, setMenuProfiles] = useState<MenuProfileState[]>(initialState.menuProfiles);
   const [activeMenuId, setActiveMenuId] = useState(initialState.activeMenuId);
   const [nameDrafts, setNameDrafts] = useState<Record<string, string>>(initialState.nameDrafts);
-  const [newMenuName, setNewMenuName] = useState("");
+  const [isCreateMenuDialogOpen, setIsCreateMenuDialogOpen] = useState(false);
+  const [newMenuNameDraft, setNewMenuNameDraft] = useState("");
   const [mergeShoppingWithAllMenus, setMergeShoppingWithAllMenus] = useState(
     initialState.mergeShoppingWithAllMenus
   );
@@ -278,7 +259,7 @@ export default function SettingsPage() {
   };
 
   const addMenu = () => {
-    const normalized = newMenuName.trim().replace(/\s+/g, " ");
+    const normalized = newMenuNameDraft.trim().replace(/\s+/g, " ");
     if (!normalized) return;
     const duplicate = menuProfiles.some(
       (menu) => menu.name.toLocaleLowerCase("ru-RU") === normalized.toLocaleLowerCase("ru-RU")
@@ -289,7 +270,8 @@ export default function SettingsPage() {
     const nextMenus = [...menuProfiles, created];
     persistMenuBundle(nextMenus, activeMenuId || created.id);
     setNameDrafts(buildNameDrafts(nextMenus));
-    setNewMenuName("");
+    setNewMenuNameDraft("");
+    setIsCreateMenuDialogOpen(false);
   };
 
   const removeMenu = (menuId: string) => {
@@ -313,7 +295,7 @@ export default function SettingsPage() {
     <section className="card">
       <h1 className="h1">Настройки</h1>
       <div id="menu-management" className="card" style={{ marginTop: "12px", padding: "12px" }}>
-        <h2 style={{ margin: 0, fontSize: "18px" }}>Управление меню</h2>
+        <h2 style={{ margin: 0, fontSize: "18px" }}>Настройки меню</h2>
         <p className="muted" style={{ marginTop: "6px" }}>
           Период: {periodLabel || "не выбран"}
         </p>
@@ -372,15 +354,15 @@ export default function SettingsPage() {
           ))}
         </div>
 
-        <div style={{ display: "flex", gap: "8px", marginTop: "12px", flexWrap: "wrap" }}>
-          <input
-            className="input"
-            style={{ minWidth: "180px", maxWidth: "320px" }}
-            value={newMenuName}
-            onChange={(e) => setNewMenuName(e.target.value)}
-            placeholder="Новое меню"
-          />
-          <button type="button" className="btn" onClick={addMenu} disabled={!newMenuName.trim()}>
+        <div style={{ marginTop: "12px" }}>
+          <button
+            type="button"
+            className="btn"
+            onClick={() => {
+              setNewMenuNameDraft("");
+              setIsCreateMenuDialogOpen(true);
+            }}
+          >
             + Добавить меню
           </button>
         </div>
@@ -391,6 +373,38 @@ export default function SettingsPage() {
           ← Назад в меню
         </Link>
       </div>
+
+      {isCreateMenuDialogOpen ? (
+        <div className="menu-dialog-overlay" role="dialog" aria-modal="true" aria-label="Новое меню">
+          <div className="menu-dialog" style={{ maxWidth: "420px" }}>
+            <h3 style={{ marginTop: 0, marginBottom: "12px" }}>Новое меню</h3>
+            <input
+              className="menu-dialog__input"
+              value={newMenuNameDraft}
+              onChange={(e) => setNewMenuNameDraft(e.target.value)}
+              placeholder="Название меню"
+              autoFocus
+            />
+            <div className="menu-dialog__actions">
+              <button
+                type="button"
+                className="menu-dialog__confirm"
+                onClick={addMenu}
+                disabled={!newMenuNameDraft.trim()}
+              >
+                Создать
+              </button>
+              <button
+                type="button"
+                className="menu-dialog__cancel"
+                onClick={() => setIsCreateMenuDialogOpen(false)}
+              >
+                Отмена
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }

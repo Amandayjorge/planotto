@@ -35,8 +35,7 @@ const GUEST_REMINDER_RECIPES_THRESHOLD = 3;
 const ACTIVE_PRODUCTS_CLOUD_META_KEY = "planotto_active_products_v1";
 const ACTIVE_PRODUCT_NOTE_MAX_LENGTH = 40;
 const MENU_STORAGE_VERSION = 2;
-const DEFAULT_MENU_NAME_FALLBACK = "Основное";
-const DEFAULT_MENU_NAME_KEY = "menuDefaultName";
+const DEFAULT_MENU_NAME = "Основное";
 const MENU_SHOPPING_MERGE_KEY_PREFIX = "menuShoppingMerge";
 const DAY_STRUCTURE_MODE_KEY = "menuDayStructureMode";
 const MEAL_STRUCTURE_SETTINGS_KEY = "menuMealStructureSettings";
@@ -62,25 +61,6 @@ const createDefaultMealSlots = (): MealSlotSetting[] =>
 const normalizeMealSlotName = (value: string): string => value.trim().replace(/\s+/g, " ");
 const normalizeProductName = (value: string): string => value.trim().replace(/\s+/g, " ");
 const normalizeMenuProfileName = (value: string): string => value.trim().replace(/\s+/g, " ");
-
-const getStoredDefaultMenuName = (): string => {
-  if (typeof window === "undefined") return DEFAULT_MENU_NAME_FALLBACK;
-  const stored = localStorage.getItem(DEFAULT_MENU_NAME_KEY) || "";
-  const normalized = normalizeMenuProfileName(stored);
-  return normalized || DEFAULT_MENU_NAME_FALLBACK;
-};
-
-const resolveDefaultMenuName = (): string => {
-  if (typeof window === "undefined") return DEFAULT_MENU_NAME_FALLBACK;
-  const storedName = getStoredDefaultMenuName();
-  if ((localStorage.getItem(DEFAULT_MENU_NAME_KEY) || "").trim()) {
-    return storedName;
-  }
-  const asked = window.prompt("Как назвать меню?", DEFAULT_MENU_NAME_FALLBACK);
-  const resolved = normalizeMenuProfileName(asked || "") || DEFAULT_MENU_NAME_FALLBACK;
-  localStorage.setItem(DEFAULT_MENU_NAME_KEY, resolved);
-  return resolved;
-};
 
 const parseMealSlots = (raw: string | null): MealSlotSetting[] | null => {
   if (!raw) return null;
@@ -268,7 +248,7 @@ const normalizeCookedStatusMap = (value: unknown): Record<string, boolean> => {
 
 const createMenuProfileState = (name: string, id?: string): MenuProfileState => ({
   id: id || crypto.randomUUID(),
-  name: normalizeMenuProfileName(name) || DEFAULT_MENU_NAME_FALLBACK,
+  name: normalizeMenuProfileName(name) || DEFAULT_MENU_NAME,
   mealData: {},
   cellPeopleCount: {},
   cookedStatus: {},
@@ -1270,7 +1250,7 @@ function MenuPageContent() {
     ) => {
       if (typeof window === "undefined") return;
       try {
-        const fallbackMenu = createMenuProfileState(getStoredDefaultMenuName(), targetMenuId || undefined);
+        const fallbackMenu = createMenuProfileState(DEFAULT_MENU_NAME, targetMenuId || undefined);
         const sourceMenus = menuProfiles.length > 0 ? menuProfiles : [fallbackMenu];
         const resolvedTargetId = targetMenuId || sourceMenus[0].id;
         const nextProfiles = sourceMenus.map((menu) => {
@@ -2097,7 +2077,7 @@ function MenuPageContent() {
       storedMenu,
       legacyCounts,
       legacyCooked,
-      resolveDefaultMenuName()
+      DEFAULT_MENU_NAME
     );
     const initialActiveId = parsedBundle.activeMenuId;
     const initialActiveMenu =
@@ -3540,41 +3520,38 @@ function MenuPageContent() {
         ) : null}
       </div>
 
-      <div className="card" style={{ marginBottom: "14px", padding: "12px" }}>
-        <div style={{ display: "grid", gap: "10px" }}>
-          <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
-            <strong style={{ fontSize: "16px" }}>Меню:</strong>
-            <select
-              className="input"
-              style={{ minWidth: "180px", maxWidth: "280px" }}
-              value={activeMenuId}
-              onChange={(e) => handleSelectMenuProfile(e.target.value)}
-            >
-              {menuProfiles.map((menu) => (
-                <option key={menu.id} value={menu.id}>
-                  {menu.name}
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              className="btn"
-              onClick={generateShoppingList}
-              disabled={Object.values(mealData).filter((item) => getDisplayText(item).trim() !== "").length === 0}
-            >
-              Сформировать список покупок
-            </button>
-            <button type="button" className="btn" onClick={() => router.push("/settings#menu-management")}>
-              Настройки управления
-            </button>
-          </div>
+      <div className="card" style={{ marginBottom: "10px", padding: "8px 10px" }}>
+        <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "nowrap" }}>
+          <strong style={{ fontSize: "15px", whiteSpace: "nowrap" }}>Меню:</strong>
+          <select
+            className="input"
+            style={{ minWidth: "120px", maxWidth: "280px", flex: "1 1 auto" }}
+            value={activeMenuId}
+            onChange={(e) => handleSelectMenuProfile(e.target.value)}
+          >
+            {menuProfiles.map((menu) => (
+              <option key={menu.id} value={menu.id}>
+                {menu.name}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            className="btn"
+            style={{ minWidth: "36px", padding: "6px 10px" }}
+            title="Настройки меню"
+            aria-label="Настройки меню"
+            onClick={() => router.push("/settings#menu-management")}
+          >
+            ⚙
+          </button>
         </div>
       </div>
 
-      <div className="card" style={{ marginBottom: "14px", padding: "12px" }}>
+      <div className="card" style={{ marginBottom: "10px", padding: "8px 10px" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", flexWrap: "wrap" }}>
-          <strong style={{ fontSize: "16px" }}>Активные продукты: {visibleActiveProductsCount}</strong>
-          <button type="button" className="btn" onClick={() => setShowActiveProductsDialog(true)}>
+          <strong style={{ fontSize: "15px" }}>Активные: {visibleActiveProductsCount}</strong>
+          <button type="button" className="btn" style={{ padding: "6px 10px" }} onClick={() => setShowActiveProductsDialog(true)}>
             {visibleActiveProductsCount === 0 ? "Добавить" : "Открыть"}
           </button>
         </div>
