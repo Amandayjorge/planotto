@@ -314,44 +314,54 @@ export default function SettingsPage() {
             <div
               key={menu.id}
               style={{
-                display: "flex",
-                alignItems: "center",
+                display: "grid",
                 gap: "8px",
-                flexWrap: "wrap",
                 border: "1px solid var(--border-default)",
                 borderRadius: "10px",
                 padding: "8px",
               }}
             >
-              <input
-                className="input"
-                style={{ minWidth: "180px", maxWidth: "320px" }}
-                value={nameDrafts[menu.id] || ""}
-                placeholder="Название меню (редактируется)"
-                aria-label={`Название меню ${menu.name}`}
-                onChange={(e) =>
-                  setNameDrafts((prev) => ({
-                    ...prev,
-                    [menu.id]: e.target.value,
-                  }))
-                }
-              />
-              <button type="button" className="btn" onClick={() => saveMenuName(menu.id)}>
-                Сохранить
-              </button>
-              <button
-                type="button"
-                className="btn btn-danger"
-                onClick={() => removeMenu(menu.id)}
-                disabled={menuProfiles.length <= 1}
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                <input
+                  className="input"
+                  style={{ minWidth: "180px", maxWidth: "320px", flex: "1 1 220px" }}
+                  value={nameDrafts[menu.id] || ""}
+                  placeholder="Название меню (редактируется)"
+                  aria-label={`Название меню ${menu.name}`}
+                  onChange={(e) =>
+                    setNameDrafts((prev) => ({
+                      ...prev,
+                      [menu.id]: e.target.value,
+                    }))
+                  }
+                />
+                <button type="button" className="btn btn-primary" onClick={() => saveMenuName(menu.id)}>
+                  Сохранить
+                </button>
+                {menu.id === activeMenuId ? (
+                  <span className="muted" style={{ fontSize: "12px" }}>
+                    Текущее меню
+                  </span>
+                ) : null}
+              </div>
+              <div
+                style={{
+                  borderTop: "1px solid var(--border-default)",
+                  paddingTop: "8px",
+                  display: "flex",
+                  justifyContent: "flex-end",
+                }}
               >
-                Удалить
-              </button>
-              {menu.id === activeMenuId ? (
-                <span className="muted" style={{ fontSize: "12px" }}>
-                  Текущее меню
-                </span>
-              ) : null}
+                <button
+                  type="button"
+                  className="btn btn-danger"
+                  style={{ padding: "6px 10px" }}
+                  onClick={() => removeMenu(menu.id)}
+                  disabled={menuProfiles.length <= 1}
+                >
+                  Удалить меню
+                </button>
+              </div>
             </div>
           ))}
         </div>
