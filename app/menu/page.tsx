@@ -3535,15 +3535,6 @@ function MenuPageContent() {
         </div>
       </div>
 
-      <div className="card" style={{ marginBottom: "10px", padding: "8px 10px" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", flexWrap: "wrap" }}>
-          <strong style={{ fontSize: "15px" }}>Активные: {visibleActiveProductsCount}</strong>
-          <button type="button" className="btn" style={{ padding: "6px 10px" }} onClick={() => setShowActiveProductsDialog(true)}>
-            {visibleActiveProductsCount === 0 ? "Добавить" : "Открыть"}
-          </button>
-        </div>
-      </div>
-
       {showCalendarInlineHint && recipes.length === 0 && (
         <div className="menu-inline-onboarding-hint">
           Подсказка: нажмите <strong>+</strong> в любом дне, чтобы добавить блюдо в меню.

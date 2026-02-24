@@ -7,6 +7,7 @@ const MENU_STORAGE_KEY = "weeklyMenu";
 const RANGE_STATE_KEY = "selectedMenuRange";
 const WEEK_START_KEY = "selectedWeekStart";
 const MENU_SHOPPING_MERGE_KEY_PREFIX = "menuShoppingMerge";
+const ACTIVE_PRODUCTS_KEY_PREFIX = "activeProducts";
 const MENU_STORAGE_VERSION = 2;
 const DEFAULT_MENU_NAME = "Основное";
 
@@ -159,6 +160,19 @@ const getCurrentRangeKey = (): string => {
   return `${startIso}__${endIso}`;
 };
 
+const getActiveProductsCount = (rangeKey: string): number => {
+  if (typeof window === "undefined" || !rangeKey) return 0;
+  try {
+    const raw = localStorage.getItem(`${ACTIVE_PRODUCTS_KEY_PREFIX}:${rangeKey}`);
+    if (!raw) return 0;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return 0;
+    return parsed.filter((item) => item && typeof item === "object" && typeof item.name === "string" && item.name.trim()).length;
+  } catch {
+    return 0;
+  }
+};
+
 export default function SettingsPage() {
   const buildNameDrafts = (menus: MenuProfileState[]): Record<string, string> => {
     const nextDrafts: Record<string, string> = {};
@@ -174,6 +188,7 @@ export default function SettingsPage() {
     activeMenuId: string;
     nameDrafts: Record<string, string>;
     mergeShoppingWithAllMenus: boolean;
+    activeProductsCount: number;
   } => {
     if (typeof window === "undefined") {
       return {
@@ -182,6 +197,7 @@ export default function SettingsPage() {
         activeMenuId: "",
         nameDrafts: {},
         mergeShoppingWithAllMenus: false,
+        activeProductsCount: 0,
       };
     }
 
@@ -198,6 +214,7 @@ export default function SettingsPage() {
       nameDrafts: nextDrafts,
       mergeShoppingWithAllMenus:
         localStorage.getItem(`${MENU_SHOPPING_MERGE_KEY_PREFIX}:${nextRangeKey}`) === "1",
+      activeProductsCount: getActiveProductsCount(nextRangeKey),
     };
   };
 
@@ -211,6 +228,7 @@ export default function SettingsPage() {
   const [mergeShoppingWithAllMenus, setMergeShoppingWithAllMenus] = useState(
     initialState.mergeShoppingWithAllMenus
   );
+  const [activeProductsCount] = useState(initialState.activeProductsCount);
 
   const periodLabel = useMemo(() => {
     if (!rangeKey.includes("__")) return "";
@@ -378,6 +396,16 @@ export default function SettingsPage() {
             + Добавить меню
           </button>
         </div>
+      </div>
+
+      <div className="card" style={{ marginTop: "12px", padding: "12px" }}>
+        <h2 style={{ margin: 0, fontSize: "18px" }}>Приоритетные продукты</h2>
+        <p className="muted" style={{ marginTop: "6px", marginBottom: "10px" }}>
+          Активных продуктов: {activeProductsCount}
+        </p>
+        <Link href="/priority-products" className="btn">
+          Открыть
+        </Link>
       </div>
 
       <div style={{ marginTop: "12px" }}>
