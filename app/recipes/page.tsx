@@ -16,6 +16,7 @@ import {
   syncRecipesToLocalCache,
   upsertRecipeInLocalCache,
   type RecipeModel,
+  type RecipeVisibility,
 } from "../lib/recipesSupabase";
 import { getSupabaseClient, isSupabaseConfigured } from "../lib/supabaseClient";
 import { RECIPE_TAGS } from "../lib/recipeTags";
@@ -48,6 +49,24 @@ const TEMPLATE_IMAGE_FALLBACKS: Record<string, string> = {
   "Паста с томатным соусом": "/recipes/templates/pasta-tomato.jpg",
   "Салат с тунцом": "/recipes/templates/tuna-salad.jpg",
   "Оладьи на кефире": "/recipes/templates/oladi-kefir.jpg",
+};
+
+const VISIBILITY_BADGE_META: Record<
+  Exclude<RecipeVisibility, "private">,
+  { title: string; emoji: string }
+> = {
+  public: {
+    title: "Публичный рецепт: доступен другим пользователям",
+    emoji: "🌍",
+  },
+  link: {
+    title: "Рецепт доступен только по прямой ссылке",
+    emoji: "🔗",
+  },
+  invited: {
+    title: "Рецепт доступен только приглашенным пользователям",
+    emoji: "👥",
+  },
 };
 
 function looksLikeUrl(value: string): boolean {
@@ -1604,27 +1623,29 @@ function RecipesPageContent() {
                         <h3 style={{ margin: 0 }}>{recipe.title}</h3>
                         <div style={{ marginTop: "4px", fontSize: "12px", color: "var(--text-tertiary)", display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
                           <span>{sourceLabel}</span>
-                          {viewMode === "mine" && recipe.visibility === "public" ? (
-                            <span
-                              title="Публичный рецепт: доступен другим пользователям"
-                              style={{
-                                display: "inline-flex",
-                                alignItems: "center",
-                                gap: "4px",
-                                border: "1px solid color-mix(in srgb, var(--accent-primary) 45%, var(--border-default) 55%)",
-                                borderRadius: "999px",
-                                padding: "1px 7px",
-                                color: "var(--text-secondary)",
-                                fontSize: "11px",
-                                background: "color-mix(in srgb, var(--accent-primary) 10%, var(--background-primary) 90%)",
-                              }}
-                            >
-                              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                                <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.8" />
-                                <path d="M3 12h18M12 3c2.8 2.6 2.8 15.4 0 18M12 3c-2.8 2.6-2.8 15.4 0 18" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-                              </svg>
-                              <span>Публичный</span>
-                            </span>
+                          {viewMode === "mine" && recipe.visibility !== "private" ? (
+                            (() => {
+                              const meta = VISIBILITY_BADGE_META[recipe.visibility as Exclude<RecipeVisibility, "private">];
+                              return (
+                                <span
+                                  title={meta.title}
+                                  style={{
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    border: "1px solid color-mix(in srgb, var(--accent-primary) 45%, var(--border-default) 55%)",
+                                    borderRadius: "999px",
+                                    width: "24px",
+                                    height: "24px",
+                                    color: "var(--text-secondary)",
+                                    fontSize: "13px",
+                                    background: "color-mix(in srgb, var(--accent-primary) 10%, var(--background-primary) 90%)",
+                                  }}
+                                >
+                                  {meta.emoji}
+                                </span>
+                              );
+                            })()
                           ) : null}
                           {pantryCoverageText ? (
                             <span

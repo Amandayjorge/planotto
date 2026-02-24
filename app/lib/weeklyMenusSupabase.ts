@@ -2,7 +2,7 @@
 
 import { getSupabaseClient } from "./supabaseClient";
 
-export type MenuWeekVisibility = "private" | "public";
+export type MenuWeekVisibility = "private" | "public" | "link" | "invited";
 
 export interface WeeklyMenuPayload {
   weekStart: string;
@@ -10,6 +10,7 @@ export interface WeeklyMenuPayload {
   cellPeopleCount: Record<string, number>;
   cookedStatus: Record<string, boolean>;
   visibility: MenuWeekVisibility;
+  shareToken?: string;
 }
 
 interface WeeklyMenuRow {
@@ -20,7 +21,14 @@ interface WeeklyMenuRow {
   cell_people_count: Record<string, number> | null;
   cooked_status: Record<string, boolean> | null;
   visibility: MenuWeekVisibility | null;
+  share_token: string | null;
   updated_at: string | null;
+}
+
+interface WeeklyMenuAccessRow {
+  menu_id: string;
+  user_id: string;
+  role: "viewer" | "editor" | null;
 }
 
 interface PostgrestLikeError {
@@ -36,7 +44,7 @@ export interface PublicWeekSummary {
 }
 
 const WEEK_MENU_COLUMNS =
-  "id,owner_id,week_start,meal_data,cell_people_count,cooked_status,visibility,updated_at";
+  "id,owner_id,week_start,meal_data,cell_people_count,cooked_status,visibility,share_token,updated_at";
 
 const isMissingRelationError = (error: unknown, relationName: string): boolean => {
   if (!error || typeof error !== "object") return false;
@@ -46,12 +54,20 @@ const isMissingRelationError = (error: unknown, relationName: string): boolean =
   return typed.code === "42P01" || message.includes(relation) || message.includes("does not exist");
 };
 
+const normalizeVisibility = (value: unknown): MenuWeekVisibility => {
+  if (value === "public" || value === "link" || value === "invited" || value === "private") {
+    return value;
+  }
+  return "private";
+};
+
 const mapRowToPayload = (row: WeeklyMenuRow): WeeklyMenuPayload => ({
   weekStart: row.week_start,
   mealData: row.meal_data || {},
   cellPeopleCount: row.cell_people_count || {},
   cookedStatus: row.cooked_status || {},
-  visibility: row.visibility || "private",
+  visibility: normalizeVisibility(row.visibility),
+  shareToken: row.share_token || undefined,
 });
 
 export const getMineWeekMenu = async (
@@ -87,7 +103,8 @@ export const upsertMineWeekMenu = async (
       meal_data: payload.mealData || {},
       cell_people_count: payload.cellPeopleCount || {},
       cooked_status: payload.cookedStatus || {},
-      visibility: payload.visibility || "private",
+      visibility: normalizeVisibility(payload.visibility),
+      share_token: (payload.shareToken || "").trim() || null,
     },
     { onConflict: "owner_id,week_start" }
   );
@@ -169,3 +186,65 @@ export const copyPublicWeekToMine = async (
   return source.weekStart;
 };
 
+export interface WeeklyMenuAccessEntry {
+  userId: string;
+  role: "viewer" | "editor";
+}
+
+export const listWeeklyMenuAccessEntries = async (
+  _ownerId: string,
+  menuId: string
+): Promise<WeeklyMenuAccessEntry[]> => {
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase
+    .from("weekly_menu_access")
+    .select("menu_id,user_id,role")
+    .eq("menu_id", menuId);
+
+  if (error) {
+    if (isMissingRelationError(error, "weekly_menu_access")) return [];
+    throw error;
+  }
+
+  const rows = (data || []) as WeeklyMenuAccessRow[];
+  return rows
+    .filter((row) => row.menu_id === menuId && typeof row.user_id === "string" && row.user_id.length > 0)
+    .map((row) => ({
+      userId: row.user_id,
+      role: row.role === "editor" ? "editor" : "viewer",
+    }));
+};
+
+export const replaceWeeklyMenuAccessEntries = async (
+  _ownerId: string,
+  menuId: string,
+  entries: WeeklyMenuAccessEntry[]
+): Promise<void> => {
+  const supabase = getSupabaseClient();
+  const normalizedEntries = entries
+    .map((entry) => ({
+      menu_id: menuId,
+      user_id: String(entry.userId || "").trim(),
+      role: entry.role === "editor" ? "editor" : "viewer",
+    }))
+    .filter((entry) => entry.user_id.length > 0);
+
+  const { error: deleteError } = await supabase
+    .from("weekly_menu_access")
+    .delete()
+    .eq("menu_id", menuId);
+  if (deleteError) {
+    if (!isMissingRelationError(deleteError, "weekly_menu_access")) {
+      throw deleteError;
+    }
+    return;
+  }
+
+  if (normalizedEntries.length === 0) return;
+
+  const { error: insertError } = await supabase.from("weekly_menu_access").insert(normalizedEntries);
+  if (insertError) {
+    if (isMissingRelationError(insertError, "weekly_menu_access")) return;
+    throw insertError;
+  }
+};

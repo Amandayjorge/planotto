@@ -6,7 +6,7 @@ export const RECIPES_STORAGE_KEY = "recipes";
 const RECIPE_REPORTS_KEY = "recipeReports";
 const RECIPES_CLOUD_FALLBACK_KEY = "planotto_recipes_cloud_v1";
 
-export type RecipeVisibility = "private" | "public";
+export type RecipeVisibility = "private" | "public" | "link" | "invited";
 
 export interface Ingredient {
   name: string;
@@ -30,6 +30,7 @@ export interface RecipeModel {
   categories: string[];
   tags: string[];
   visibility: RecipeVisibility;
+  shareToken?: string;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -46,6 +47,7 @@ export interface RecipeUpsertInput {
   categories?: string[];
   tags?: string[];
   visibility?: RecipeVisibility;
+  shareToken?: string;
 }
 
 interface RecipeRow {
@@ -60,8 +62,20 @@ interface RecipeRow {
   image: string | null;
   categories: string[] | null;
   visibility: RecipeVisibility | null;
+  share_token: string | null;
   created_at: string | null;
   updated_at: string | null;
+}
+
+interface RecipeAccessRow {
+  recipe_id: string;
+  user_id: string;
+  role: "viewer" | "editor" | null;
+}
+
+interface RecipeAccessEmailRpcRow {
+  email: string | null;
+  role: "viewer" | "editor" | null;
 }
 
 interface RecipeNoteRow {
@@ -87,7 +101,7 @@ interface RecipeReportRecord {
 }
 
 const RECIPE_COLUMNS =
-  "id,owner_id,title,short_description,description,instructions,ingredients,servings,image,categories,visibility,created_at,updated_at";
+  "id,owner_id,title,short_description,description,instructions,ingredients,servings,image,categories,visibility,share_token,created_at,updated_at";
 
 const SEED_TEMPLATE_RECIPES: RecipeModel[] = [
   {
@@ -326,6 +340,14 @@ const isMissingRelationError = (error: unknown, relationName: string): boolean =
   return typed.code === "42P01" || message.includes(relation) || message.includes("does not exist");
 };
 
+const isMissingFunctionError = (error: unknown, functionName: string): boolean => {
+  if (!error || typeof error !== "object") return false;
+  const typed = error as PostgrestLikeError;
+  const message = String(typed.message || "").toLowerCase();
+  const name = functionName.toLowerCase();
+  return typed.code === "42883" || message.includes(name) || message.includes("function") && message.includes("does not exist");
+};
+
 const isDuplicateKeyError = (error: unknown): boolean => {
   if (!error || typeof error !== "object") return false;
   const typed = error as PostgrestLikeError;
@@ -335,6 +357,13 @@ const isDuplicateKeyError = (error: unknown): boolean => {
 
 const normalizeTitle = (value: string): string =>
   value.trim().toLocaleLowerCase("ru-RU").replace(/\s+/g, " ");
+
+const normalizeVisibility = (value: unknown): RecipeVisibility => {
+  if (value === "public" || value === "link" || value === "invited" || value === "private") {
+    return value;
+  }
+  return "private";
+};
 
 const getRecipeSortTimestamp = (recipe: RecipeModel): number => {
   const updatedAt = Date.parse(recipe.updatedAt || "");
@@ -424,7 +453,8 @@ const serializeRecipeForCloudFallback = (recipe: RecipeModel): Record<string, un
   image: recipe.image || "",
   categories: normalizeStringArray(recipe.categories),
   tags: normalizeStringArray(recipe.tags || recipe.categories),
-  visibility: "private",
+  visibility: normalizeVisibility(recipe.visibility),
+  shareToken: (recipe.shareToken || "").trim(),
   createdAt: recipe.createdAt || new Date().toISOString(),
   updatedAt: recipe.updatedAt || new Date().toISOString(),
 });
@@ -438,6 +468,7 @@ const mapCloudFallbackItemToRecipe = (ownerId: string, value: unknown): RecipeMo
 
   const categories = normalizeStringArray(raw.categories);
   const tags = normalizeStringArray(raw.tags ?? raw.categories);
+  const shareToken = String(raw.shareToken || "").trim();
 
   return {
     id,
@@ -454,7 +485,8 @@ const mapCloudFallbackItemToRecipe = (ownerId: string, value: unknown): RecipeMo
     image: String(raw.image || ""),
     categories,
     tags: tags.length > 0 ? tags : categories,
-    visibility: "private",
+    visibility: normalizeVisibility(raw.visibility),
+    shareToken: shareToken || undefined,
     createdAt: String(raw.createdAt || ""),
     updatedAt: String(raw.updatedAt || ""),
   };
@@ -513,7 +545,8 @@ const mapRow = (row: RecipeRow, notes?: string | null): RecipeModel => {
     image: row.image || "",
     categories: tags,
     tags,
-    visibility: row.visibility || "private",
+    visibility: normalizeVisibility(row.visibility),
+    shareToken: row.share_token || undefined,
     createdAt: row.created_at || undefined,
     updatedAt: row.updated_at || undefined,
   };
@@ -530,7 +563,8 @@ const toPayload = (input: RecipeUpsertInput) => {
     servings: input.servings && input.servings > 0 ? input.servings : 2,
     image: (input.image || "").trim(),
     categories: tags,
-    visibility: input.visibility || "private",
+    visibility: normalizeVisibility(input.visibility),
+    share_token: (input.shareToken || "").trim() || null,
   };
 };
 
@@ -548,7 +582,8 @@ export const syncRecipesToLocalCache = (recipes: RecipeModel[]): void => {
     image: item.image || "",
     categories: item.categories || [],
     tags: item.tags || item.categories || [],
-    visibility: item.visibility || "private",
+    visibility: normalizeVisibility(item.visibility),
+    shareToken: (item.shareToken || "").trim(),
   }));
   localStorage.setItem(RECIPES_STORAGE_KEY, JSON.stringify(mapped));
 };
@@ -595,7 +630,8 @@ export const loadLocalRecipes = (): RecipeModel[] => {
         image: String(row.image || ""),
         categories: normalizeStringArray(row.categories),
         tags: normalizeStringArray(row.tags ?? row.categories),
-        visibility: (row.visibility === "public" ? "public" : "private") as RecipeVisibility,
+        visibility: normalizeVisibility(row.visibility),
+        shareToken: String(row.shareToken || "").trim() || undefined,
       };
     }));
   } catch {
@@ -678,7 +714,11 @@ export const listPublicRecipes = async (): Promise<RecipeModel[]> => {
   return [...extraTemplates, ...dbPublic];
 };
 
-export const getRecipeById = async (recipeId: string, currentUserId?: string | null): Promise<RecipeModel | null> => {
+export const getRecipeById = async (
+  recipeId: string,
+  currentUserId?: string | null,
+  shareToken?: string | null
+): Promise<RecipeModel | null> => {
   const seedTemplate = getSeedTemplateRecipeById(recipeId);
   if (seedTemplate) {
     return seedTemplate;
@@ -687,10 +727,13 @@ export const getRecipeById = async (recipeId: string, currentUserId?: string | n
   const supabase = getSupabaseClient();
 
   let query = supabase.from("recipes").select(RECIPE_COLUMNS).eq("id", recipeId);
-  if (currentUserId) {
-    query = query.or(`owner_id.eq.${currentUserId},visibility.eq.public`);
-  } else {
-    query = query.eq("visibility", "public");
+  const normalizedShareToken = String(shareToken || "").trim();
+  if (!currentUserId) {
+    if (normalizedShareToken) {
+      query = query.eq("visibility", "link").eq("share_token", normalizedShareToken);
+    } else {
+      query = query.eq("visibility", "public");
+    }
   }
 
   const { data, error } = await query.maybeSingle();
@@ -704,12 +747,21 @@ export const getRecipeById = async (recipeId: string, currentUserId?: string | n
   if (!data) return null;
 
   const row = data as RecipeRow;
-  if (row.visibility === "public" && (!currentUserId || row.owner_id !== currentUserId)) {
+  const rowVisibility = normalizeVisibility(row.visibility);
+  const isOwner = Boolean(currentUserId && row.owner_id === currentUserId);
+
+  if (rowVisibility === "link" && !isOwner) {
+    if (!normalizedShareToken || row.share_token !== normalizedShareToken) {
+      return null;
+    }
+  }
+
+  if (rowVisibility === "public" && (!currentUserId || row.owner_id !== currentUserId)) {
     if (isRecipeHiddenByReport(row.id)) return null;
   }
   let notes = "";
 
-  if (currentUserId && row.owner_id === currentUserId) {
+  if (isOwner && currentUserId) {
     const { data: noteData, error: noteError } = await supabase
       .from("recipe_notes")
       .select("recipe_id,notes")
@@ -758,7 +810,8 @@ export const createRecipe = async (ownerId: string, input: RecipeUpsertInput): P
         image: payload.image || "",
         categories: normalizeStringArray(payload.categories),
         tags: normalizeStringArray(payload.categories),
-        visibility: "private",
+        visibility: normalizeVisibility(payload.visibility),
+        shareToken: payload.share_token || undefined,
         createdAt: now,
         updatedAt: now,
       };
@@ -818,7 +871,8 @@ export const updateRecipe = async (ownerId: string, recipeId: string, input: Rec
         image: payload.image || "",
         categories: normalizeStringArray(payload.categories),
         tags: normalizeStringArray(payload.categories),
-        visibility: payload.visibility || "private",
+        visibility: normalizeVisibility(payload.visibility),
+        shareToken: payload.share_token || undefined,
         updatedAt: now,
       };
       const next = [updated, ...cloudRecipes.filter((item) => item.id !== recipeId)];
@@ -1017,6 +1071,180 @@ export const copyPublicRecipeToMine = async (ownerId: string, recipeId: string):
   }
 
   return mapRow(data as RecipeRow);
+};
+
+export interface RecipeAccessEntry {
+  userId: string;
+  role: "viewer" | "editor";
+}
+
+export interface RecipeAccessEmailEntry {
+  email: string;
+  role: "viewer" | "editor";
+}
+
+export interface RecipeAccessInviteSendResult {
+  sent: string[];
+  failed: Array<{ email: string; message: string }>;
+}
+
+const normalizeInviteEmails = (emails: string[]): string[] => {
+  const unique = new Set<string>();
+  emails
+    .map((item) => String(item || "").trim().toLowerCase())
+    .filter(Boolean)
+    .forEach((email) => unique.add(email));
+  return Array.from(unique);
+};
+
+const toErrorMessage = (error: unknown): string => {
+  if (error instanceof Error && error.message) return error.message;
+  if (error && typeof error === "object" && "message" in error) {
+    const text = String((error as { message?: unknown }).message || "");
+    if (text) return text;
+  }
+  return "Не удалось отправить приглашение.";
+};
+
+export const sendRecipeAccessInvites = async (
+  recipeId: string,
+  emails: string[]
+): Promise<RecipeAccessInviteSendResult> => {
+  const supabase = getSupabaseClient();
+  const normalizedEmails = normalizeInviteEmails(emails);
+  if (normalizedEmails.length === 0) return { sent: [], failed: [] };
+
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  const baseRecipeUrl = origin
+    ? `${origin}/recipes/${encodeURIComponent(recipeId)}`
+    : undefined;
+  const redirectTo = baseRecipeUrl ? `${baseRecipeUrl}?invited=1` : undefined;
+
+  const sent: string[] = [];
+  const failed: Array<{ email: string; message: string }> = [];
+
+  for (const email of normalizedEmails) {
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: {
+        shouldCreateUser: true,
+        emailRedirectTo: redirectTo,
+      },
+    });
+
+    if (error) {
+      failed.push({ email, message: toErrorMessage(error) });
+      continue;
+    }
+    sent.push(email);
+  }
+
+  return { sent, failed };
+};
+
+export const listRecipeAccessEmails = async (
+  _ownerId: string,
+  recipeId: string
+): Promise<RecipeAccessEmailEntry[]> => {
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase.rpc("list_recipe_access_emails", {
+    p_recipe_id: recipeId,
+  });
+
+  if (error) {
+    if (isMissingFunctionError(error, "list_recipe_access_emails")) return [];
+    throw error;
+  }
+
+  const rows = Array.isArray(data) ? (data as RecipeAccessEmailRpcRow[]) : [];
+  return rows
+    .map((row) => ({
+      email: String(row.email || "").trim().toLowerCase(),
+      role: (row.role === "editor" ? "editor" : "viewer") as "viewer" | "editor",
+    }))
+    .filter((entry) => entry.email.length > 0);
+};
+
+export const replaceRecipeAccessByEmail = async (
+  _ownerId: string,
+  recipeId: string,
+  emails: string[],
+  role: "viewer" | "editor" = "viewer"
+): Promise<void> => {
+  const supabase = getSupabaseClient();
+  const normalizedEmails = normalizeInviteEmails(emails);
+  const { error } = await supabase.rpc("replace_recipe_access_by_email", {
+    p_recipe_id: recipeId,
+    p_emails: normalizedEmails,
+    p_role: role === "editor" ? "editor" : "viewer",
+  });
+
+  if (error) {
+    if (isMissingFunctionError(error, "replace_recipe_access_by_email")) {
+      throw new Error(
+        "В Supabase не применено обновление доступа. Откройте SQL Editor и выполните supabase/schema.sql."
+      );
+    }
+    throw error;
+  }
+};
+
+export const listRecipeAccessEntries = async (
+  _ownerId: string,
+  recipeId: string
+): Promise<RecipeAccessEntry[]> => {
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase
+    .from("recipe_access")
+    .select("recipe_id,user_id,role")
+    .eq("recipe_id", recipeId);
+
+  if (error) {
+    if (isMissingRelationError(error, "recipe_access")) return [];
+    throw error;
+  }
+
+  const rows = (data || []) as RecipeAccessRow[];
+  return rows
+    .filter((row) => row.recipe_id === recipeId && typeof row.user_id === "string" && row.user_id.length > 0)
+    .map((row) => ({
+      userId: row.user_id,
+      role: row.role === "editor" ? "editor" : "viewer",
+    }));
+};
+
+export const replaceRecipeAccessEntries = async (
+  _ownerId: string,
+  recipeId: string,
+  entries: RecipeAccessEntry[]
+): Promise<void> => {
+  const supabase = getSupabaseClient();
+  const normalizedEntries = entries
+    .map((entry) => ({
+      recipe_id: recipeId,
+      user_id: String(entry.userId || "").trim(),
+      role: entry.role === "editor" ? "editor" : "viewer",
+    }))
+    .filter((entry) => entry.user_id.length > 0);
+
+  const { error: deleteError } = await supabase
+    .from("recipe_access")
+    .delete()
+    .eq("recipe_id", recipeId);
+  if (deleteError) {
+    if (!isMissingRelationError(deleteError, "recipe_access")) {
+      throw deleteError;
+    }
+    return;
+  }
+
+  if (normalizedEntries.length === 0) return;
+
+  const { error: insertError } = await supabase.from("recipe_access").insert(normalizedEntries);
+  if (insertError) {
+    if (isMissingRelationError(insertError, "recipe_access")) return;
+    throw insertError;
+  }
 };
 
 export const importLocalRecipesIfNeeded = async (ownerId: string): Promise<number> => {

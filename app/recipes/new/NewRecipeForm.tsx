@@ -7,6 +7,8 @@ import ProductAutocompleteInput from "../../components/ProductAutocompleteInput"
 import {
   createRecipe,
   getCurrentUserId,
+  replaceRecipeAccessByEmail,
+  sendRecipeAccessInvites,
   upsertRecipeInLocalCache,
   type Ingredient,
   type RecipeModel,
@@ -102,6 +104,30 @@ const sanitizeImportIssue = (issue: string): string => {
 const sanitizeImportIssues = (issues: string[]): string[] =>
   Array.from(new Set(issues.map((issue) => sanitizeImportIssue(issue)).filter(Boolean)));
 
+const ACCESS_OPTIONS: Array<{
+  value: RecipeVisibility;
+  label: string;
+  description: string;
+}> = [
+  { value: "private", label: "Личный", description: "Только владелец." },
+  { value: "public", label: "Публичный", description: "Виден всем в библиотеке." },
+  { value: "link", label: "По ссылке", description: "Доступ по прямой ссылке." },
+  { value: "invited", label: "По приглашению", description: "Только приглашенным пользователям." },
+];
+
+const generateShareToken = (): string => crypto.randomUUID().replace(/-/g, "");
+
+const parseInvitedEmails = (raw: string): string[] => {
+  const unique = new Set<string>();
+  raw
+    .split(/[\n,;]+/g)
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .forEach((item) => unique.add(item.toLowerCase()));
+
+  return Array.from(unique);
+};
+
 interface NewRecipeFormProps {
   initialFirstCreate?: boolean;
 }
@@ -117,6 +143,9 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
   const [image, setImage] = useState("");
   const [servings, setServings] = useState(2);
   const [visibility, setVisibility] = useState<RecipeVisibility>("private");
+  const [shareToken, setShareToken] = useState("");
+  const [invitedEmailsDraft, setInvitedEmailsDraft] = useState("");
+  const [showInvitedAccessEditor, setShowInvitedAccessEditor] = useState(false);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [ingredients, setIngredients] = useState<Ingredient[]>([{ name: "", amount: 0, unit: UNITS[0] }]);
   const [productSuggestions] = useState<string[]>(() => loadProductSuggestions());
@@ -564,7 +593,7 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
   };
 
   const handleVisibilityChange = (next: RecipeVisibility) => {
-    if (!canChangeVisibility && next === "public") return;
+    if (!canChangeVisibility && next !== "private") return;
     setVisibility(next);
   };
 
@@ -630,6 +659,12 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
         return;
       }
 
+      const normalizedVisibility: RecipeVisibility = canChangeVisibility ? visibility : "private";
+      const normalizedShareToken =
+        normalizedVisibility === "link" ? (shareToken.trim() || generateShareToken()) : "";
+      const invitedEmails =
+        normalizedVisibility === "invited" ? parseInvitedEmails(invitedEmailsDraft) : [];
+
       const created = await createRecipe(currentUserId, {
         title: title.trim(),
         shortDescription: shortDescription.trim(),
@@ -639,18 +674,34 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
         image: image.trim(),
         ingredients: normalizedIngredients,
         servings: servings > 0 ? servings : 2,
-        visibility: visibility || "private",
+        visibility: normalizedVisibility,
+        shareToken: normalizedShareToken || undefined,
         categories: normalizedTags,
         tags: normalizedTags,
       });
 
-      upsertRecipeInLocalCache(created);
+      if (normalizedVisibility === "invited") {
+        await replaceRecipeAccessByEmail(currentUserId, created.id, invitedEmails);
+        if (invitedEmails.length > 0) {
+          const inviteResult = await sendRecipeAccessInvites(created.id, invitedEmails);
+          if (inviteResult.failed.length > 0) {
+            const failedEmails = inviteResult.failed.map((item) => item.email).join(", ");
+            alert(`Часть приглашений не отправлена: ${failedEmails}`);
+          }
+        }
+      }
+
+      const finalizedRecipe: RecipeModel =
+        normalizedVisibility === "link" && normalizedShareToken
+          ? { ...created, shareToken: normalizedShareToken }
+          : created;
+      upsertRecipeInLocalCache(finalizedRecipe);
       if (shouldShowFirstRecipeOverlay && typeof window !== "undefined") {
-        localStorage.setItem(FIRST_RECIPE_ADDED_KEY, created.id);
+        localStorage.setItem(FIRST_RECIPE_ADDED_KEY, finalizedRecipe.id);
         localStorage.setItem(FIRST_RECIPE_SUCCESS_PENDING_KEY, "1");
-        router.push(`/recipes?firstAdded=1&recipe=${encodeURIComponent(created.id)}`);
+        router.push(`/recipes?firstAdded=1&recipe=${encodeURIComponent(finalizedRecipe.id)}`);
       } else {
-        router.push(`/recipes/${created.id}`);
+        router.push(`/recipes/${finalizedRecipe.id}`);
       }
     } catch (error) {
       const text = error instanceof Error ? error.message : "Не удалось сохранить рецепт.";
@@ -831,31 +882,86 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
         </div>
 
         <div style={{ marginBottom: "16px" }}>
-          <label style={{ display: "block", marginBottom: "8px", fontWeight: "bold" }}>Видимость рецепта</label>
-          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-            <button
-              type="button"
-              className={`btn ${visibility === "private" ? "btn-primary" : ""}`}
-              onClick={() => handleVisibilityChange("private")}
-            >
-              Приватный
-            </button>
-            <button
-              type="button"
-              className={`btn ${visibility === "public" ? "btn-primary" : ""}`}
-              onClick={() => handleVisibilityChange("public")}
-              disabled={!canChangeVisibility}
-            >
-              Публичный
-            </button>
+          <label style={{ display: "block", marginBottom: "8px", fontWeight: "bold" }}>Доступ</label>
+          <div style={{ display: "grid", gap: "8px" }}>
+            {ACCESS_OPTIONS.map((option) => {
+              const disabled = !canChangeVisibility && option.value !== "private";
+              const isActive = visibility === option.value;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  className={`btn ${isActive ? "btn-primary" : ""}`}
+                  onClick={() => handleVisibilityChange(option.value)}
+                  disabled={disabled}
+                  style={{
+                    justifyContent: "flex-start",
+                    textAlign: "left",
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "flex-start",
+                    gap: "2px",
+                  }}
+                >
+                  <span>{option.label}</span>
+                  <span style={{ fontSize: "12px", opacity: 0.85 }}>{option.description}</span>
+                </button>
+              );
+            })}
           </div>
-          <p className="muted" style={{ margin: "8px 0 0 0" }}>
-            Публичный рецепт будет доступен другим пользователям для просмотра и копирования.
-          </p>
           {!canChangeVisibility ? (
-            <p className="muted" style={{ margin: "6px 0 0 0" }}>
-              Для публикации войдите в аккаунт.
+            <p className="muted" style={{ margin: "8px 0 0 0" }}>
+              Для режимов Публичный, По ссылке и По приглашению войдите в аккаунт.
             </p>
+          ) : null}
+
+          {visibility === "link" ? (
+            <div style={{ marginTop: "10px", display: "grid", gap: "8px" }}>
+              <p className="muted" style={{ margin: 0 }}>
+                Ссылка будет доступна после сохранения рецепта.
+              </p>
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => setShareToken(generateShareToken())}
+                >
+                  Сгенерировать ссылку
+                </button>
+                {shareToken ? (
+                  <span className="muted" style={{ alignSelf: "center", fontSize: "12px" }}>
+                    Токен: {shareToken.slice(0, 12)}...
+                  </span>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+
+          {visibility === "invited" ? (
+            <div style={{ marginTop: "10px", display: "grid", gap: "8px" }}>
+              <button
+                type="button"
+                className="btn"
+                onClick={() => setShowInvitedAccessEditor((prev) => !prev)}
+              >
+                Управлять доступом
+              </button>
+              {showInvitedAccessEditor ? (
+                <div style={{ display: "grid", gap: "6px" }}>
+                  <textarea
+                    className="input"
+                    rows={4}
+                    value={invitedEmailsDraft}
+                    onChange={(e) => setInvitedEmailsDraft(e.target.value)}
+                    placeholder="email пользователей, по одному в строке"
+                    style={{ minHeight: "88px", resize: "vertical" }}
+                  />
+                  <p className="muted" style={{ margin: 0 }}>
+                    Приглашения отправляются на email, доступ выдается после входа в аккаунт.
+                  </p>
+                </div>
+              ) : null}
+            </div>
           ) : null}
         </div>
 
@@ -1039,7 +1145,7 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
               <p className="muted" style={{ marginTop: "8px" }}>
                 Если рецепт взят из книги или сайта, укажите источник.
               </p>
-              {visibility === "public" ? (
+              {visibility !== "private" ? (
                 <p className="muted" style={{ marginTop: "8px" }}>
                   Если источник не указан, ответственность за публикацию остается на вас.
                 </p>
