@@ -8,6 +8,7 @@ export interface PriorityProduct {
   name: string;
   untilDate: string; // YYYY-MM-DD
   preferOften: boolean;
+  note: string;
   periodMode: PriorityPeriodMode;
   createdAt: string;
 }
@@ -18,7 +19,18 @@ interface AddPriorityProductInput {
   days?: number;
   untilDate?: string;
   preferOften?: boolean;
+  note?: string;
 }
+
+interface UpdatePriorityProductInput {
+  name?: string;
+  periodMode?: PriorityPeriodMode;
+  days?: number;
+  untilDate?: string;
+  note?: string;
+}
+
+const PRIORITY_NOTE_MAX_LENGTH = 120;
 
 const pad2 = (value: number) => String(value).padStart(2, "0");
 
@@ -33,6 +45,7 @@ const parseDate = (raw: string): Date | null => {
 };
 
 const normalizeName = (value: string): string => value.trim().replace(/\s+/g, " ").toLowerCase();
+const normalizeNote = (value: string): string => value.trim().slice(0, PRIORITY_NOTE_MAX_LENGTH);
 
 const endOfWeek = (date: Date): Date => {
   const day = date.getDay(); // 0..6 (0 = Sunday)
@@ -92,6 +105,7 @@ export const loadPriorityProducts = (): PriorityProduct[] => {
         name: typeof item.name === "string" ? item.name.trim() : "",
         untilDate: typeof item.untilDate === "string" ? item.untilDate : formatLocalDate(new Date()),
         preferOften: Boolean(item.preferOften),
+        note: typeof item.note === "string" ? normalizeNote(item.note) : "",
         periodMode: (item.periodMode as PriorityPeriodMode) || "date",
         createdAt: typeof item.createdAt === "string" ? item.createdAt : new Date().toISOString(),
       }))
@@ -119,6 +133,7 @@ export const addPriorityProduct = (input: AddPriorityProductInput): PriorityProd
     name,
     untilDate: resolveUntilDate(input.periodMode, input.days || 7, input.untilDate),
     preferOften: Boolean(input.preferOften),
+    note: normalizeNote(input.note || ""),
     periodMode: input.periodMode,
     createdAt: new Date().toISOString(),
   };
@@ -135,6 +150,35 @@ export const removePriorityProduct = (id: string) => {
   if (typeof window === "undefined") return;
   const next = loadPriorityProducts().filter((item) => item.id !== id);
   savePriorityProducts(next);
+};
+
+export const updatePriorityProduct = (id: string, input: UpdatePriorityProductInput): PriorityProduct | null => {
+  if (typeof window === "undefined") return null;
+  const current = loadPriorityProducts();
+  const index = current.findIndex((item) => item.id === id);
+  if (index < 0) return null;
+
+  const existing = current[index];
+  const nextName = typeof input.name === "string" ? input.name.trim() : existing.name;
+  if (!nextName) return null;
+
+  const nextMode = input.periodMode || existing.periodMode;
+  const nextUntilDate = resolveUntilDate(nextMode, input.days || 7, input.untilDate || existing.untilDate);
+  const nextNote = typeof input.note === "string" ? normalizeNote(input.note) : existing.note;
+
+  const updated: PriorityProduct = {
+    ...existing,
+    name: nextName,
+    periodMode: nextMode,
+    untilDate: nextUntilDate,
+    note: nextNote,
+    preferOften: false,
+  };
+
+  const next = [...current];
+  next[index] = updated;
+  savePriorityProducts(next);
+  return updated;
 };
 
 export const isPriorityProductActive = (item: PriorityProduct, now = new Date()): boolean => {
@@ -168,4 +212,3 @@ export const getRecipePriorityMatchCount = (
 
   return count;
 };
-
