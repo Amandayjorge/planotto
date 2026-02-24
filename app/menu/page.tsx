@@ -2966,10 +2966,6 @@ function MenuPageContent() {
             />
             Сделать по умолчанию для всех новых периодов
           </label>
-          <p className="muted" style={{ margin: "6px 0 0 0", fontSize: "12px" }}>
-            Для нового пользователя по умолчанию используются 3 приема: Завтрак, Обед, Ужин.
-          </p>
-
           <div style={{ marginTop: "12px", display: "flex", justifyContent: "flex-end", gap: "8px" }}>
             <button type="button" className="btn" onClick={closeMealSettingsDialog}>
               Отмена
