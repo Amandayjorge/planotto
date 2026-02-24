@@ -35,7 +35,8 @@ const GUEST_REMINDER_RECIPES_THRESHOLD = 3;
 const ACTIVE_PRODUCTS_CLOUD_META_KEY = "planotto_active_products_v1";
 const ACTIVE_PRODUCT_NOTE_MAX_LENGTH = 40;
 const MENU_STORAGE_VERSION = 2;
-const DEFAULT_MENU_NAME = "Меню 1";
+const DEFAULT_MENU_NAME_FALLBACK = "Основное";
+const DEFAULT_MENU_NAME_KEY = "menuDefaultName";
 const MENU_SHOPPING_MERGE_KEY_PREFIX = "menuShoppingMerge";
 const DAY_STRUCTURE_MODE_KEY = "menuDayStructureMode";
 const MEAL_STRUCTURE_SETTINGS_KEY = "menuMealStructureSettings";
@@ -60,6 +61,26 @@ const createDefaultMealSlots = (): MealSlotSetting[] =>
 
 const normalizeMealSlotName = (value: string): string => value.trim().replace(/\s+/g, " ");
 const normalizeProductName = (value: string): string => value.trim().replace(/\s+/g, " ");
+const normalizeMenuProfileName = (value: string): string => value.trim().replace(/\s+/g, " ");
+
+const getStoredDefaultMenuName = (): string => {
+  if (typeof window === "undefined") return DEFAULT_MENU_NAME_FALLBACK;
+  const stored = localStorage.getItem(DEFAULT_MENU_NAME_KEY) || "";
+  const normalized = normalizeMenuProfileName(stored);
+  return normalized || DEFAULT_MENU_NAME_FALLBACK;
+};
+
+const resolveDefaultMenuName = (): string => {
+  if (typeof window === "undefined") return DEFAULT_MENU_NAME_FALLBACK;
+  const storedName = getStoredDefaultMenuName();
+  if ((localStorage.getItem(DEFAULT_MENU_NAME_KEY) || "").trim()) {
+    return storedName;
+  }
+  const asked = window.prompt("Как назвать меню?", DEFAULT_MENU_NAME_FALLBACK);
+  const resolved = normalizeMenuProfileName(asked || "") || DEFAULT_MENU_NAME_FALLBACK;
+  localStorage.setItem(DEFAULT_MENU_NAME_KEY, resolved);
+  return resolved;
+};
 
 const parseMealSlots = (raw: string | null): MealSlotSetting[] | null => {
   if (!raw) return null;
@@ -247,7 +268,7 @@ const normalizeCookedStatusMap = (value: unknown): Record<string, boolean> => {
 
 const createMenuProfileState = (name: string, id?: string): MenuProfileState => ({
   id: id || crypto.randomUUID(),
-  name: name.trim() || DEFAULT_MENU_NAME,
+  name: normalizeMenuProfileName(name) || DEFAULT_MENU_NAME_FALLBACK,
   mealData: {},
   cellPeopleCount: {},
   cookedStatus: {},
@@ -256,10 +277,11 @@ const createMenuProfileState = (name: string, id?: string): MenuProfileState => 
 const parseMenuBundleFromStorage = (
   raw: string | null,
   legacyCellPeopleCount: Record<string, number>,
-  legacyCookedStatus: Record<string, boolean>
+  legacyCookedStatus: Record<string, boolean>,
+  defaultMenuName: string
 ): { menus: MenuProfileState[]; activeMenuId: string } => {
   if (!raw) {
-    const defaultMenu = createMenuProfileState(DEFAULT_MENU_NAME);
+    const defaultMenu = createMenuProfileState(defaultMenuName);
     return { menus: [defaultMenu], activeMenuId: defaultMenu.id };
   }
 
@@ -292,13 +314,13 @@ const parseMenuBundleFromStorage = (
     }
 
     const legacyMealData = normalizeMenuDataRecord(parsed);
-    const legacyMenu = createMenuProfileState(DEFAULT_MENU_NAME);
+    const legacyMenu = createMenuProfileState(defaultMenuName);
     legacyMenu.mealData = legacyMealData;
     legacyMenu.cellPeopleCount = legacyCellPeopleCount;
     legacyMenu.cookedStatus = legacyCookedStatus;
     return { menus: [legacyMenu], activeMenuId: legacyMenu.id };
   } catch {
-    const defaultMenu = createMenuProfileState(DEFAULT_MENU_NAME);
+    const defaultMenu = createMenuProfileState(defaultMenuName);
     return { menus: [defaultMenu], activeMenuId: defaultMenu.id };
   }
 };
@@ -1248,7 +1270,7 @@ function MenuPageContent() {
     ) => {
       if (typeof window === "undefined") return;
       try {
-        const fallbackMenu = createMenuProfileState(DEFAULT_MENU_NAME, targetMenuId || undefined);
+        const fallbackMenu = createMenuProfileState(getStoredDefaultMenuName(), targetMenuId || undefined);
         const sourceMenus = menuProfiles.length > 0 ? menuProfiles : [fallbackMenu];
         const resolvedTargetId = targetMenuId || sourceMenus[0].id;
         const nextProfiles = sourceMenus.map((menu) => {
@@ -2071,7 +2093,12 @@ function MenuPageContent() {
     const legacyCounts = parseLegacyCounts();
     const legacyCooked = parseLegacyCooked();
     const storedMenu = localStorage.getItem(menuStorageKey);
-    const parsedBundle = parseMenuBundleFromStorage(storedMenu, legacyCounts, legacyCooked);
+    const parsedBundle = parseMenuBundleFromStorage(
+      storedMenu,
+      legacyCounts,
+      legacyCooked,
+      resolveDefaultMenuName()
+    );
     const initialActiveId = parsedBundle.activeMenuId;
     const initialActiveMenu =
       parsedBundle.menus.find((menu) => menu.id === initialActiveId) || parsedBundle.menus[0];

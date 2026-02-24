@@ -8,7 +8,8 @@ const RANGE_STATE_KEY = "selectedMenuRange";
 const WEEK_START_KEY = "selectedWeekStart";
 const MENU_SHOPPING_MERGE_KEY_PREFIX = "menuShoppingMerge";
 const MENU_STORAGE_VERSION = 2;
-const DEFAULT_MENU_NAME = "Меню 1";
+const DEFAULT_MENU_NAME_FALLBACK = "Основное";
+const DEFAULT_MENU_NAME_KEY = "menuDefaultName";
 
 interface MenuProfileState {
   id: string;
@@ -47,6 +48,27 @@ const formatDisplayDate = (dateIso: string): string => {
   return date.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" });
 };
 
+const normalizeMenuProfileName = (value: string): string => value.trim().replace(/\s+/g, " ");
+
+const getStoredDefaultMenuName = (): string => {
+  if (typeof window === "undefined") return DEFAULT_MENU_NAME_FALLBACK;
+  const stored = localStorage.getItem(DEFAULT_MENU_NAME_KEY) || "";
+  const normalized = normalizeMenuProfileName(stored);
+  return normalized || DEFAULT_MENU_NAME_FALLBACK;
+};
+
+const resolveDefaultMenuName = (): string => {
+  if (typeof window === "undefined") return DEFAULT_MENU_NAME_FALLBACK;
+  const storedName = getStoredDefaultMenuName();
+  if ((localStorage.getItem(DEFAULT_MENU_NAME_KEY) || "").trim()) {
+    return storedName;
+  }
+  const asked = window.prompt("Как назвать меню?", DEFAULT_MENU_NAME_FALLBACK);
+  const resolved = normalizeMenuProfileName(asked || "") || DEFAULT_MENU_NAME_FALLBACK;
+  localStorage.setItem(DEFAULT_MENU_NAME_KEY, resolved);
+  return resolved;
+};
+
 const normalizeMenuDataRecord = (value: unknown): Record<string, unknown[]> => {
   if (!value || typeof value !== "object") return {};
   const converted: Record<string, unknown[]> = {};
@@ -78,17 +100,18 @@ const normalizeCookedStatusMap = (value: unknown): Record<string, boolean> => {
 
 const createMenuProfileState = (name: string, id?: string): MenuProfileState => ({
   id: id || crypto.randomUUID(),
-  name: name.trim() || DEFAULT_MENU_NAME,
+  name: normalizeMenuProfileName(name) || DEFAULT_MENU_NAME_FALLBACK,
   mealData: {},
   cellPeopleCount: {},
   cookedStatus: {},
 });
 
 const parseMenuBundleFromStorage = (
-  raw: string | null
+  raw: string | null,
+  defaultMenuName: string
 ): { menus: MenuProfileState[]; activeMenuId: string } => {
   if (!raw) {
-    const defaultMenu = createMenuProfileState(DEFAULT_MENU_NAME);
+    const defaultMenu = createMenuProfileState(defaultMenuName);
     return { menus: [defaultMenu], activeMenuId: defaultMenu.id };
   }
 
@@ -120,11 +143,11 @@ const parseMenuBundleFromStorage = (
       }
     }
 
-    const legacyMenu = createMenuProfileState(DEFAULT_MENU_NAME);
+    const legacyMenu = createMenuProfileState(defaultMenuName);
     legacyMenu.mealData = normalizeMenuDataRecord(parsed);
     return { menus: [legacyMenu], activeMenuId: legacyMenu.id };
   } catch {
-    const defaultMenu = createMenuProfileState(DEFAULT_MENU_NAME);
+    const defaultMenu = createMenuProfileState(defaultMenuName);
     return { menus: [defaultMenu], activeMenuId: defaultMenu.id };
   }
 };
@@ -183,7 +206,10 @@ export default function SettingsPage() {
     }
 
     const nextRangeKey = getCurrentRangeKey();
-    const parsed = parseMenuBundleFromStorage(localStorage.getItem(`${MENU_STORAGE_KEY}:${nextRangeKey}`));
+    const parsed = parseMenuBundleFromStorage(
+      localStorage.getItem(`${MENU_STORAGE_KEY}:${nextRangeKey}`),
+      resolveDefaultMenuName()
+    );
     const nextDrafts = buildNameDrafts(parsed.menus);
     return {
       rangeKey: nextRangeKey,
