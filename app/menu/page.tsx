@@ -996,10 +996,6 @@ function MenuPageContent() {
   });
   const [mealSlots, setMealSlots] = useState<MealSlotSetting[]>(() => loadMealSlotsFromStorage(initialMealRangeKey));
   const [mealSlotsHydrated, setMealSlotsHydrated] = useState(false);
-  const [showMealSettings, setShowMealSettings] = useState(false);
-  const [newMealSlotName, setNewMealSlotName] = useState("");
-  const [saveMealSlotsAsDefault, setSaveMealSlotsAsDefault] = useState(false);
-  const [mealSettingsMessage, setMealSettingsMessage] = useState<string | null>(null);
 
   const orderedMealSlots = useMemo(
     () => [...mealSlots].sort((a, b) => a.order - b.order),
@@ -1121,7 +1117,6 @@ function MenuPageContent() {
   const guestVisitTrackedRef = useRef(false);
   const activeProductsSaveTimerRef = useRef<number | null>(null);
   const activeProductSavedNoteTimerRef = useRef<number | null>(null);
-  const mealSettingsMessageTimerRef = useRef<number | null>(null);
 
   const rangeKey = `${weekStart}__${periodEnd}`;
   const periodDays = getRangeLengthDays(weekStart, periodEnd);
@@ -1217,34 +1212,6 @@ function MenuPageContent() {
     [getAllMealsForDay, mealData]
   );
 
-  const migrateMealName = useCallback((fromName: string, toName: string) => {
-    if (!fromName || !toName || fromName === toName) return;
-
-    setMealData((prev) => {
-      const next = { ...prev };
-      Object.entries(prev).forEach(([cellKey, items]) => {
-        const parsed = splitCellKey(cellKey);
-        if (!parsed || parsed.mealLabel !== fromName) return;
-        const targetKey = getCellKey(parsed.dayKey, toName);
-        const merged = [...(next[targetKey] || []), ...(items || [])];
-        next[targetKey] = merged;
-        delete next[cellKey];
-      });
-      return next;
-    });
-
-    setCellPeopleCount((prev) => {
-      const next = { ...prev };
-      Object.entries(prev).forEach(([cellKey, count]) => {
-        const parsed = splitCellKey(cellKey);
-        if (!parsed || parsed.mealLabel !== fromName) return;
-        const targetKey = getCellKey(parsed.dayKey, toName);
-        next[targetKey] = count;
-        delete next[cellKey];
-      });
-      return next;
-    });
-  }, []);
   const persistMenuSnapshot = useCallback(
     (
       nextMealData: Record<string, MenuItem[]>,
@@ -1324,11 +1291,6 @@ function MenuPageContent() {
     setMoveTargetMeal("");
   };
 
-  const closeMealSettingsDialog = () => {
-    setSaveMealSlotsAsDefault(false);
-    setShowMealSettings(false);
-  };
-
   const closeActiveProductsDialog = () => {
     setShowActiveProductsDialog(false);
     setExpandedActiveProductNoteId(null);
@@ -1339,80 +1301,7 @@ function MenuPageContent() {
     closeDropdownMenu();
     closeAddEditDialog();
     closeMoveDialog();
-    closeMealSettingsDialog();
     closeActiveProductsDialog();
-  };
-
-  const toggleMealVisibility = (slotId: string) => {
-    setMealSlots((prev) => prev.map((slot) => (slot.id === slotId ? { ...slot, visible: !slot.visible } : slot)));
-  };
-
-  const renameMealSlot = (slotId: string, nextRawName: string) => {
-    const normalized = normalizeMealSlotName(nextRawName);
-    const current = mealSlots.find((slot) => slot.id === slotId);
-    if (!current || !normalized || normalized === current.name) return;
-
-    const exists = mealSlots.some(
-      (slot) => slot.id !== slotId && slot.name.toLocaleLowerCase("ru-RU") === normalized.toLocaleLowerCase("ru-RU")
-    );
-    if (exists) return;
-
-    migrateMealName(current.name, normalized);
-    setMealSlots((prev) => prev.map((slot) => (slot.id === slotId ? { ...slot, name: normalized } : slot)));
-  };
-
-  const moveMealSlot = (slotId: string, direction: -1 | 1) => {
-    setMealSlots((prev) => {
-      const ordered = [...prev].sort((a, b) => a.order - b.order);
-      const index = ordered.findIndex((slot) => slot.id === slotId);
-      if (index < 0) return prev;
-      const nextIndex = index + direction;
-      if (nextIndex < 0 || nextIndex >= ordered.length) return prev;
-      const swapped = [...ordered];
-      [swapped[index], swapped[nextIndex]] = [swapped[nextIndex], swapped[index]];
-      return swapped.map((slot, idx) => ({ ...slot, order: idx }));
-    });
-  };
-
-  const addMealSlot = () => {
-    const normalized = normalizeMealSlotName(newMealSlotName);
-    if (!normalized) return;
-    const exists = mealSlots.some(
-      (slot) => slot.name.toLocaleLowerCase("ru-RU") === normalized.toLocaleLowerCase("ru-RU")
-    );
-    if (exists) return;
-    const nextOrder = mealSlots.length;
-    setMealSlots((prev) => [
-      ...prev,
-      { id: crypto.randomUUID(), name: normalized, visible: true, order: nextOrder },
-    ]);
-    setNewMealSlotName("");
-  };
-
-  const showMealSettingsSavedMessage = (text: string) => {
-    setMealSettingsMessage(text);
-    if (typeof window !== "undefined") {
-      if (mealSettingsMessageTimerRef.current !== null) {
-        window.clearTimeout(mealSettingsMessageTimerRef.current);
-      }
-      mealSettingsMessageTimerRef.current = window.setTimeout(() => {
-        setMealSettingsMessage(null);
-        mealSettingsMessageTimerRef.current = null;
-      }, 1400);
-    }
-  };
-
-  const saveMealSlotsAsDefaults = () => {
-    if (typeof window === "undefined") return;
-    localStorage.setItem(MEAL_STRUCTURE_DEFAULT_SETTINGS_KEY, JSON.stringify(mealSlots));
-    showMealSettingsSavedMessage("Сохранено по умолчанию для новых периодов.");
-  };
-
-  const handleMealSettingsDone = () => {
-    if (saveMealSlotsAsDefault) {
-      saveMealSlotsAsDefaults();
-    }
-    closeMealSettingsDialog();
   };
 
   const handleOnboardingAddFirstRecipe = () => {
@@ -1702,7 +1591,7 @@ function MenuPageContent() {
         .filter((item) => item.prefer)
         .map((item) => item.name)
         .join(", ");
-      const composedConstraints = [prompt.trim(), prioritizedProducts ? `Приоритетные продукты: ${prioritizedProducts}.` : ""]
+      const composedConstraints = [prompt.trim(), prioritizedProducts ? `Активные продукты: ${prioritizedProducts}.` : ""]
         .filter(Boolean)
         .join(" ");
 
@@ -2249,10 +2138,6 @@ function MenuPageContent() {
         window.clearTimeout(activeProductSavedNoteTimerRef.current);
         activeProductSavedNoteTimerRef.current = null;
       }
-      if (mealSettingsMessageTimerRef.current !== null && typeof window !== "undefined") {
-        window.clearTimeout(mealSettingsMessageTimerRef.current);
-        mealSettingsMessageTimerRef.current = null;
-      }
     };
   }, []);
 
@@ -2670,8 +2555,7 @@ function MenuPageContent() {
         target.closest(".menu-grid__item-menu-portal") ||
         target.closest(".menu-grid__item-more") ||
         target.closest(".menu-dialog") ||
-        target.closest(".move-dialog") ||
-        target.closest(".meal-settings-dialog");
+        target.closest(".move-dialog");
 
       if (dialogMouseDownRef.current && !clickedInside) {
         dialogMouseDownRef.current = false;
@@ -2685,7 +2569,6 @@ function MenuPageContent() {
       if (openMoreMenu) closeDropdownMenu();
       if (movingItem) closeMoveDialog();
       if (addingItemCell) closeAddEditDialog();
-      if (showMealSettings) closeMealSettingsDialog();
     };
 
     const handleEscapeKey = (event: KeyboardEvent) => {
@@ -2693,7 +2576,7 @@ function MenuPageContent() {
       resetAllModalStates();
     };
 
-    if (openMoreMenu || movingItem || addingItemCell || showMealSettings) {
+    if (openMoreMenu || movingItem || addingItemCell) {
       document.addEventListener("pointerdown", handlePointerDown, true);
       document.addEventListener("click", handleOutsideClick, false);
       document.addEventListener("keydown", handleEscapeKey, true);
@@ -2704,7 +2587,7 @@ function MenuPageContent() {
       document.removeEventListener("click", handleOutsideClick, false);
       document.removeEventListener("keydown", handleEscapeKey, true);
     };
-  }, [openMoreMenu, movingItem, addingItemCell, showMealSettings]);
+  }, [openMoreMenu, movingItem, addingItemCell]);
 
   useEffect(() => {
     return () => {
@@ -2846,132 +2729,6 @@ function MenuPageContent() {
             </button>
             <button type="button" onClick={closeMoveDialog} className="move-dialog-cancel">
               Отмена
-            </button>
-          </div>
-        </div>
-      </div>,
-      document.body
-    );
-  };
-
-  const MealSettingsDialog = () => {
-    if (!showMealSettings) return null;
-
-    return createPortal(
-      <div
-        className="move-dialog-overlay"
-        style={{
-          position: "fixed",
-          inset: 0,
-          zIndex: 10000,
-          background: "rgba(0, 0, 0, 0.5)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-        onMouseDown={(e) => {
-          if (e.target === e.currentTarget) closeMealSettingsDialog();
-        }}
-      >
-        <div
-          className="meal-settings-dialog"
-          style={{
-            background: "white",
-            border: "1px solid #ddd",
-            borderRadius: "10px",
-            padding: "16px",
-            minWidth: "320px",
-            width: "min(640px, 94vw)",
-            maxHeight: "80vh",
-            overflow: "auto",
-          }}
-          onMouseDown={(e) => e.stopPropagation()}
-        >
-          <h3 style={{ marginTop: 0 }}>Настроить приемы</h3>
-          <div style={{ display: "grid", gap: "8px" }}>
-            {orderedMealSlots.map((slot, index) => (
-              <div
-                key={slot.id}
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "auto 1fr auto auto",
-                  gap: "8px",
-                  alignItems: "center",
-                  border: "1px solid var(--border-default)",
-                  borderRadius: "8px",
-                  padding: "8px",
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={slot.visible}
-                  onChange={() => toggleMealVisibility(slot.id)}
-                  title="Показывать прием"
-                />
-                <input
-                  className="input"
-                  defaultValue={slot.name}
-                  onBlur={(e) => renameMealSlot(slot.id, e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      renameMealSlot(slot.id, (e.target as HTMLInputElement).value);
-                      (e.target as HTMLInputElement).blur();
-                    }
-                  }}
-                />
-                <button
-                  type="button"
-                  className="btn"
-                  onClick={() => moveMealSlot(slot.id, -1)}
-                  disabled={index === 0}
-                  style={{ padding: "2px 8px" }}
-                >
-                  ↑
-                </button>
-                <button
-                  type="button"
-                  className="btn"
-                  onClick={() => moveMealSlot(slot.id, 1)}
-                  disabled={index === orderedMealSlots.length - 1}
-                  style={{ padding: "2px 8px" }}
-                >
-                  ↓
-                </button>
-              </div>
-            ))}
-          </div>
-
-          <div style={{ marginTop: "10px", display: "flex", gap: "8px", flexWrap: "wrap" }}>
-            <input
-              className="input"
-              type="text"
-              placeholder="Новый прием"
-              value={newMealSlotName}
-              onChange={(e) => setNewMealSlotName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") addMealSlot();
-              }}
-              style={{ flex: "1 1 220px" }}
-            />
-            <button type="button" className="btn btn-primary" onClick={addMealSlot}>
-              + Добавить прием
-            </button>
-          </div>
-
-          <label style={{ marginTop: "12px", display: "inline-flex", gap: "8px", alignItems: "center", fontSize: "13px" }}>
-            <input
-              type="checkbox"
-              checked={saveMealSlotsAsDefault}
-              onChange={(e) => setSaveMealSlotsAsDefault(e.target.checked)}
-            />
-            Использовать по умолчанию
-          </label>
-          <div style={{ marginTop: "12px", display: "flex", justifyContent: "flex-end", gap: "8px" }}>
-            <button type="button" className="btn" onClick={closeMealSettingsDialog}>
-              Отмена
-            </button>
-            <button type="button" className="btn btn-primary" onClick={handleMealSettingsDone}>
-              Готово
             </button>
           </div>
         </div>
@@ -3501,34 +3258,37 @@ function MenuPageContent() {
           </div>
           <div style={{ display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" }}>
             <span className="muted" style={{ fontSize: "12px" }}>
-              Вид дня:
+              Режим:
             </span>
-            <select
-              className="input"
-              value={dayStructureMode}
-              onChange={(e) => setDayStructureMode(e.target.value as DayStructureMode)}
-              style={{ width: "140px", padding: "4px 8px", fontSize: "12px", minHeight: "30px" }}
-              aria-label="Вид дня"
+            <div
+              role="group"
+              aria-label="Режим отображения дня"
+              style={{
+                display: "inline-flex",
+                border: "1px solid var(--border-default)",
+                borderRadius: "999px",
+                padding: "2px",
+                background: "var(--background-primary)",
+              }}
             >
-              <option value="list">Список</option>
-              <option value="meals">По приемам</option>
-            </select>
-            {dayStructureMode === "meals" ? (
               <button
                 type="button"
-                className="btn"
-                style={{ padding: "4px 8px", fontSize: "12px" }}
-                onClick={() => setShowMealSettings(true)}
+                className={dayStructureMode === "list" ? "btn btn-primary" : "btn"}
+                style={{ padding: "4px 10px", fontSize: "12px", minHeight: "30px" }}
+                onClick={() => setDayStructureMode("list")}
               >
-                Приемы
+                Список
               </button>
-            ) : null}
+              <button
+                type="button"
+                className={dayStructureMode === "meals" ? "btn btn-primary" : "btn"}
+                style={{ padding: "4px 10px", fontSize: "12px", minHeight: "30px" }}
+                onClick={() => setDayStructureMode("meals")}
+              >
+                По приемам
+              </button>
+            </div>
           </div>
-          {mealSettingsMessage ? (
-            <p className="muted" style={{ margin: "2px 0 0 0", fontSize: "12px" }}>
-              {mealSettingsMessage}
-            </p>
-          ) : null}
         </div>
       </div>
 
@@ -3655,7 +3415,6 @@ function MenuPageContent() {
 
       <DropdownMenu />
       <MoveDialog />
-      <MealSettingsDialog />
       {activeProductsDialog}
 
       <AddEditDialog

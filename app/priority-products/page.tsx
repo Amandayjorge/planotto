@@ -145,7 +145,7 @@ export default function PriorityProductsPage() {
       </div>
 
       <h1 className="h1" style={{ marginBottom: "10px" }}>
-        Приоритетные продукты
+        Активные продукты
       </h1>
 
       <div className="card" style={{ marginBottom: "16px" }}>
