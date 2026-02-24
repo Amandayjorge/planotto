@@ -4,7 +4,12 @@ import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState, mem
 import { useRouter, useSearchParams } from "next/navigation";
 import { createPortal } from "react-dom";
 import ProductAutocompleteInput from "../components/ProductAutocompleteInput";
-import { STARTER_PRODUCT_SUGGESTIONS, appendProductSuggestions, loadProductSuggestions } from "../lib/productSuggestions";
+import {
+  STARTER_PRODUCT_SUGGESTIONS,
+  appendProductSuggestions,
+  loadProductSuggestions,
+  sanitizeProductSuggestion,
+} from "../lib/productSuggestions";
 import { getMenuSuggestion } from "../lib/aiAssistantClient";
 import { getCurrentUserId, listMyRecipes } from "../lib/recipesSupabase";
 import { getSupabaseClient, isSupabaseConfigured } from "../lib/supabaseClient";
@@ -59,7 +64,6 @@ const createDefaultMealSlots = (): MealSlotSetting[] =>
   }));
 
 const normalizeMealSlotName = (value: string): string => value.trim().replace(/\s+/g, " ");
-const normalizeProductName = (value: string): string => value.trim().replace(/\s+/g, " ");
 const normalizeMenuProfileName = (value: string): string => value.trim().replace(/\s+/g, " ");
 
 const parseMealSlots = (raw: string | null): MealSlotSetting[] | null => {
@@ -1157,7 +1161,7 @@ function MenuPageContent() {
   const activeProductAutocompleteSuggestions = useMemo(() => {
     const unique = new Map<string, string>();
     const pushSuggestion = (rawName: string) => {
-      const normalized = normalizeProductName(rawName);
+      const normalized = sanitizeProductSuggestion(rawName);
       if (!normalized) return;
       const key = normalized.toLocaleLowerCase("ru-RU");
       if (!unique.has(key)) {

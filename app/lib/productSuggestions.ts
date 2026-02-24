@@ -4,7 +4,7 @@ const normalizeName = (value: string) => value.trim().replace(/\s+/g, " ");
 const NON_PRODUCT_WORD_PATTERN =
   /\b(можно|нужно|нельзя|например|или|если|когда|чтобы|потом|затем|сразу|вручную|сервис|временно|недоступен|распознавание|распознать|рецепт|меню|добавить|открыть|удалить|сохранено|шаг|основное|ингредиент|ингредиенты|способ|приготовления|копировать|импорт|фото|камера|очистить|сергей)\b/iu;
 
-const extractSuggestionName = (value: string): string | null => {
+export const sanitizeProductSuggestion = (value: string): string | null => {
   let normalized = normalizeName(value);
   if (!normalized) return null;
 
@@ -119,7 +119,7 @@ const uniqueSuggestions = (items: string[]): string[] => {
   const unique = new Map<string, string>();
 
   items.forEach((item) => {
-    const normalized = extractSuggestionName(item);
+    const normalized = sanitizeProductSuggestion(item);
     if (!normalized) return;
     const key = normalized.toLowerCase();
     if (!unique.has(key)) unique.set(key, normalized);
