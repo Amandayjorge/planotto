@@ -3468,33 +3468,6 @@ function MenuPageContent() {
             ›
           </button>
         </div>
-        <div style={{ marginTop: "10px", display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
-          <span style={{ fontWeight: 600 }}>Структура дня:</span>
-          <button
-            type="button"
-            className={`btn ${dayStructureMode === "list" ? "btn-primary" : ""}`.trim()}
-            onClick={() => setDayStructureMode("list")}
-          >
-            Список
-          </button>
-          <button
-            type="button"
-            className={`btn ${dayStructureMode === "meals" ? "btn-primary" : ""}`.trim()}
-            onClick={() => setDayStructureMode("meals")}
-          >
-            По приемам пищи
-          </button>
-          {dayStructureMode === "meals" ? (
-            <button type="button" className="btn" onClick={() => setShowMealSettings(true)}>
-              Настроить приемы
-            </button>
-          ) : null}
-        </div>
-        {mealSettingsMessage ? (
-          <p className="muted" style={{ margin: "8px 0 0 0", fontSize: "13px" }}>
-            {mealSettingsMessage}
-          </p>
-        ) : null}
       </div>
 
       <div className="card" style={{ marginBottom: "10px", padding: "8px 10px" }}>
@@ -3529,6 +3502,36 @@ function MenuPageContent() {
           <span className="muted" style={{ fontSize: "12px" }}>
             Это выбор меню. Переименовать можно в «Настройки меню».
           </span>
+          <div style={{ display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" }}>
+            <span className="muted" style={{ fontSize: "12px" }}>
+              Вид дня:
+            </span>
+            <select
+              className="input"
+              value={dayStructureMode}
+              onChange={(e) => setDayStructureMode(e.target.value as DayStructureMode)}
+              style={{ width: "140px", padding: "4px 8px", fontSize: "12px", minHeight: "30px" }}
+              aria-label="Вид дня"
+            >
+              <option value="list">Список</option>
+              <option value="meals">По приемам</option>
+            </select>
+            {dayStructureMode === "meals" ? (
+              <button
+                type="button"
+                className="btn"
+                style={{ padding: "4px 8px", fontSize: "12px" }}
+                onClick={() => setShowMealSettings(true)}
+              >
+                Приемы
+              </button>
+            ) : null}
+          </div>
+          {mealSettingsMessage ? (
+            <p className="muted" style={{ margin: "2px 0 0 0", fontSize: "12px" }}>
+              {mealSettingsMessage}
+            </p>
+          ) : null}
         </div>
       </div>
 
