@@ -306,7 +306,7 @@ export default function SettingsPage() {
             checked={mergeShoppingWithAllMenus}
             onChange={(e) => setMergeShoppingWithAllMenus(e.target.checked)}
           />
-          Объединять со всеми меню при формировании списка покупок
+          Объединять все меню в один список покупок
         </label>
 
         <div style={{ display: "grid", gap: "8px" }}>
