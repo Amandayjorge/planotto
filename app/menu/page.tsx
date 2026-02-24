@@ -36,6 +36,7 @@ const ACTIVE_PRODUCTS_CLOUD_META_KEY = "planotto_active_products_v1";
 const ACTIVE_PRODUCT_NOTE_MAX_LENGTH = 40;
 const MENU_STORAGE_VERSION = 2;
 const DEFAULT_MENU_NAME = "Меню 1";
+const MENU_SHOPPING_MERGE_KEY_PREFIX = "menuShoppingMerge";
 const DAY_STRUCTURE_MODE_KEY = "menuDayStructureMode";
 const MEAL_STRUCTURE_SETTINGS_KEY = "menuMealStructureSettings";
 const MEAL_STRUCTURE_DEFAULT_SETTINGS_KEY = "menuMealStructureDefaults";
@@ -1018,8 +1019,6 @@ function MenuPageContent() {
   const [mealData, setMealData] = useState<Record<string, MenuItem[]>>({});
   const [menuProfiles, setMenuProfiles] = useState<MenuProfileState[]>([]);
   const [activeMenuId, setActiveMenuId] = useState("");
-  const [activeMenuNameDraft, setActiveMenuNameDraft] = useState("");
-  const [newMenuName, setNewMenuName] = useState("");
 
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [hasLoaded, setHasLoaded] = useState(false);
@@ -2142,11 +2141,6 @@ function MenuPageContent() {
   }, [activeMenuId, hasLoaded, menuProfiles]);
 
   useEffect(() => {
-    const activeMenu = menuProfiles.find((menu) => menu.id === activeMenuId);
-    setActiveMenuNameDraft(activeMenu?.name || "");
-  }, [activeMenuId, menuProfiles]);
-
-  useEffect(() => {
     if (!hasLoaded || !activeMenuId) return;
     persistMenuSnapshot(mealData, cellPeopleCount, cookedStatus, activeMenuId);
   }, [
@@ -2323,25 +2317,6 @@ function MenuPageContent() {
     router.replace("/menu");
   }, [dayKeys, hasLoaded, recipes, router, searchParams]);
 
-  const handleCreateMenuProfile = () => {
-    const normalizedName = newMenuName.trim().replace(/\s+/g, " ");
-    if (!normalizedName) return;
-    const nameExists = menuProfiles.some(
-      (menu) => menu.name.toLocaleLowerCase("ru-RU") === normalizedName.toLocaleLowerCase("ru-RU")
-    );
-    if (nameExists) return;
-
-    const created = createMenuProfileState(normalizedName);
-    const nextProfiles = [...menuProfiles, created];
-    setMenuProfiles(nextProfiles);
-    setActiveMenuId(created.id);
-    setMealData(created.mealData);
-    setCellPeopleCount(created.cellPeopleCount);
-    setCookedStatus(created.cookedStatus);
-    setNewMenuName("");
-    persistMenuBundleSnapshot(nextProfiles, created.id);
-  };
-
   const handleSelectMenuProfile = (menuId: string) => {
     if (!menuId || menuId === activeMenuId) return;
     const target = menuProfiles.find((menu) => menu.id === menuId);
@@ -2349,30 +2324,10 @@ function MenuPageContent() {
     setActiveMenuId(menuId);
   };
 
-  const handleRenameActiveMenu = (rawName: string) => {
-    const normalizedName = rawName.trim().replace(/\s+/g, " ");
-    if (!normalizedName || !activeMenuId) return;
-
-    const target = menuProfiles.find((menu) => menu.id === activeMenuId);
-    if (!target) return;
-    if (target.name === normalizedName) return;
-
-    const duplicate = menuProfiles.some(
-      (menu) =>
-        menu.id !== activeMenuId &&
-        menu.name.toLocaleLowerCase("ru-RU") === normalizedName.toLocaleLowerCase("ru-RU")
-    );
-    if (duplicate) return;
-
-    const nextProfiles = menuProfiles.map((menu) =>
-      menu.id === activeMenuId ? { ...menu, name: normalizedName } : menu
-    );
-    setMenuProfiles(nextProfiles);
-    setActiveMenuNameDraft(normalizedName);
-    persistMenuBundleSnapshot(nextProfiles, activeMenuId);
-  };
-
   const generateShoppingListForMenu = (menuId: string) => {
+    const mergeShoppingKey = `${MENU_SHOPPING_MERGE_KEY_PREFIX}:${rangeKey}`;
+    const mergeShoppingWithAllMenus =
+      typeof window !== "undefined" && localStorage.getItem(mergeShoppingKey) === "1";
     const menuProfilesWithCurrentState = menuProfiles.map((menu) => {
       if (menu.id !== activeMenuId) return menu;
       return {
@@ -2398,7 +2353,7 @@ function MenuPageContent() {
     sessionStorage.setItem("cellPeopleCount", JSON.stringify(targetMenu.cellPeopleCount));
     sessionStorage.setItem("shoppingSelectedMenuId", menuId);
     sessionStorage.setItem("shoppingSelectedMenuName", targetMenu.name);
-    sessionStorage.setItem("shoppingUseMergedMenus", "0");
+    sessionStorage.setItem("shoppingUseMergedMenus", mergeShoppingWithAllMenus ? "1" : "0");
     sessionStorage.setItem("shoppingListUpdatedFromMenu", "1");
     router.push("/shopping-list");
   };
@@ -3582,37 +3537,8 @@ function MenuPageContent() {
             >
               Сформировать список покупок
             </button>
-          </div>
-
-          <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
-            <input
-              className="input"
-              style={{ maxWidth: "260px" }}
-              value={activeMenuNameDraft}
-              onChange={(e) => setActiveMenuNameDraft(e.target.value)}
-              onBlur={() => handleRenameActiveMenu(activeMenuNameDraft)}
-              placeholder="Название текущего меню"
-            />
-            <button
-              type="button"
-              className="btn"
-              onClick={() => handleRenameActiveMenu(activeMenuNameDraft)}
-              disabled={!activeMenuNameDraft.trim()}
-            >
-              Сохранить
-            </button>
-          </div>
-
-          <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
-            <input
-              className="input"
-              style={{ maxWidth: "260px" }}
-              value={newMenuName}
-              onChange={(e) => setNewMenuName(e.target.value)}
-              placeholder="Название меню (например, Клиент Анна)"
-            />
-            <button type="button" className="btn" onClick={handleCreateMenuProfile} disabled={!newMenuName.trim()}>
-              + Добавить меню
+            <button type="button" className="btn" onClick={() => router.push("/settings#menu-management")}>
+              Настройки управления
             </button>
           </div>
         </div>
