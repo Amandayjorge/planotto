@@ -27,6 +27,20 @@ interface MenuItem {
   cooked?: boolean;
 }
 
+interface MenuProfileState {
+  id: string;
+  name: string;
+  mealData: Record<string, MenuItem[]>;
+  cellPeopleCount: Record<string, number>;
+  cookedStatus: Record<string, boolean>;
+}
+
+interface MenuStorageBundleV2 {
+  version: 2;
+  activeMenuId: string;
+  menus: MenuProfileState[];
+}
+
 interface GroupedIngredient {
   name: string;
   totalAmount: number;
@@ -116,6 +130,9 @@ const GUEST_REMINDER_PENDING_KEY = "guestReminderPending";
 const GUEST_REMINDER_VISITS_THRESHOLD = 3;
 const GUEST_REMINDER_RECIPES_THRESHOLD = 3;
 const MANUAL_ITEMS_KEY = "manualShoppingItems";
+const SHOPPING_SELECTED_MENU_ID_KEY = "shoppingSelectedMenuId";
+const SHOPPING_SELECTED_MENU_NAME_KEY = "shoppingSelectedMenuName";
+const SHOPPING_USE_MERGED_MENUS_KEY = "shoppingUseMergedMenus";
 
 const getMonday = (date: Date): Date => {
   const d = new Date(date);
@@ -174,6 +191,78 @@ const normalizeKey = (name: string, unit: string): string => {
   return `${normalizeString(name)}|${normalizeString(unit)}`;
 };
 
+const normalizeMenuDataRecord = (value: unknown): Record<string, MenuItem[]> => {
+  if (!value || typeof value !== "object") return {};
+  const converted: Record<string, MenuItem[]> = {};
+  Object.entries(value as Record<string, unknown>).forEach(([key, rawCell]) => {
+    const rows = Array.isArray(rawCell) ? rawCell : [rawCell];
+    converted[key] = rows
+      .filter((row) => row && typeof row === "object")
+      .map((row) => row as MenuItem);
+  });
+  return converted;
+};
+
+const normalizePeopleCountMap = (value: unknown): Record<string, number> => {
+  if (!value || typeof value !== "object") return {};
+  const map: Record<string, number> = {};
+  Object.entries(value as Record<string, unknown>).forEach(([key, raw]) => {
+    const num = Number(raw);
+    if (Number.isFinite(num) && num > 0) map[key] = num;
+  });
+  return map;
+};
+
+const normalizeCookedStatusMap = (value: unknown): Record<string, boolean> => {
+  if (!value || typeof value !== "object") return {};
+  const map: Record<string, boolean> = {};
+  Object.entries(value as Record<string, unknown>).forEach(([key, raw]) => {
+    map[key] = raw === true;
+  });
+  return map;
+};
+
+const parseMenuProfilesFromRangeStorage = (
+  raw: string | null,
+  fallbackCounts: Record<string, number>,
+  fallbackCooked: Record<string, boolean>
+): MenuProfileState[] => {
+  if (!raw) return [];
+
+  try {
+    const parsed = JSON.parse(raw);
+    if (
+      parsed &&
+      typeof parsed === "object" &&
+      (parsed as Partial<MenuStorageBundleV2>).version === 2 &&
+      Array.isArray((parsed as Partial<MenuStorageBundleV2>).menus)
+    ) {
+      return ((parsed as Partial<MenuStorageBundleV2>).menus || [])
+        .map((menu) => menu as Partial<MenuProfileState>)
+        .filter((menu) => typeof menu.name === "string" && menu.name.trim().length > 0)
+        .map((menu) => ({
+          id: typeof menu.id === "string" && menu.id ? menu.id : crypto.randomUUID(),
+          name: String(menu.name || "").trim(),
+          mealData: normalizeMenuDataRecord(menu.mealData),
+          cellPeopleCount: normalizePeopleCountMap(menu.cellPeopleCount),
+          cookedStatus: normalizeCookedStatusMap(menu.cookedStatus),
+        }));
+    }
+
+    return [
+      {
+        id: "default",
+        name: "Семья",
+        mealData: normalizeMenuDataRecord(parsed),
+        cellPeopleCount: fallbackCounts,
+        cookedStatus: fallbackCooked,
+      },
+    ];
+  } catch {
+    return [];
+  }
+};
+
 const WEEKDAY_SHORT = ["Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"];
 
 const ensureWeekStart = (): string => {
@@ -217,11 +306,11 @@ const getWeekdayShort = (isoDate: string): string => {
 
 type QuickDatePreset = "today" | "tomorrow" | "period" | "custom";
 
-const loadManualItemsFromStorage = (): ManualShoppingItem[] => {
+const loadManualItemsFromStorage = (menuScopeKey = "default"): ManualShoppingItem[] => {
   if (typeof window === "undefined") return [];
 
   try {
-    const stored = localStorage.getItem(MANUAL_ITEMS_KEY);
+    const stored = localStorage.getItem(`${MANUAL_ITEMS_KEY}:${menuScopeKey}`);
     if (!stored) return [];
     const parsed = JSON.parse(stored);
     if (!Array.isArray(parsed)) return [];
@@ -252,11 +341,11 @@ const loadPantryItemsFromStorage = (): PantryItem[] => {
   }
 };
 
-const loadPurchasedItemsForRange = (weeks: number): Record<string, boolean> => {
+const loadPurchasedItemsForRange = (weeks: number, menuScopeKey = "default"): Record<string, boolean> => {
   if (typeof window === "undefined") return {};
 
   const weekStart = ensureWeekStart();
-  const purchasedKey = `purchasedItems:${weekStart}:${weeks}`;
+  const purchasedKey = `purchasedItems:${weekStart}:${weeks}:${menuScopeKey}`;
   const stored = localStorage.getItem(purchasedKey);
   if (!stored) return {};
 
@@ -331,6 +420,23 @@ const formatAmount = (value: number): string => {
 };
 
 export default function ShoppingListPage() {
+  const [shoppingSelectedMenuId] = useState<string>(() => {
+    if (typeof window === "undefined") return "";
+    return window.sessionStorage.getItem(SHOPPING_SELECTED_MENU_ID_KEY) || "";
+  });
+  const [shoppingSelectedMenuName] = useState<string>(() => {
+    if (typeof window === "undefined") return "";
+    return window.sessionStorage.getItem(SHOPPING_SELECTED_MENU_NAME_KEY) || "";
+  });
+  const [shoppingUseMergedMenus] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return window.sessionStorage.getItem(SHOPPING_USE_MERGED_MENUS_KEY) === "1";
+  });
+  const shoppingScopeKey = useMemo(
+    () => (shoppingUseMergedMenus ? "merged" : shoppingSelectedMenuId || "default"),
+    [shoppingSelectedMenuId, shoppingUseMergedMenus]
+  );
+
   const [pantryItems, setPantryItems] = useState<PantryItem[]>(() =>
     loadPantryItemsFromStorage()
   );
@@ -369,12 +475,17 @@ export default function ShoppingListPage() {
   const guestReminderStrong = guestReminderState.strong;
 
   const [purchasedItems, setPurchasedItems] = useState<Record<string, boolean>>(() =>
-    loadPurchasedItemsForRange(rangeWeeks)
+    loadPurchasedItemsForRange(rangeWeeks, shoppingScopeKey)
   );
 
   const [manualItems, setManualItems] = useState<ManualShoppingItem[]>(() =>
-    loadManualItemsFromStorage()
+    loadManualItemsFromStorage(shoppingScopeKey)
   );
+  const shoppingSourceLabel = shoppingUseMergedMenus
+    ? "Источник: объединенный список всех меню периода"
+    : shoppingSelectedMenuName
+      ? `Источник: меню «${shoppingSelectedMenuName}»`
+      : "Источник: текущее меню периода";
   const [collapsedSections, setCollapsedSections] = useState<string[]>([]);
   const [isManualModalOpen, setIsManualModalOpen] = useState(false);
   const [manualName, setManualName] = useState("");
@@ -395,7 +506,7 @@ export default function ShoppingListPage() {
     setSelectedDates(dates);
     setActiveDatePreset("period");
     setIsDatePickerOpen(false);
-    setPurchasedItems(loadPurchasedItemsForRange(weeks));
+    setPurchasedItems(loadPurchasedItemsForRange(weeks, shoppingScopeKey));
   };
 
   // сохраняем rangeWeeks
@@ -407,14 +518,14 @@ export default function ShoppingListPage() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     const weekStart = ensureWeekStart();
-    const purchasedKey = `purchasedItems:${weekStart}:${rangeWeeks}`;
+    const purchasedKey = `purchasedItems:${weekStart}:${rangeWeeks}:${shoppingScopeKey}`;
     localStorage.setItem(purchasedKey, JSON.stringify(purchasedItems));
-  }, [purchasedItems, rangeWeeks]);
+  }, [purchasedItems, rangeWeeks, shoppingScopeKey]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    localStorage.setItem(MANUAL_ITEMS_KEY, JSON.stringify(manualItems));
-  }, [manualItems]);
+    localStorage.setItem(`${MANUAL_ITEMS_KEY}:${shoppingScopeKey}`, JSON.stringify(manualItems));
+  }, [manualItems, shoppingScopeKey]);
 
   const shoppingList = useMemo(() => {
     if (typeof window === "undefined") return [];
@@ -449,31 +560,6 @@ export default function ShoppingListPage() {
         return Number.isFinite(ing.amount) && ing.amount > 0;
       };
 
-      const parseCellPeopleCount = (raw: string | null): Record<string, number> => {
-        if (!raw) return {};
-        try {
-          const parsed = JSON.parse(raw) as Record<string, number>;
-          return parsed && typeof parsed === "object" ? parsed : {};
-        } catch {
-          return {};
-        }
-      };
-
-      const parseCookedStatus = (raw: string | null): Record<string, boolean> => {
-        if (!raw) return {};
-        try {
-          const parsed = JSON.parse(raw) as Record<string, unknown>;
-          if (!parsed || typeof parsed !== "object") return {};
-          const mapped: Record<string, boolean> = {};
-          Object.entries(parsed).forEach(([key, value]) => {
-            mapped[key] = value === true;
-          });
-          return mapped;
-        } catch {
-          return {};
-        }
-      };
-
       // 1) Preferred source: current selected period from Menu page (range key start__end)
       const storedRangeState = localStorage.getItem(RANGE_STATE_KEY);
       if (storedRangeState) {
@@ -483,17 +569,33 @@ export default function ShoppingListPage() {
             const suffix = `${parsed.start}__${parsed.end}`;
             const rangeMenuRaw = localStorage.getItem(`${MENU_STORAGE_KEY}:${suffix}`);
             if (rangeMenuRaw) {
-              const rangeMenuParsed = JSON.parse(rangeMenuRaw) as Record<string, MenuItem[] | MenuItem>;
-              const normalizedRangeMenu: Record<string, MenuItem[]> = {};
-              Object.entries(rangeMenuParsed || {}).forEach(([cellKey, cellValue]) => {
-                normalizedRangeMenu[cellKey] = Array.isArray(cellValue) ? cellValue : [cellValue];
-              });
-
-              menuBuckets.push({
-                menuData: normalizedRangeMenu,
-                cellPeopleCountMap: parseCellPeopleCount(localStorage.getItem(`cellPeopleCount:${suffix}`)),
-                cookedStatusMap: parseCookedStatus(localStorage.getItem(`cookedStatus:${suffix}`)),
-              });
+              const fallbackCounts = normalizePeopleCountMap(
+                JSON.parse(localStorage.getItem(`cellPeopleCount:${suffix}`) || "{}")
+              );
+              const fallbackCooked = normalizeCookedStatusMap(
+                JSON.parse(localStorage.getItem(`cookedStatus:${suffix}`) || "{}")
+              );
+              const profiles = parseMenuProfilesFromRangeStorage(
+                rangeMenuRaw,
+                fallbackCounts,
+                fallbackCooked
+              );
+              if (profiles.length > 0) {
+                const scopedProfiles = shoppingUseMergedMenus
+                  ? profiles
+                  : shoppingSelectedMenuId
+                    ? profiles.filter((menu) => menu.id === shoppingSelectedMenuId)
+                    : [profiles[0]];
+                const effectiveProfiles =
+                  scopedProfiles.length > 0 ? scopedProfiles : [profiles[0]];
+                effectiveProfiles.forEach((profile) => {
+                  menuBuckets.push({
+                    menuData: profile.mealData,
+                    cellPeopleCountMap: profile.cellPeopleCount,
+                    cookedStatusMap: profile.cookedStatus,
+                  });
+                });
+              }
             }
           }
         } catch {
@@ -509,21 +611,36 @@ export default function ShoppingListPage() {
           const currentWeekKey = formatDate(currentWeekDate);
 
           const menuStorageKey = `${MENU_STORAGE_KEY}:${currentWeekKey}`;
-          const cellPeopleCountKey = `cellPeopleCount:${currentWeekKey}`;
 
           const storedMenu = localStorage.getItem(menuStorageKey);
           if (!storedMenu) continue;
 
-          const menuDataParsed = JSON.parse(storedMenu) as Record<string, MenuItem[] | MenuItem>;
-          const normalizedMenuData: Record<string, MenuItem[]> = {};
-          Object.entries(menuDataParsed || {}).forEach(([cellKey, cellValue]) => {
-            normalizedMenuData[cellKey] = Array.isArray(cellValue) ? cellValue : [cellValue];
-          });
-
-          menuBuckets.push({
-            menuData: normalizedMenuData,
-            cellPeopleCountMap: parseCellPeopleCount(localStorage.getItem(cellPeopleCountKey)),
-            cookedStatusMap: parseCookedStatus(localStorage.getItem(`cookedStatus:${currentWeekKey}`)),
+          let fallbackCounts: Record<string, number> = {};
+          let fallbackCooked: Record<string, boolean> = {};
+          try {
+            fallbackCounts = normalizePeopleCountMap(
+              JSON.parse(localStorage.getItem(`cellPeopleCount:${currentWeekKey}`) || "{}")
+            );
+            fallbackCooked = normalizeCookedStatusMap(
+              JSON.parse(localStorage.getItem(`cookedStatus:${currentWeekKey}`) || "{}")
+            );
+          } catch {
+            fallbackCounts = {};
+            fallbackCooked = {};
+          }
+          const profiles = parseMenuProfilesFromRangeStorage(storedMenu, fallbackCounts, fallbackCooked);
+          const scopedProfiles = shoppingUseMergedMenus
+            ? profiles
+            : shoppingSelectedMenuId
+              ? profiles.filter((menu) => menu.id === shoppingSelectedMenuId)
+              : [profiles[0]];
+          const effectiveProfiles = scopedProfiles.length > 0 ? scopedProfiles : [profiles[0]];
+          effectiveProfiles.forEach((profile) => {
+            menuBuckets.push({
+              menuData: profile.mealData,
+              cellPeopleCountMap: profile.cellPeopleCount,
+              cookedStatusMap: profile.cookedStatus,
+            });
           });
         }
       }
@@ -619,7 +736,7 @@ export default function ShoppingListPage() {
       console.error("Failed to generate shopping list:", error);
       return [];
     }
-  }, [includeCookedDishes, rangeWeeks, selectedDates]);
+  }, [includeCookedDishes, rangeWeeks, selectedDates, shoppingSelectedMenuId, shoppingUseMergedMenus]);
 
   // сохраняем pantryItems
   useEffect(() => {
@@ -897,6 +1014,9 @@ export default function ShoppingListPage() {
     <section className="card">
       <div className="shopping-list__header">
         <h1 className="h1">Список покупок</h1>
+        <p className="muted" style={{ margin: "4px 0 0 0", fontSize: "13px" }}>
+          {shoppingSourceLabel}
+        </p>
 
         <div className="shopping-list__period">
           <label className="shopping-list__period-label">

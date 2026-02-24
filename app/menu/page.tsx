@@ -34,6 +34,8 @@ const GUEST_REMINDER_VISITS_THRESHOLD = 3;
 const GUEST_REMINDER_RECIPES_THRESHOLD = 3;
 const ACTIVE_PRODUCTS_CLOUD_META_KEY = "planotto_active_products_v1";
 const ACTIVE_PRODUCT_NOTE_MAX_LENGTH = 40;
+const MENU_STORAGE_VERSION = 2;
+const DEFAULT_MENU_NAME = "Семья";
 const DAY_STRUCTURE_MODE_KEY = "menuDayStructureMode";
 const MEAL_STRUCTURE_SETTINGS_KEY = "menuMealStructureSettings";
 const MEAL_STRUCTURE_DEFAULT_SETTINGS_KEY = "menuMealStructureDefaults";
@@ -130,6 +132,20 @@ interface MenuItem {
   cooked?: boolean;
 }
 
+interface MenuProfileState {
+  id: string;
+  name: string;
+  mealData: Record<string, MenuItem[]>;
+  cellPeopleCount: Record<string, number>;
+  cookedStatus: Record<string, boolean>;
+}
+
+interface MenuStorageBundleV2 {
+  version: 2;
+  activeMenuId: string;
+  menus: MenuProfileState[];
+}
+
 interface Recipe {
   id: string;
   title: string;
@@ -180,6 +196,110 @@ const normalizeActivePeriodProducts = (
       note: typeof item.note === "string" ? item.note.slice(0, ACTIVE_PRODUCT_NOTE_MAX_LENGTH) : "",
       hidden: item.hidden === true,
     }));
+};
+
+const normalizeMenuItem = (item: MenuItem): MenuItem => {
+  if (item.type === "text") {
+    return {
+      ...item,
+      includeInShopping: item.includeInShopping ?? true,
+      ingredients: item.ingredients || [],
+      cooked: item.cooked ?? false,
+    };
+  }
+  return {
+    ...item,
+    cooked: item.cooked ?? false,
+  };
+};
+
+const normalizeMenuDataRecord = (value: unknown): Record<string, MenuItem[]> => {
+  if (!value || typeof value !== "object") return {};
+  const converted: Record<string, MenuItem[]> = {};
+  Object.entries(value as Record<string, unknown>).forEach(([key, rawCell]) => {
+    const rows = Array.isArray(rawCell) ? rawCell : [rawCell];
+    converted[key] = rows
+      .filter((row) => row && typeof row === "object")
+      .map((row) => normalizeMenuItem(row as MenuItem));
+  });
+  return converted;
+};
+
+const normalizePeopleCountMap = (value: unknown): Record<string, number> => {
+  if (!value || typeof value !== "object") return {};
+  const map: Record<string, number> = {};
+  Object.entries(value as Record<string, unknown>).forEach(([key, raw]) => {
+    const num = Number(raw);
+    if (Number.isFinite(num) && num > 0) map[key] = num;
+  });
+  return map;
+};
+
+const normalizeCookedStatusMap = (value: unknown): Record<string, boolean> => {
+  if (!value || typeof value !== "object") return {};
+  const map: Record<string, boolean> = {};
+  Object.entries(value as Record<string, unknown>).forEach(([key, raw]) => {
+    map[key] = raw === true;
+  });
+  return map;
+};
+
+const createMenuProfileState = (name: string, id?: string): MenuProfileState => ({
+  id: id || crypto.randomUUID(),
+  name: name.trim() || DEFAULT_MENU_NAME,
+  mealData: {},
+  cellPeopleCount: {},
+  cookedStatus: {},
+});
+
+const parseMenuBundleFromStorage = (
+  raw: string | null,
+  legacyCellPeopleCount: Record<string, number>,
+  legacyCookedStatus: Record<string, boolean>
+): { menus: MenuProfileState[]; activeMenuId: string } => {
+  if (!raw) {
+    const defaultMenu = createMenuProfileState(DEFAULT_MENU_NAME);
+    return { menus: [defaultMenu], activeMenuId: defaultMenu.id };
+  }
+
+  try {
+    const parsed = JSON.parse(raw);
+    if (
+      parsed &&
+      typeof parsed === "object" &&
+      (parsed as Partial<MenuStorageBundleV2>).version === MENU_STORAGE_VERSION &&
+      Array.isArray((parsed as Partial<MenuStorageBundleV2>).menus)
+    ) {
+      const bundle = parsed as Partial<MenuStorageBundleV2>;
+      const normalizedMenus = (bundle.menus || [])
+        .map((menu) => menu as Partial<MenuProfileState>)
+        .filter((menu) => typeof menu.name === "string" && menu.name.trim().length > 0)
+        .map((menu) => ({
+          id: typeof menu.id === "string" && menu.id ? menu.id : crypto.randomUUID(),
+          name: String(menu.name || "").trim(),
+          mealData: normalizeMenuDataRecord(menu.mealData),
+          cellPeopleCount: normalizePeopleCountMap(menu.cellPeopleCount),
+          cookedStatus: normalizeCookedStatusMap(menu.cookedStatus),
+        }));
+      if (normalizedMenus.length > 0) {
+        const activeId = String(bundle.activeMenuId || "").trim();
+        const resolvedActiveId = normalizedMenus.some((menu) => menu.id === activeId)
+          ? activeId
+          : normalizedMenus[0].id;
+        return { menus: normalizedMenus, activeMenuId: resolvedActiveId };
+      }
+    }
+
+    const legacyMealData = normalizeMenuDataRecord(parsed);
+    const legacyMenu = createMenuProfileState(DEFAULT_MENU_NAME);
+    legacyMenu.mealData = legacyMealData;
+    legacyMenu.cellPeopleCount = legacyCellPeopleCount;
+    legacyMenu.cookedStatus = legacyCookedStatus;
+    return { menus: [legacyMenu], activeMenuId: legacyMenu.id };
+  } catch {
+    const defaultMenu = createMenuProfileState(DEFAULT_MENU_NAME);
+    return { menus: [defaultMenu], activeMenuId: defaultMenu.id };
+  }
 };
 
 interface QuickRecipeConfirm {
@@ -896,6 +1016,10 @@ function MenuPageContent() {
   );
 
   const [mealData, setMealData] = useState<Record<string, MenuItem[]>>({});
+  const [menuProfiles, setMenuProfiles] = useState<MenuProfileState[]>([]);
+  const [activeMenuId, setActiveMenuId] = useState("");
+  const [newMenuName, setNewMenuName] = useState("");
+  const [mergeShoppingWithAllMenus, setMergeShoppingWithAllMenus] = useState(false);
 
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [hasLoaded, setHasLoaded] = useState(false);
@@ -1047,10 +1171,23 @@ function MenuPageContent() {
     return Array.from(unique.values()).sort((a, b) => a.localeCompare(b, "ru-RU", { sensitivity: "base" }));
   }, [activeProducts, pantry]);
 
-  const getMenuStorageKey = () => `${MENU_STORAGE_KEY}:${rangeKey}`;
-  const getCellPeopleCountKey = () => `${CELL_PEOPLE_COUNT_KEY}:${rangeKey}`;
-  const getCookedStatusKey = () => `cookedStatus:${rangeKey}`;
-  const getActiveProductsKey = () => `activeProducts:${rangeKey}`;
+  const menuStorageKey = `${MENU_STORAGE_KEY}:${rangeKey}`;
+  const cellPeopleCountKey = `${CELL_PEOPLE_COUNT_KEY}:${rangeKey}`;
+  const cookedStatusKey = `cookedStatus:${rangeKey}`;
+  const activeProductsKey = `activeProducts:${rangeKey}`;
+  const persistMenuBundleSnapshot = useCallback(
+    (nextProfiles: MenuProfileState[], nextActiveMenuId: string) => {
+      if (typeof window === "undefined") return;
+      const payload: MenuStorageBundleV2 = {
+        version: MENU_STORAGE_VERSION,
+        activeMenuId: nextActiveMenuId,
+        menus: nextProfiles,
+      };
+      localStorage.setItem(menuStorageKey, JSON.stringify(payload));
+    },
+    [menuStorageKey]
+  );
+
   const getCellKey = (day: string, meal: string) => `${day}-${meal}`;
   const getListAppendMeal = useCallback(
     (dayKey: string) => {
@@ -1103,18 +1240,57 @@ function MenuPageContent() {
       return next;
     });
   }, []);
-  const persistMenuSnapshot = (
-    nextMealData: Record<string, MenuItem[]>,
-    nextCellPeopleCount: Record<string, number> = cellPeopleCount
-  ) => {
-    if (typeof window === "undefined") return;
-    try {
-      localStorage.setItem(getMenuStorageKey(), JSON.stringify(nextMealData));
-      localStorage.setItem(getCellPeopleCountKey(), JSON.stringify(nextCellPeopleCount));
-    } catch {
-      // ignore local storage write errors
-    }
-  };
+  const persistMenuSnapshot = useCallback(
+    (
+      nextMealData: Record<string, MenuItem[]>,
+      nextCellPeopleCount: Record<string, number> = cellPeopleCount,
+      nextCookedStatus: Record<string, boolean> = cookedStatus,
+      targetMenuId: string = activeMenuId
+    ) => {
+      if (typeof window === "undefined") return;
+      try {
+        const fallbackMenu = createMenuProfileState(DEFAULT_MENU_NAME, targetMenuId || undefined);
+        const sourceMenus = menuProfiles.length > 0 ? menuProfiles : [fallbackMenu];
+        const resolvedTargetId = targetMenuId || sourceMenus[0].id;
+        const nextProfiles = sourceMenus.map((menu) => {
+          if (menu.id !== resolvedTargetId) return menu;
+          if (
+            menu.mealData === nextMealData &&
+            menu.cellPeopleCount === nextCellPeopleCount &&
+            menu.cookedStatus === nextCookedStatus
+          ) {
+            return menu;
+          }
+          return {
+            ...menu,
+            mealData: nextMealData,
+            cellPeopleCount: nextCellPeopleCount,
+            cookedStatus: nextCookedStatus,
+          };
+        });
+        const profilesChanged =
+          nextProfiles.length !== sourceMenus.length ||
+          nextProfiles.some((menu, index) => menu !== sourceMenus[index]);
+        persistMenuBundleSnapshot(nextProfiles, resolvedTargetId);
+        if (profilesChanged) {
+          setMenuProfiles(nextProfiles);
+        }
+        localStorage.setItem(cellPeopleCountKey, JSON.stringify(nextCellPeopleCount));
+        localStorage.setItem(cookedStatusKey, JSON.stringify(nextCookedStatus));
+      } catch {
+        // ignore local storage write errors
+      }
+    },
+    [
+      activeMenuId,
+      cellPeopleCount,
+      cellPeopleCountKey,
+      cookedStatus,
+      cookedStatusKey,
+      menuProfiles,
+      persistMenuBundleSnapshot,
+    ]
+  );
   const isReadOnly = menuMode === "public";
 
 
@@ -1871,75 +2047,70 @@ function MenuPageContent() {
   }, [recipes.length, showMenuAddedNotice]);
 
   useEffect(() => {
-    const storedMenu = localStorage.getItem(getMenuStorageKey());
-    if (storedMenu) {
+    const parseLegacyCounts = (): Record<string, number> => {
+      const storedCounts = localStorage.getItem(cellPeopleCountKey);
+      if (!storedCounts) return {};
       try {
-        const parsedMenu = JSON.parse(storedMenu);
-        const converted: Record<string, MenuItem[]> = {};
-        for (const [key, value] of Object.entries(parsedMenu)) {
-          const items = ensureArray(value as MenuItem | MenuItem[] | undefined);
-          converted[key] = items.map((it) => ensureTextItemCompatibility(it));
-        }
-        setMealData(converted);
-        const labelsFromData = Array.from(
-          new Set(
-            Object.keys(converted)
-              .map((cellKey) => splitCellKey(cellKey)?.mealLabel || "")
-              .filter(Boolean)
-          )
-        );
-        if (labelsFromData.length > 0) {
-          setMealSlots((prev) => {
-            const existing = new Set(prev.map((slot) => slot.name.toLocaleLowerCase("ru-RU")));
-            const missing = labelsFromData.filter(
-              (label) => !existing.has(label.toLocaleLowerCase("ru-RU"))
-            );
-            if (missing.length === 0) return prev;
-            const nextBase = [...prev];
-            missing.forEach((name) => {
-              nextBase.push({
-                id: crypto.randomUUID(),
-                name,
-                visible: true,
-                order: nextBase.length,
-              });
-            });
-            return nextBase;
-          });
-        }
-      } catch (e) {
-        console.error("Failed to load menu data:", e);
-        setMealData({});
-      }
-    } else {
-      setMealData({});
-    }
-
-    const storedCounts = localStorage.getItem(getCellPeopleCountKey());
-    if (storedCounts) {
-      try {
-        setCellPeopleCount(JSON.parse(storedCounts));
+        return normalizePeopleCountMap(JSON.parse(storedCounts));
       } catch (e) {
         console.error("Failed to load cell people count:", e);
-        setCellPeopleCount({});
+        return {};
       }
-    } else {
-      setCellPeopleCount({});
-    }
+    };
 
-    const storedCookedStatus = localStorage.getItem(getCookedStatusKey());
-    if (storedCookedStatus) {
+    const parseLegacyCooked = (): Record<string, boolean> => {
+      const storedCookedStatus = localStorage.getItem(cookedStatusKey);
+      if (!storedCookedStatus) return {};
       try {
-        setCookedStatus(JSON.parse(storedCookedStatus));
+        return normalizeCookedStatusMap(JSON.parse(storedCookedStatus));
       } catch (e) {
         console.error("Failed to load cooked status:", e);
-        setCookedStatus({});
+        return {};
       }
-    } else {
-      setCookedStatus({});
+    };
+
+    const legacyCounts = parseLegacyCounts();
+    const legacyCooked = parseLegacyCooked();
+    const storedMenu = localStorage.getItem(menuStorageKey);
+    const parsedBundle = parseMenuBundleFromStorage(storedMenu, legacyCounts, legacyCooked);
+    const initialActiveId = parsedBundle.activeMenuId;
+    const initialActiveMenu =
+      parsedBundle.menus.find((menu) => menu.id === initialActiveId) || parsedBundle.menus[0];
+
+    setMenuProfiles(parsedBundle.menus);
+    setActiveMenuId(initialActiveId);
+    setMealData(initialActiveMenu?.mealData || {});
+    setCellPeopleCount(initialActiveMenu?.cellPeopleCount || {});
+    setCookedStatus(initialActiveMenu?.cookedStatus || {});
+
+    const labelsFromData = Array.from(
+      new Set(
+        Object.keys(initialActiveMenu?.mealData || {})
+          .map((cellKey) => splitCellKey(cellKey)?.mealLabel || "")
+          .filter(Boolean)
+      )
+    );
+    if (labelsFromData.length > 0) {
+      setMealSlots((prev) => {
+        const existing = new Set(prev.map((slot) => slot.name.toLocaleLowerCase("ru-RU")));
+        const missing = labelsFromData.filter(
+          (label) => !existing.has(label.toLocaleLowerCase("ru-RU"))
+        );
+        if (missing.length === 0) return prev;
+        const nextBase = [...prev];
+        missing.forEach((name) => {
+          nextBase.push({
+            id: crypto.randomUUID(),
+            name,
+            visible: true,
+            order: nextBase.length,
+          });
+        });
+        return nextBase;
+      });
     }
 
-    const storedActiveProducts = localStorage.getItem(getActiveProductsKey());
+    const storedActiveProducts = localStorage.getItem(activeProductsKey);
     if (storedActiveProducts) {
       try {
         const parsed = JSON.parse(storedActiveProducts);
@@ -1959,9 +2130,29 @@ function MenuPageContent() {
   }, [rangeKey]);
 
   useEffect(() => {
-    if (!hasLoaded) return;
-    localStorage.setItem(getMenuStorageKey(), JSON.stringify(mealData));
-  }, [mealData, hasLoaded, rangeKey]);
+    if (!hasLoaded || !activeMenuId) return;
+    const target = menuProfiles.find((menu) => menu.id === activeMenuId);
+    if (!target) return;
+
+    setMealData((prev) => (prev === target.mealData ? prev : target.mealData));
+    setCellPeopleCount((prev) =>
+      prev === target.cellPeopleCount ? prev : target.cellPeopleCount
+    );
+    setCookedStatus((prev) => (prev === target.cookedStatus ? prev : target.cookedStatus));
+  }, [activeMenuId, hasLoaded, menuProfiles]);
+
+  useEffect(() => {
+    if (!hasLoaded || !activeMenuId) return;
+    persistMenuSnapshot(mealData, cellPeopleCount, cookedStatus, activeMenuId);
+  }, [
+    activeMenuId,
+    cellPeopleCount,
+    cookedStatus,
+    hasLoaded,
+    mealData,
+    persistMenuSnapshot,
+    rangeKey,
+  ]);
 
   useEffect(() => {
     if (!hasLoaded || typeof window === "undefined") return;
@@ -1994,18 +2185,18 @@ function MenuPageContent() {
 
   useEffect(() => {
     if (!hasLoaded) return;
-    localStorage.setItem(getCellPeopleCountKey(), JSON.stringify(cellPeopleCount));
-  }, [cellPeopleCount, hasLoaded, rangeKey]);
+    localStorage.setItem(cellPeopleCountKey, JSON.stringify(cellPeopleCount));
+  }, [cellPeopleCount, cellPeopleCountKey, hasLoaded, rangeKey]);
 
   useEffect(() => {
     if (!hasLoaded) return;
-    localStorage.setItem(getCookedStatusKey(), JSON.stringify(cookedStatus));
-  }, [cookedStatus, hasLoaded, rangeKey]);
+    localStorage.setItem(cookedStatusKey, JSON.stringify(cookedStatus));
+  }, [cookedStatus, cookedStatusKey, hasLoaded, rangeKey]);
 
   useEffect(() => {
     if (!hasLoaded) return;
-    localStorage.setItem(getActiveProductsKey(), JSON.stringify(activeProducts));
-  }, [activeProducts, hasLoaded, rangeKey]);
+    localStorage.setItem(activeProductsKey, JSON.stringify(activeProducts));
+  }, [activeProducts, activeProductsKey, hasLoaded, rangeKey]);
 
   useEffect(() => {
     if (!hasLoaded || !authResolved || !currentUserId || !activeProductsCloudHydrated) return;
@@ -2127,16 +2318,85 @@ function MenuPageContent() {
     router.replace("/menu");
   }, [dayKeys, hasLoaded, recipes, router, searchParams]);
 
-  const generateShoppingList = () => {
-    const dishNames = Object.values(mealData)
+  const handleCreateMenuProfile = () => {
+    const normalizedName = newMenuName.trim().replace(/\s+/g, " ");
+    if (!normalizedName) return;
+    const nameExists = menuProfiles.some(
+      (menu) => menu.name.toLocaleLowerCase("ru-RU") === normalizedName.toLocaleLowerCase("ru-RU")
+    );
+    if (nameExists) return;
+
+    const created = createMenuProfileState(normalizedName);
+    const nextProfiles = [...menuProfiles, created];
+    setMenuProfiles(nextProfiles);
+    setActiveMenuId(created.id);
+    setMealData(created.mealData);
+    setCellPeopleCount(created.cellPeopleCount);
+    setCookedStatus(created.cookedStatus);
+    setNewMenuName("");
+    persistMenuBundleSnapshot(nextProfiles, created.id);
+  };
+
+  const handleSelectMenuProfile = (menuId: string) => {
+    if (!menuId || menuId === activeMenuId) return;
+    const target = menuProfiles.find((menu) => menu.id === menuId);
+    if (!target) return;
+    setActiveMenuId(menuId);
+  };
+
+  const handleRemoveMenuProfile = (menuId: string) => {
+    if (menuProfiles.length <= 1) {
+      alert("Нужно оставить минимум одно меню.");
+      return;
+    }
+    const target = menuProfiles.find((menu) => menu.id === menuId);
+    if (!target) return;
+    if (!confirm(`Удалить меню "${target.name}"?`)) return;
+
+    const nextProfiles = menuProfiles.filter((menu) => menu.id !== menuId);
+    const nextActiveId = activeMenuId === menuId ? nextProfiles[0]?.id || "" : activeMenuId;
+    setMenuProfiles(nextProfiles);
+    setActiveMenuId(nextActiveId);
+    persistMenuBundleSnapshot(nextProfiles, nextActiveId);
+  };
+
+  const generateShoppingListForMenu = (menuId: string) => {
+    const menuProfilesWithCurrentState = menuProfiles.map((menu) => {
+      if (menu.id !== activeMenuId) return menu;
+      return {
+        ...menu,
+        mealData,
+        cellPeopleCount,
+        cookedStatus,
+      };
+    });
+    const targetMenu = menuProfilesWithCurrentState.find((menu) => menu.id === menuId);
+    if (!targetMenu) return;
+    const sourceMenus = mergeShoppingWithAllMenus ? menuProfilesWithCurrentState : [targetMenu];
+
+    const dishNames = sourceMenus
+      .flatMap((menu) => Object.values(menu.mealData))
       .map((item) => getDisplayText(item))
       .filter((name) => name.trim() !== "");
 
-    persistMenuSnapshot(mealData);
+    if (dishNames.length === 0) return;
+
+    persistMenuBundleSnapshot(menuProfilesWithCurrentState, activeMenuId);
     sessionStorage.setItem("menuDishes", JSON.stringify(dishNames));
-    sessionStorage.setItem("cellPeopleCount", JSON.stringify(cellPeopleCount));
+    sessionStorage.setItem(
+      "cellPeopleCount",
+      JSON.stringify(mergeShoppingWithAllMenus ? {} : targetMenu.cellPeopleCount)
+    );
+    sessionStorage.setItem("shoppingSelectedMenuId", menuId);
+    sessionStorage.setItem("shoppingSelectedMenuName", targetMenu.name);
+    sessionStorage.setItem("shoppingUseMergedMenus", mergeShoppingWithAllMenus ? "1" : "0");
     sessionStorage.setItem("shoppingListUpdatedFromMenu", "1");
     router.push("/shopping-list");
+  };
+
+  const generateShoppingList = () => {
+    if (!activeMenuId) return;
+    generateShoppingListForMenu(activeMenuId);
   };
 
   const handleAddItemClick = (key: string) => {
@@ -2405,9 +2665,13 @@ function MenuPageContent() {
   };
 
   const clearWeek = () => {
-    if (confirm("Вы уверены, что хотите очистить день из текущего меню?")) {
+    if (confirm("Вы уверены, что хотите очистить текущее меню?")) {
       setMealData({});
-      localStorage.removeItem(getMenuStorageKey());
+      setCellPeopleCount({});
+      setCookedStatus({});
+      if (activeMenuId) {
+        persistMenuSnapshot({}, {}, {}, activeMenuId);
+      }
     }
   };
 
@@ -3109,12 +3373,10 @@ function MenuPageContent() {
               type="button"
               className="btn btn-primary"
               onClick={() => {
-                persistMenuSnapshot(mealData);
                 if (typeof window !== "undefined") {
                   window.sessionStorage.setItem(GUEST_REMINDER_PENDING_KEY, "1");
-                  window.sessionStorage.setItem("shoppingListUpdatedFromMenu", "1");
                 }
-                router.push("/shopping-list");
+                generateShoppingList();
               }}
             >
               Посмотреть список покупок
@@ -3285,6 +3547,80 @@ function MenuPageContent() {
             {mealSettingsMessage}
           </p>
         ) : null}
+      </div>
+
+      <div className="card" style={{ marginBottom: "14px", padding: "12px" }}>
+        <div style={{ display: "grid", gap: "10px" }}>
+          <strong style={{ fontSize: "16px" }}>Меню периода</strong>
+          {menuProfiles.map((menu) => {
+            const dishCount = Object.values(menu.mealData)
+              .flatMap((rows) => rows || [])
+              .filter((item) => getDisplayText([item]).trim().length > 0).length;
+            return (
+              <div
+                key={menu.id}
+                style={{
+                  display: "flex",
+                  gap: "8px",
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                  padding: "8px",
+                  border: "1px solid var(--border-default)",
+                  borderRadius: "10px",
+                  background:
+                    menu.id === activeMenuId
+                      ? "color-mix(in srgb, var(--accent-primary) 10%, var(--background-primary) 90%)"
+                      : "var(--background-primary)",
+                }}
+              >
+                <button
+                  type="button"
+                  className={`btn ${menu.id === activeMenuId ? "btn-primary" : ""}`.trim()}
+                  onClick={() => handleSelectMenuProfile(menu.id)}
+                >
+                  Меню: {menu.name}
+                </button>
+                <span className="muted" style={{ fontSize: "12px" }}>
+                  Блюд: {dishCount}
+                </span>
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => generateShoppingListForMenu(menu.id)}
+                  disabled={dishCount === 0}
+                >
+                  Сформировать список покупок
+                </button>
+                {menuProfiles.length > 1 ? (
+                  <button type="button" className="btn btn-danger" onClick={() => handleRemoveMenuProfile(menu.id)}>
+                    Удалить меню
+                  </button>
+                ) : null}
+              </div>
+            );
+          })}
+
+          <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+            <input
+              className="input"
+              style={{ maxWidth: "260px" }}
+              value={newMenuName}
+              onChange={(e) => setNewMenuName(e.target.value)}
+              placeholder="Название меню (например, Клиент Анна)"
+            />
+            <button type="button" className="btn" onClick={handleCreateMenuProfile} disabled={!newMenuName.trim()}>
+              + Добавить меню
+            </button>
+            <label style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "13px" }}>
+              <input
+                type="checkbox"
+                checked={mergeShoppingWithAllMenus}
+                onChange={(e) => setMergeShoppingWithAllMenus(e.target.checked)}
+              />
+              Объединить с общим списком
+            </label>
+          </div>
+        </div>
       </div>
 
       <div className="card" style={{ marginBottom: "14px", padding: "12px" }}>
