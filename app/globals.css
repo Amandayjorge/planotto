@@ -2778,22 +2778,22 @@ body {
 }
 
 .menu-board {
-  margin-top: 16px;
+  margin-top: 12px;
   display: grid;
-  gap: 14px;
-  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   width: 100%;
 }
 
 .menu-day-card {
   background: var(--background-secondary);
   border: 1px solid var(--border-default);
-  border-radius: 14px;
-  padding: 12px;
+  border-radius: 12px;
+  padding: 8px;
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 6px;
 }
 
 .menu-day-card__slot-controls {
@@ -2832,34 +2832,66 @@ body {
 }
 
 .menu-day-card__header {
+  display: grid;
+  gap: 4px;
+  border-bottom: 1px solid rgba(122, 116, 109, 0.22);
+  padding-bottom: 5px;
+}
+
+.menu-day-card__header-main {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-bottom: 1px solid rgba(122, 116, 109, 0.22);
-  padding-bottom: 6px;
 }
 
 .menu-day-card__day {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
   color: var(--text-primary);
 }
 
 .menu-day-card__date {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-secondary);
+}
+
+.menu-day-card__progress {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.menu-day-card__progress-track {
+  height: 5px;
+  flex: 1;
+  border-radius: 999px;
+  background: rgba(122, 116, 109, 0.25);
+  overflow: hidden;
+}
+
+.menu-day-card__progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent-primary);
+}
+
+.menu-day-card__progress-label {
+  font-size: 10px;
+  color: var(--text-secondary);
+  min-width: 28px;
+  text-align: right;
 }
 
 .menu-day-card__meals {
   display: grid;
-  gap: 8px;
+  gap: 6px;
 }
 
 .menu-slot {
   background: var(--background-primary);
   border: 1px solid rgba(122, 116, 109, 0.16);
-  border-radius: 10px;
-  padding: 8px;
+  border-radius: 9px;
+  padding: 6px;
   min-width: 0;
 }
 
@@ -2867,7 +2899,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 6px;
+  margin-bottom: 4px;
 }
 
 .menu-slot__meal {
@@ -2902,8 +2934,8 @@ body {
 .menu-slot__items {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  min-height: 24px;
+  gap: 4px;
+  min-height: 20px;
 }
 
 .menu-slot-item {
@@ -2978,13 +3010,13 @@ body {
 
 .menu-slot__empty {
   border: 1px dashed rgba(122, 116, 109, 0.35);
-  border-radius: 8px;
+  border-radius: 7px;
   background: transparent;
   color: var(--text-secondary);
   font-size: 12px;
   cursor: pointer;
   text-align: center;
-  padding: 8px;
+  padding: 5px 8px;
 }
 
 .menu-slot__empty:hover {

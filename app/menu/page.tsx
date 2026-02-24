@@ -3556,13 +3556,31 @@ function MenuPageContent() {
       <div className="menu-board">
         {dayEntries.map((dayEntry) => {
           const dayMeals = getDayMeals(dayEntry.dateKey);
+          const allDayMeals = getAllMealsForDay(dayEntry.dateKey);
           const dayListEntries = getDayListEntries(dayEntry.dateKey);
           const listAddCellKey = getCellKey(dayEntry.dateKey, getListAppendMeal(dayEntry.dateKey));
+          const dayTargetCount = Math.max(1, allDayMeals.length);
+          const dayFilledCount = dayListEntries.length;
+          const dayFillPercent = Math.min(100, Math.round((dayFilledCount / dayTargetCount) * 100));
           return (
             <article key={dayEntry.dateKey} className="menu-day-card">
               <header className="menu-day-card__header">
-                <span className="menu-day-card__day">{dayEntry.dayLabel}</span>
-                <span className="menu-day-card__date">{dayEntry.displayDate}</span>
+                <div className="menu-day-card__header-main">
+                  <span className="menu-day-card__day">{dayEntry.dayLabel}</span>
+                  <span className="menu-day-card__date">{dayEntry.displayDate}</span>
+                </div>
+                <div className="menu-day-card__progress" aria-label={`Заполненность дня ${dayFillPercent}%`}>
+                  <div className="menu-day-card__progress-track">
+                    <div
+                      className="menu-day-card__progress-fill"
+                      style={{ width: `${dayFillPercent}%` }}
+                      aria-hidden="true"
+                    />
+                  </div>
+                  <span className="menu-day-card__progress-label">
+                    {dayFilledCount}/{dayTargetCount}
+                  </span>
+                </div>
               </header>
 
               {dayStructureMode === "list" ? (
