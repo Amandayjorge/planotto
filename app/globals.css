@@ -2608,6 +2608,14 @@ body {
   flex-wrap: wrap;
 }
 
+.week-navigation--compact {
+  flex-wrap: nowrap;
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  padding: 4px 6px;
+  background: var(--background-secondary);
+}
+
 .week-nav-btn {
   border: 1px solid var(--border-default);
   background: var(--background-primary);
@@ -2619,6 +2627,14 @@ body {
   transition: border-color 0.2s ease, background-color 0.2s ease;
 }
 
+.week-nav-btn--icon {
+  min-width: 32px;
+  padding: 4px 8px;
+  font-size: 20px;
+  line-height: 1;
+  border-radius: 8px;
+}
+
 .week-nav-btn:hover {
   border-color: var(--accent-primary);
   background: var(--background-secondary);
@@ -2626,8 +2642,20 @@ body {
 
 .week-range {
   font-size: 14px;
-  color: var(--text-secondary);
+  color: var(--text-primary);
   font-weight: 600;
+}
+
+.week-range-compact {
+  display: grid;
+  justify-items: center;
+  min-width: 120px;
+}
+
+.week-range-meta {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.1;
 }
 
 .menu-first-onboarding {
@@ -2991,13 +3019,17 @@ body {
     grid-template-columns: 1fr;
   }
 
-  .week-navigation {
+  .week-navigation:not(.week-navigation--compact) {
     width: 100%;
   }
 
-  .week-nav-btn {
+  .week-nav-btn:not(.week-nav-btn--icon) {
     flex: 1;
     min-width: 130px;
+  }
+
+  .week-range-compact {
+    min-width: 112px;
   }
 
   .menu-inline-onboarding-hint {

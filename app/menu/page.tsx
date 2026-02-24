@@ -3446,50 +3446,27 @@ function MenuPageContent() {
       <section className="card">
       <div className="menu-header">
         <h1 className="h1">Меню на период</h1>
-        <div className="week-navigation">
-          <button className="week-nav-btn" onClick={goToPreviousWeek}>
-            ← Назад
-          </button>
-          <span className="week-range">Период: {getRangeDisplay(weekStart, periodEnd)}</span>
-          <button className="week-nav-btn" onClick={goToNextWeek}>
-            Вперед →
-          </button>
-        </div>
-        <div style={{ marginTop: "12px", display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
-          <span style={{ fontWeight: 600 }}>Период:</span>
-          <select
-            className="input"
-            value={periodPreset}
-            onChange={(e) => applyPeriodPreset(e.target.value as PeriodPreset)}
-            style={{ width: "190px" }}
+        <div className="week-navigation week-navigation--compact">
+          <button
+            className="week-nav-btn week-nav-btn--icon"
+            onClick={goToPreviousWeek}
+            aria-label="Предыдущий период"
+            title="Предыдущий период"
           >
-            <option value="7d">7 дней</option>
-            <option value="10d">10 дней</option>
-            <option value="14d">14 дней</option>
-            <option value="month">Месяц</option>
-            <option value="custom">Свой диапазон</option>
-          </select>
-          {periodPreset === "custom" && (
-            <>
-              <input
-                className="input"
-                type="date"
-                value={customStartInput}
-                onChange={(e) => setCustomStartInput(e.target.value)}
-                style={{ width: "170px" }}
-              />
-              <input
-                className="input"
-                type="date"
-                value={customEndInput}
-                onChange={(e) => setCustomEndInput(e.target.value)}
-                style={{ width: "170px" }}
-              />
-              <button type="button" className="btn" onClick={() => applyPeriodPreset("custom")}>
-                Применить
-              </button>
-            </>
-          )}
+            ‹
+          </button>
+          <div className="week-range-compact">
+            <span className="week-range">{getRangeDisplay(weekStart, periodEnd)}</span>
+            <span className="week-range-meta">{periodDays} дней</span>
+          </div>
+          <button
+            className="week-nav-btn week-nav-btn--icon"
+            onClick={goToNextWeek}
+            aria-label="Следующий период"
+            title="Следующий период"
+          >
+            ›
+          </button>
         </div>
         <div style={{ marginTop: "10px", display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
           <span style={{ fontWeight: 600 }}>Структура дня:</span>
