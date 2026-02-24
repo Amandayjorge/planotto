@@ -2964,7 +2964,7 @@ function MenuPageContent() {
               checked={saveMealSlotsAsDefault}
               onChange={(e) => setSaveMealSlotsAsDefault(e.target.checked)}
             />
-            Сделать по умолчанию для всех новых периодов
+            Использовать по умолчанию
           </label>
           <div style={{ marginTop: "12px", display: "flex", justifyContent: "flex-end", gap: "8px" }}>
             <button type="button" className="btn" onClick={closeMealSettingsDialog}>
