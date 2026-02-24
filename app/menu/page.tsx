@@ -3503,9 +3503,6 @@ function MenuPageContent() {
               ⚙
             </button>
           </div>
-          <span className="muted" style={{ fontSize: "12px" }}>
-            Это выбор меню. Переименовать можно в «Настройки меню».
-          </span>
           <div style={{ display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" }}>
             <span className="muted" style={{ fontSize: "12px" }}>
               Вид дня:
