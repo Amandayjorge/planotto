@@ -695,8 +695,9 @@ body {
 }
 
 .pantry-card__amount {
-  font-size: 16px;
-  font-weight: 600;
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1.15;
   color: var(--text-primary);
 }
 
