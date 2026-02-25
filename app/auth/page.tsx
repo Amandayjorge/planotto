@@ -354,17 +354,6 @@ export default function AuthPage() {
             </div>
           </div>
 
-          <label style={{ display: "grid", gap: "6px" }}>
-            Ваше имя
-            <input
-              className="input"
-              type="text"
-              value={profileName}
-              onChange={(e) => setProfileName(e.target.value)}
-              placeholder="Например, Катя"
-            />
-          </label>
-
           <div
             style={{
               display: "grid",
@@ -376,182 +365,19 @@ export default function AuthPage() {
             }}
           >
             <div style={{ fontSize: "15px", fontWeight: 700, color: "var(--text-primary)" }}>
-              Использование сервиса <span style={{ fontWeight: 400, color: "var(--text-tertiary)" }}>(по желанию)</span>
-            </div>
-            <div className="muted" style={{ margin: 0, fontSize: "13px" }}>
-              Эти настройки помогают давать рекомендации, но не обязательны.
+              Профиль
             </div>
             <label style={{ display: "grid", gap: "6px" }}>
-              Цель использования
-              <select className="input" value={profileGoal} onChange={(e) => setProfileGoal(e.target.value)}>
-                {PROFILE_GOAL_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
+              Имя
+              <input
+                className="input"
+                type="text"
+                value={profileName}
+                onChange={(e) => setProfileName(e.target.value)}
+                placeholder="Например, Катя"
+              />
             </label>
-            <div style={{ fontSize: "12px", color: "var(--text-tertiary)", marginTop: "-2px" }}>
-              Используется для рекомендаций и подсказок.
-            </div>
-            <label style={{ display: "grid", gap: "6px" }}>
-              Планировать дни
-              <select className="input" value={profilePlanDays} onChange={(e) => setProfilePlanDays(e.target.value)}>
-                {PROFILE_PLAN_DAYS_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label style={{ display: "grid", gap: "6px" }}>
-              Обычно готовлю на
-              <select className="input" value={profilePeopleCount} onChange={(e) => setProfilePeopleCount(e.target.value)}>
-                {["1", "2", "3", "4", "5+"].map((count) => (
-                  <option key={count} value={count}>
-                    {count}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label style={{ display: "grid", gap: "6px" }}>
-              Приемов пищи в день
-              <select className="input" value={profileMealsPerDay} onChange={(e) => setProfileMealsPerDay(e.target.value)}>
-                {PROFILE_MEALS_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-
-          <div
-            style={{
-              display: "grid",
-              gap: "10px",
-              padding: "12px",
-              border: "1px solid var(--border-default)",
-              borderRadius: "12px",
-              background: "var(--background-primary)",
-            }}
-          >
-            <div style={{ fontSize: "15px", fontWeight: 700, color: "var(--text-primary)" }}>
-              Питание и предпочтения <span style={{ fontWeight: 400, color: "var(--text-tertiary)" }}>(по желанию)</span>
-            </div>
-            <label style={{ display: "grid", gap: "6px" }}>
-              Тип питания
-              <select className="input" value={profileDiet} onChange={(e) => setProfileDiet(e.target.value)}>
-                {PROFILE_DIET_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <div style={{ fontSize: "12px", color: "var(--text-tertiary)", display: "grid", gap: "3px" }}>
-              <div>Аллергии и строгие ограничения — никогда не использовать.</div>
-              <div>Не люблю — стараемся избегать в рекомендациях.</div>
-            </div>
-
-            <div style={{ display: "grid", gap: "6px" }}>
-              <span>Аллергии и строгие ограничения</span>
-              <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
-                <div style={{ flex: "1 1 260px", minWidth: "220px" }}>
-                  <ProductAutocompleteInput
-                    value={allergyInput}
-                    onChange={setAllergyInput}
-                    suggestions={productSuggestions}
-                    placeholder="Например: арахис"
-                  />
-                </div>
-                <button type="button" className="btn" onClick={() => addListItem(allergyInput, setProfileAllergiesList, setAllergyInput)}>
-                  Добавить
-                </button>
-              </div>
-              {profileAllergiesList.length > 0 ? (
-                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                  {profileAllergiesList.map((item) => (
-                    <span
-                      key={`allergy-${item}`}
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: "6px",
-                        border: "1px solid var(--border-default)",
-                        borderRadius: "999px",
-                        padding: "4px 10px",
-                        background: "var(--background-primary)",
-                      }}
-                    >
-                      {item}
-                      <button type="button" className="btn" onClick={() => removeListItem(item, setProfileAllergiesList)} style={{ padding: "0 6px" }}>
-                        ×
-                      </button>
-                    </span>
-                  ))}
-                </div>
-              ) : null}
-            </div>
-
-            <div style={{ display: "grid", gap: "6px" }}>
-              <span>Не люблю продукты</span>
-              <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
-                <div style={{ flex: "1 1 260px", minWidth: "220px" }}>
-                  <ProductAutocompleteInput
-                    value={dislikeInput}
-                    onChange={setDislikeInput}
-                    suggestions={productSuggestions}
-                    placeholder="Например: лук"
-                  />
-                </div>
-                <button type="button" className="btn" onClick={() => addListItem(dislikeInput, setProfileDislikesList, setDislikeInput)}>
-                  Добавить
-                </button>
-              </div>
-              {profileDislikesList.length > 0 ? (
-                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                  {profileDislikesList.map((item) => (
-                    <span
-                      key={`dislike-${item}`}
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: "6px",
-                        border: "1px solid var(--border-default)",
-                        borderRadius: "999px",
-                        padding: "4px 10px",
-                        background: "var(--background-primary)",
-                      }}
-                    >
-                      {item}
-                      <button type="button" className="btn" onClick={() => removeListItem(item, setProfileDislikesList)} style={{ padding: "0 6px" }}>
-                        ×
-                      </button>
-                    </span>
-                  ))}
-                </div>
-              ) : null}
-            </div>
-          </div>
-
-          <div
-            style={{
-              display: "grid",
-              gap: "8px",
-              padding: "12px",
-              border: "1px solid var(--border-default)",
-              borderRadius: "12px",
-              background: "var(--background-primary)",
-            }}
-          >
-            <div style={{ fontSize: "15px", fontWeight: 700, color: "var(--text-primary)" }}>
-              Внешний вид <span style={{ fontWeight: 400, color: "var(--text-tertiary)" }}>(по желанию)</span>
-            </div>
-            <div style={{ fontSize: "12px", color: "var(--text-tertiary)" }}>
-              Не влияет на рекомендации и работу меню.
-            </div>
+            <div style={{ fontSize: "14px", fontWeight: 600, color: "var(--text-primary)" }}>Аватар</div>
             <div style={{ fontSize: "14px", fontWeight: 600, color: "var(--text-primary)" }}>Выберите аватар</div>
             <div
               style={{
@@ -647,6 +473,156 @@ export default function AuthPage() {
                 </button>
               ))}
             </div>
+          </div>
+
+          <div
+            style={{
+              display: "grid",
+              gap: "10px",
+              padding: "12px",
+              border: "1px solid var(--border-default)",
+              borderRadius: "12px",
+              background: "var(--background-primary)",
+            }}
+          >
+            <div style={{ fontSize: "15px", fontWeight: 700, color: "var(--text-primary)" }}>
+              Предпочтения <span style={{ fontWeight: 400, color: "var(--text-tertiary)" }}>(если реально работают)</span>
+            </div>
+            <label style={{ display: "grid", gap: "6px" }}>
+              Тип питания
+              <select className="input" value={profileDiet} onChange={(e) => setProfileDiet(e.target.value)}>
+                {PROFILE_DIET_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <div style={{ display: "grid", gap: "6px" }}>
+              <span>Аллергии</span>
+              <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+                <div style={{ flex: "1 1 260px", minWidth: "220px" }}>
+                  <ProductAutocompleteInput
+                    value={allergyInput}
+                    onChange={setAllergyInput}
+                    suggestions={productSuggestions}
+                    placeholder="Например: арахис"
+                  />
+                </div>
+                <button type="button" className="btn" onClick={() => addListItem(allergyInput, setProfileAllergiesList, setAllergyInput)}>
+                  Добавить
+                </button>
+              </div>
+              {profileAllergiesList.length > 0 ? (
+                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                  {profileAllergiesList.map((item) => (
+                    <span
+                      key={`allergy-${item}`}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "6px",
+                        border: "1px solid var(--border-default)",
+                        borderRadius: "999px",
+                        padding: "4px 10px",
+                        background: "var(--background-primary)",
+                      }}
+                    >
+                      {item}
+                      <button type="button" className="btn" onClick={() => removeListItem(item, setProfileAllergiesList)} style={{ padding: "0 6px" }}>
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+
+            <div style={{ display: "grid", gap: "6px" }}>
+              <span>Не люблю</span>
+              <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+                <div style={{ flex: "1 1 260px", minWidth: "220px" }}>
+                  <ProductAutocompleteInput
+                    value={dislikeInput}
+                    onChange={setDislikeInput}
+                    suggestions={productSuggestions}
+                    placeholder="Например: лук"
+                  />
+                </div>
+                <button type="button" className="btn" onClick={() => addListItem(dislikeInput, setProfileDislikesList, setDislikeInput)}>
+                  Добавить
+                </button>
+              </div>
+              {profileDislikesList.length > 0 ? (
+                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                  {profileDislikesList.map((item) => (
+                    <span
+                      key={`dislike-${item}`}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "6px",
+                        border: "1px solid var(--border-default)",
+                        borderRadius: "999px",
+                        padding: "4px 10px",
+                        background: "var(--background-primary)",
+                      }}
+                    >
+                      {item}
+                      <button type="button" className="btn" onClick={() => removeListItem(item, setProfileDislikesList)} style={{ padding: "0 6px" }}>
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: "grid",
+              gap: "10px",
+              padding: "12px",
+              border: "1px solid var(--border-default)",
+              borderRadius: "12px",
+              background: "var(--background-primary)",
+            }}
+          >
+            <div style={{ fontSize: "15px", fontWeight: 700, color: "var(--text-primary)" }}>
+              Использование сервиса
+            </div>
+            <label style={{ display: "grid", gap: "6px" }}>
+              Цель
+              <select className="input" value={profileGoal} onChange={(e) => setProfileGoal(e.target.value)}>
+                {PROFILE_GOAL_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label style={{ display: "grid", gap: "6px" }}>
+              Сколько дней
+              <select className="input" value={profilePlanDays} onChange={(e) => setProfilePlanDays(e.target.value)}>
+                {PROFILE_PLAN_DAYS_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label style={{ display: "grid", gap: "6px" }}>
+              Сколько приемов пищи
+              <select className="input" value={profileMealsPerDay} onChange={(e) => setProfileMealsPerDay(e.target.value)}>
+                {PROFILE_MEALS_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
 
           <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>

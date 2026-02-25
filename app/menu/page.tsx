@@ -3751,7 +3751,16 @@ function MenuPageContent() {
               </div>
             </div>
 
-            <div style={{ marginTop: "10px", display: "grid", gap: "8px" }}>
+            <div
+              style={{
+                marginTop: "12px",
+                paddingTop: "10px",
+                borderTop: "1px solid var(--border-default)",
+                display: "grid",
+                gap: "8px",
+              }}
+            >
+              <strong style={{ fontSize: "14px" }}>Управление меню</strong>
               {menuProfiles.map((menu) => (
                 <div
                   key={menu.id}
@@ -3761,6 +3770,7 @@ function MenuPageContent() {
                     border: "1px solid var(--border-default)",
                     borderRadius: "10px",
                     padding: "8px",
+                    background: "var(--background-primary)",
                   }}
                 >
                   <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
@@ -3776,7 +3786,12 @@ function MenuPageContent() {
                         }))
                       }
                     />
-                    <button type="button" className="btn btn-primary" onClick={() => saveMenuName(menu.id)}>
+                    <button
+                      type="button"
+                      className="btn"
+                      style={{ padding: "6px 10px", fontSize: "13px" }}
+                      onClick={() => saveMenuName(menu.id)}
+                    >
                       Сохранить
                     </button>
                     {menu.id === activeMenuId ? (
@@ -3796,8 +3811,8 @@ function MenuPageContent() {
                   >
                     <button
                       type="button"
-                      className="btn btn-danger"
-                      style={{ padding: "6px 10px" }}
+                      className="btn"
+                      style={{ padding: "5px 10px", fontSize: "13px", color: "var(--text-secondary)" }}
                       onClick={() => requestRemoveMenu(menu.id)}
                       disabled={menuProfiles.length <= 1}
                     >

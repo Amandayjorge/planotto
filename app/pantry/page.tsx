@@ -442,19 +442,22 @@ export default function PantryPage() {
         </select>
       </div>
 
-      <div className="pantry-category-chips">
-        {categoryChips.map((chip) => (
-          <button
-            key={chip.value}
-            type="button"
-            className={`pantry-chip${categoryFilter === chip.value ? " pantry-chip--active" : ""}`}
-            onClick={() => setCategoryFilter(chip.value)}
-          >
-            {chip.emoji ? `${chip.emoji} ` : ""}
-            {chip.label}
-          </button>
-        ))}
+      <div className="pantry-category-strip">
+        <div className="pantry-category-chips">
+          {categoryChips.map((chip) => (
+            <button
+              key={chip.value}
+              type="button"
+              className={`pantry-chip${categoryFilter === chip.value ? " pantry-chip--active" : ""}`}
+              onClick={() => setCategoryFilter(chip.value)}
+            >
+              {chip.emoji ? `${chip.emoji} ` : ""}
+              {chip.label}
+            </button>
+          ))}
+        </div>
       </div>
+      <div className="pantry-category-hint" aria-hidden="true">Листайте категории →</div>
 
       {categoryOptions.length > 0 ? (
         <datalist id={CATEGORY_DATALIST_ID}>

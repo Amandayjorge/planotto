@@ -1,8 +1,8 @@
 /* Global color system and theme variables */
 :root {
   /* Background colors */
-  --background-primary: #F6F3EE;
-  --background-secondary: #EFEAE2;
+  --background-primary: #FFFCF7;
+  --background-secondary: #F7F1E6;
 
   /* Text colors */
   --text-primary: #3E3A36;
@@ -18,7 +18,7 @@
   --state-warning: #A26A5A;
 
   /* Border colors */
-  --border-default: #DED8CF;
+  --border-default: #E6DED1;
 
   /* Component-specific derived colors */
   --button-primary-bg: var(--accent-primary);
@@ -28,17 +28,17 @@
   --button-add-bg: var(--accent-secondary);
   --button-add-text: var(--background-primary);
 
-  --input-bg: var(--background-primary);
+  --input-bg: #FFFEFB;
   --input-border: var(--border-default);
   --input-text: var(--text-primary);
   --input-placeholder: var(--text-secondary);
 
-  --card-bg: var(--background-primary);
-  --card-border: var(--border-default);
-  --card-shadow: 0 2px 8px rgba(62, 58, 54, 0.1);
+  --card-bg: #FFFEFB;
+  --card-border: #E8E0D4;
+  --card-shadow: 0 8px 22px rgba(62, 58, 54, 0.08);
 
   --modal-overlay: rgba(62, 58, 54, 0.5);
-  --modal-bg: var(--background-primary);
+  --modal-bg: #FFFEFB;
   --modal-border: var(--border-default);
 
   --badge-neutral-bg: var(--state-neutral);
@@ -49,9 +49,9 @@
   --badge-warning-text: var(--background-primary);
 
   --paper-texture-bg:
-    radial-gradient(180% 120% at 0% 0%, rgba(249, 236, 211, 0.95) 0%, rgba(238, 220, 186, 0.95) 62%, rgba(230, 209, 173, 0.95) 100%),
-    repeating-linear-gradient(135deg, rgba(114, 90, 58, 0.022) 0 2px, rgba(255, 255, 255, 0) 2px 6px),
-    repeating-linear-gradient(45deg, rgba(120, 96, 62, 0.014) 0 1px, rgba(255, 255, 255, 0) 1px 5px);
+    radial-gradient(180% 120% at 0% 0%, rgba(253, 248, 238, 0.96) 0%, rgba(248, 240, 225, 0.95) 62%, rgba(242, 232, 212, 0.94) 100%),
+    repeating-linear-gradient(135deg, rgba(114, 90, 58, 0.012) 0 2px, rgba(255, 255, 255, 0) 2px 7px),
+    repeating-linear-gradient(45deg, rgba(120, 96, 62, 0.009) 0 1px, rgba(255, 255, 255, 0) 1px 6px);
 }
 
 /* Base styles */
@@ -602,6 +602,10 @@ body {
   margin-bottom: 20px;
 }
 
+.pantry-category-strip {
+  position: relative;
+}
+
 .pantry-chip {
   border: 1px solid rgba(149, 128, 92, 0.17);
   border-radius: 999px;
@@ -624,6 +628,10 @@ body {
   border-color: #979256;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28);
   color: #fff;
+}
+
+.pantry-category-hint {
+  display: none;
 }
 
 .pantry-page {
@@ -731,10 +739,10 @@ body {
 
 .pantry-card__amount {
   margin-top: 2px;
-  font-size: 24px;
-  font-weight: 800;
-  line-height: 1.08;
-  color: var(--text-primary);
+  font-size: 19px;
+  font-weight: 650;
+  line-height: 1.15;
+  color: var(--text-secondary);
 }
 
 .pantry-card__meta-row {
@@ -747,7 +755,7 @@ body {
 
 .pantry-card__updated {
   margin-top: 0;
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-secondary);
   display: inline-flex;
   align-items: center;
@@ -829,20 +837,52 @@ body {
 }
 
 @media (max-width: 640px) {
+  .pantry-category-strip::after {
+    content: "";
+    position: absolute;
+    right: 0;
+    top: 0;
+    width: 36px;
+    height: 100%;
+    pointer-events: none;
+    background: linear-gradient(90deg, rgba(236, 218, 185, 0), rgba(236, 218, 185, 0.96));
+  }
+
+  .pantry-category-strip {
+    overflow: hidden;
+  }
+
   .pantry-category-chips {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: max-content;
+    align-items: center;
+    gap: 7px;
     flex-wrap: nowrap;
-    gap: 8px;
     overflow-x: auto;
     overflow-y: hidden;
+    touch-action: pan-x;
+    overscroll-behavior-x: contain;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: thin;
-    margin-bottom: 16px;
+    margin-right: -26px;
+    padding-right: 26px;
+    margin-bottom: 6px;
     padding-bottom: 4px;
   }
 
   .pantry-chip {
     flex: 0 0 auto;
     white-space: nowrap;
+    font-size: 12px;
+    padding: 5px 10px;
+  }
+
+  .pantry-category-hint {
+    display: block;
+    margin: 0 0 14px;
+    font-size: 11px;
+    color: #8e8372;
   }
 
   .pantry-card__meta-row {
@@ -1296,17 +1336,24 @@ body {
 .shopping-list__custom-days-btn {
   border: 1px solid var(--border-default);
   border-radius: 999px;
-  padding: 6px 14px;
-  font-size: 12px;
+  padding: 8px 14px;
+  font-size: 13px;
+  min-width: 44px;
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: var(--background-primary);
   color: var(--text-secondary);
   cursor: pointer;
-  transition: border-color 0.2s, transform 0.2s;
+  box-shadow: 0 6px 14px rgba(62, 58, 54, 0.08);
+  transition: border-color 0.2s, transform 0.2s, box-shadow 0.2s;
 }
 
 .shopping-list__custom-days-btn:hover {
   border-color: var(--border-default);
   transform: translateY(-1px);
+  box-shadow: 0 10px 18px rgba(62, 58, 54, 0.12);
 }
 
 .shopping-list__add-manual-btn {
@@ -3386,7 +3433,7 @@ body {
   }
 
   .shopping-list__date-filter {
-    gap: 4px;
+    gap: 8px;
   }
 
   .shopping-list__quick-buttons,
@@ -3405,6 +3452,12 @@ body {
     flex: 1 1 calc(50% - 8px);
     min-width: 0;
     text-align: center;
+  }
+
+  .shopping-list__custom-days-btn {
+    margin-top: 2px;
+    align-self: flex-end;
+    padding: 8px 16px;
   }
 
   .shopping-list__item {
