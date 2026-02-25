@@ -199,7 +199,10 @@ export default function PantryPage() {
           </div>
 
           {editingId === "new" && draftItem && (
-            <div className="pantry-table__row" style={{ backgroundColor: "var(--background-secondary)" }}>
+            <div
+              className={`pantry-table__row${activeSuggestionField === "new" ? " pantry-table__row--suggestions-open" : ""}`}
+              style={{ backgroundColor: "var(--background-secondary)" }}
+            >
               <div className="pantry-table__cell">
                 <div className="pantry-name-input-wrap">
                   <input
@@ -293,7 +296,10 @@ export default function PantryPage() {
             const currentItem = isEditing && draftItem ? draftItem : item;
 
             return (
-              <div key={index} className="pantry-table__row">
+              <div
+                key={index}
+                className={`pantry-table__row${activeSuggestionField === `edit-${index}` ? " pantry-table__row--suggestions-open" : ""}`}
+              >
                 <div className="pantry-table__cell">
                   {isEditing ? (
                     <>
