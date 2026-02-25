@@ -1021,6 +1021,15 @@ function MenuPageContent() {
   const [mealData, setMealData] = useState<Record<string, MenuItem[]>>({});
   const [menuProfiles, setMenuProfiles] = useState<MenuProfileState[]>([]);
   const [activeMenuId, setActiveMenuId] = useState("");
+  const [nameDrafts, setNameDrafts] = useState<Record<string, string>>({});
+  const [showMenuSettingsDialog, setShowMenuSettingsDialog] = useState(false);
+  const [isCreateMenuDialogOpen, setIsCreateMenuDialogOpen] = useState(false);
+  const [newMenuNameDraft, setNewMenuNameDraft] = useState("");
+  const [pendingDeleteMenuId, setPendingDeleteMenuId] = useState<string | null>(null);
+  const [mergeShoppingWithAllMenus, setMergeShoppingWithAllMenus] = useState(false);
+  const [showMealSettingsDialog, setShowMealSettingsDialog] = useState(false);
+  const [newMealSlotName, setNewMealSlotName] = useState("");
+  const [saveMealSlotsAsDefault, setSaveMealSlotsAsDefault] = useState(false);
 
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [hasLoaded, setHasLoaded] = useState(false);
@@ -1175,6 +1184,17 @@ function MenuPageContent() {
   const cellPeopleCountKey = `${CELL_PEOPLE_COUNT_KEY}:${rangeKey}`;
   const cookedStatusKey = `cookedStatus:${rangeKey}`;
   const activeProductsKey = `activeProducts:${rangeKey}`;
+  const getMergeShoppingKey = useCallback(
+    (targetRangeKey: string) => `${MENU_SHOPPING_MERGE_KEY_PREFIX}:${targetRangeKey}`,
+    []
+  );
+  const buildNameDrafts = useCallback((menus: MenuProfileState[]): Record<string, string> => {
+    const drafts: Record<string, string> = {};
+    menus.forEach((menu) => {
+      drafts[menu.id] = menu.name;
+    });
+    return drafts;
+  }, []);
   const persistMenuBundleSnapshot = useCallback(
     (nextProfiles: MenuProfileState[], nextActiveMenuId: string) => {
       if (typeof window === "undefined") return;
@@ -1189,6 +1209,39 @@ function MenuPageContent() {
   );
 
   const getCellKey = (day: string, meal: string) => `${day}-${meal}`;
+  const migrateMealNameInMenus = (
+    menus: MenuProfileState[],
+    fromName: string,
+    toName: string
+  ): MenuProfileState[] => {
+    if (!fromName || !toName || fromName === toName) return menus;
+
+    return menus.map((menu) => {
+      const nextMealData: Record<string, MenuItem[]> = { ...menu.mealData };
+      Object.entries(menu.mealData).forEach(([cellKey, items]) => {
+        const parsed = splitCellKey(cellKey);
+        if (!parsed || parsed.mealLabel !== fromName) return;
+        const targetKey = getCellKey(parsed.dayKey, toName);
+        nextMealData[targetKey] = [...(nextMealData[targetKey] || []), ...(items || [])];
+        delete nextMealData[cellKey];
+      });
+
+      const nextCellPeopleCount: Record<string, number> = { ...menu.cellPeopleCount };
+      Object.entries(menu.cellPeopleCount).forEach(([cellKey, count]) => {
+        const parsed = splitCellKey(cellKey);
+        if (!parsed || parsed.mealLabel !== fromName) return;
+        const targetKey = getCellKey(parsed.dayKey, toName);
+        nextCellPeopleCount[targetKey] = count;
+        delete nextCellPeopleCount[cellKey];
+      });
+
+      return {
+        ...menu,
+        mealData: nextMealData,
+        cellPeopleCount: nextCellPeopleCount,
+      };
+    });
+  };
   const getListAppendMeal = useCallback(
     (dayKey: string) => {
       const meals = getAllMealsForDay(dayKey);
@@ -1297,12 +1350,55 @@ function MenuPageContent() {
     setActiveProductsSearch("");
   };
 
+  const closeMenuSettingsDialog = () => {
+    setShowMenuSettingsDialog(false);
+    setShowMealSettingsDialog(false);
+    setIsCreateMenuDialogOpen(false);
+    setPendingDeleteMenuId(null);
+    setSaveMealSlotsAsDefault(false);
+    setNewMealSlotName("");
+  };
+
   const resetAllModalStates = () => {
     closeDropdownMenu();
     closeAddEditDialog();
     closeMoveDialog();
     closeActiveProductsDialog();
+    closeMenuSettingsDialog();
   };
+
+  useEffect(() => {
+    if (
+      !showMenuSettingsDialog &&
+      !showMealSettingsDialog &&
+      !isCreateMenuDialogOpen &&
+      !pendingDeleteMenuId
+    ) {
+      return;
+    }
+
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      if (pendingDeleteMenuId) {
+        setPendingDeleteMenuId(null);
+        return;
+      }
+      if (isCreateMenuDialogOpen) {
+        setIsCreateMenuDialogOpen(false);
+        return;
+      }
+      if (showMealSettingsDialog) {
+        closeMealSettingsDialog();
+        return;
+      }
+      setShowMenuSettingsDialog(false);
+    };
+
+    document.addEventListener("keydown", onEscape, true);
+    return () => {
+      document.removeEventListener("keydown", onEscape, true);
+    };
+  }, [isCreateMenuDialogOpen, pendingDeleteMenuId, showMealSettingsDialog, showMenuSettingsDialog]);
 
   const handleOnboardingAddFirstRecipe = () => {
     setShowFirstVisitOnboarding(false);
@@ -1978,6 +2074,8 @@ function MenuPageContent() {
 
     setMenuProfiles(parsedBundle.menus);
     setActiveMenuId(initialActiveId);
+    setNameDrafts(buildNameDrafts(parsedBundle.menus));
+    setMergeShoppingWithAllMenus(localStorage.getItem(getMergeShoppingKey(rangeKey)) === "1");
     setMealData(initialActiveMenu?.mealData || {});
     setCellPeopleCount(initialActiveMenu?.cellPeopleCount || {});
     setCookedStatus(initialActiveMenu?.cookedStatus || {});
@@ -2024,9 +2122,13 @@ function MenuPageContent() {
 
     setExpandedActiveProductNoteId(null);
     setActiveProductsCloudHydrated(false);
+    setShowMenuSettingsDialog(false);
+    setShowMealSettingsDialog(false);
+    setIsCreateMenuDialogOpen(false);
+    setPendingDeleteMenuId(null);
     setHasLoaded(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rangeKey]);
+  }, [buildNameDrafts, getMergeShoppingKey, rangeKey]);
 
   useEffect(() => {
     if (!hasLoaded || !activeMenuId) return;
@@ -2096,6 +2198,11 @@ function MenuPageContent() {
     if (!hasLoaded) return;
     localStorage.setItem(activeProductsKey, JSON.stringify(activeProducts));
   }, [activeProducts, activeProductsKey, hasLoaded, rangeKey]);
+
+  useEffect(() => {
+    if (!hasLoaded) return;
+    localStorage.setItem(getMergeShoppingKey(rangeKey), mergeShoppingWithAllMenus ? "1" : "0");
+  }, [getMergeShoppingKey, hasLoaded, mergeShoppingWithAllMenus, rangeKey]);
 
   useEffect(() => {
     if (!hasLoaded || !authResolved || !currentUserId || !activeProductsCloudHydrated) return;
@@ -2220,10 +2327,132 @@ function MenuPageContent() {
     setActiveMenuId(menuId);
   };
 
+  const saveMenuName = (menuId: string) => {
+    const target = menuProfiles.find((menu) => menu.id === menuId);
+    if (!target) return;
+
+    const rawDraft = nameDrafts[menuId] || target.name;
+    const normalized = normalizeMenuProfileName(rawDraft);
+    if (!normalized) {
+      setNameDrafts((prev) => ({ ...prev, [menuId]: target.name }));
+      return;
+    }
+    if (normalized === target.name) return;
+
+    const duplicate = menuProfiles.some(
+      (menu) => menu.id !== menuId && menu.name.toLocaleLowerCase("ru-RU") === normalized.toLocaleLowerCase("ru-RU")
+    );
+    if (duplicate) return;
+
+    const nextMenus = menuProfiles.map((menu) => (menu.id === menuId ? { ...menu, name: normalized } : menu));
+    persistMenuBundleSnapshot(nextMenus, activeMenuId);
+    setMenuProfiles(nextMenus);
+    setNameDrafts(buildNameDrafts(nextMenus));
+  };
+
+  const addMenu = () => {
+    const normalized = normalizeMenuProfileName(newMenuNameDraft);
+    if (!normalized) return;
+    const duplicate = menuProfiles.some(
+      (menu) => menu.name.toLocaleLowerCase("ru-RU") === normalized.toLocaleLowerCase("ru-RU")
+    );
+    if (duplicate) return;
+
+    const created = createMenuProfileState(normalized);
+    const nextMenus = [...menuProfiles, created];
+    const nextActiveId = activeMenuId || created.id;
+    persistMenuBundleSnapshot(nextMenus, nextActiveId);
+    setMenuProfiles(nextMenus);
+    setActiveMenuId(nextActiveId);
+    setNameDrafts(buildNameDrafts(nextMenus));
+    setNewMenuNameDraft("");
+    setIsCreateMenuDialogOpen(false);
+  };
+
+  const requestRemoveMenu = (menuId: string) => {
+    if (menuProfiles.length <= 1) return;
+    setPendingDeleteMenuId(menuId);
+  };
+
+  const removeMenu = (menuId: string) => {
+    if (menuProfiles.length <= 1) return;
+    const target = menuProfiles.find((menu) => menu.id === menuId);
+    if (!target) return;
+
+    const nextMenus = menuProfiles.filter((menu) => menu.id !== menuId);
+    if (nextMenus.length === 0) return;
+    const nextActiveMenuId = activeMenuId === menuId ? nextMenus[0].id : activeMenuId;
+
+    persistMenuBundleSnapshot(nextMenus, nextActiveMenuId);
+    setMenuProfiles(nextMenus);
+    setActiveMenuId(nextActiveMenuId);
+    setNameDrafts(buildNameDrafts(nextMenus));
+    setPendingDeleteMenuId(null);
+  };
+
+  const toggleMealVisibility = (slotId: string) => {
+    setMealSlots((prev) => prev.map((slot) => (slot.id === slotId ? { ...slot, visible: !slot.visible } : slot)));
+  };
+
+  const renameMealSlot = (slotId: string, nextRawName: string) => {
+    const normalized = normalizeMealSlotName(nextRawName);
+    const current = mealSlots.find((slot) => slot.id === slotId);
+    if (!current || !normalized || normalized === current.name) return;
+
+    const exists = mealSlots.some(
+      (slot) => slot.id !== slotId && slot.name.toLocaleLowerCase("ru-RU") === normalized.toLocaleLowerCase("ru-RU")
+    );
+    if (exists) return;
+
+    const nextMenus = migrateMealNameInMenus(menuProfiles, current.name, normalized);
+    persistMenuBundleSnapshot(nextMenus, activeMenuId);
+    setMenuProfiles(nextMenus);
+    setMealSlots((prev) => prev.map((slot) => (slot.id === slotId ? { ...slot, name: normalized } : slot)));
+  };
+
+  const moveMealSlot = (slotId: string, direction: -1 | 1) => {
+    setMealSlots((prev) => {
+      const ordered = [...prev].sort((a, b) => a.order - b.order);
+      const index = ordered.findIndex((slot) => slot.id === slotId);
+      if (index < 0) return prev;
+      const nextIndex = index + direction;
+      if (nextIndex < 0 || nextIndex >= ordered.length) return prev;
+      const swapped = [...ordered];
+      [swapped[index], swapped[nextIndex]] = [swapped[nextIndex], swapped[index]];
+      return swapped.map((slot, idx) => ({ ...slot, order: idx }));
+    });
+  };
+
+  const addMealSlot = () => {
+    const normalized = normalizeMealSlotName(newMealSlotName);
+    if (!normalized) return;
+    const exists = mealSlots.some(
+      (slot) => slot.name.toLocaleLowerCase("ru-RU") === normalized.toLocaleLowerCase("ru-RU")
+    );
+    if (exists) return;
+
+    const nextOrder = mealSlots.length;
+    setMealSlots((prev) => [
+      ...prev,
+      { id: crypto.randomUUID(), name: normalized, visible: true, order: nextOrder },
+    ]);
+    setNewMealSlotName("");
+  };
+
+  const closeMealSettingsDialog = () => {
+    setShowMealSettingsDialog(false);
+    setSaveMealSlotsAsDefault(false);
+    setNewMealSlotName("");
+  };
+
+  const handleMealSettingsDone = () => {
+    if (saveMealSlotsAsDefault && typeof window !== "undefined") {
+      localStorage.setItem(MEAL_STRUCTURE_DEFAULT_SETTINGS_KEY, JSON.stringify(mealSlots));
+    }
+    closeMealSettingsDialog();
+  };
+
   const generateShoppingListForMenu = (menuId: string) => {
-    const mergeShoppingKey = `${MENU_SHOPPING_MERGE_KEY_PREFIX}:${rangeKey}`;
-    const mergeShoppingWithAllMenus =
-      typeof window !== "undefined" && localStorage.getItem(mergeShoppingKey) === "1";
     const menuProfilesWithCurrentState = menuProfiles.map((menu) => {
       if (menu.id !== activeMenuId) return menu;
       return {
@@ -2235,7 +2464,7 @@ function MenuPageContent() {
     });
     const targetMenu = menuProfilesWithCurrentState.find((menu) => menu.id === menuId);
     if (!targetMenu) return;
-    const sourceMenus = [targetMenu];
+    const sourceMenus = mergeShoppingWithAllMenus ? menuProfilesWithCurrentState : [targetMenu];
 
     const dishNames = sourceMenus
       .flatMap((menu) => Object.values(menu.mealData))
@@ -2247,8 +2476,8 @@ function MenuPageContent() {
     persistMenuBundleSnapshot(menuProfilesWithCurrentState, activeMenuId);
     sessionStorage.setItem("menuDishes", JSON.stringify(dishNames));
     sessionStorage.setItem("cellPeopleCount", JSON.stringify(targetMenu.cellPeopleCount));
-    sessionStorage.setItem("shoppingSelectedMenuId", menuId);
-    sessionStorage.setItem("shoppingSelectedMenuName", targetMenu.name);
+    sessionStorage.setItem("shoppingSelectedMenuId", mergeShoppingWithAllMenus ? "merged" : menuId);
+    sessionStorage.setItem("shoppingSelectedMenuName", mergeShoppingWithAllMenus ? "Все меню периода" : targetMenu.name);
     sessionStorage.setItem("shoppingUseMergedMenus", mergeShoppingWithAllMenus ? "1" : "0");
     sessionStorage.setItem("shoppingListUpdatedFromMenu", "1");
     router.push("/shopping-list");
@@ -3049,6 +3278,10 @@ function MenuPageContent() {
     );
   };
 
+  const pendingDeleteMenu = pendingDeleteMenuId
+    ? menuProfiles.find((menu) => menu.id === pendingDeleteMenuId) || null
+    : null;
+
   return (
     <>
       {showFirstVisitOnboarding && (
@@ -3251,7 +3484,7 @@ function MenuPageContent() {
               style={{ minWidth: "36px", padding: "6px 10px" }}
               title="Настройки меню"
               aria-label="Настройки меню"
-              onClick={() => router.push("/settings#menu-management")}
+              onClick={() => setShowMenuSettingsDialog(true)}
             >
               ⚙
             </button>
@@ -3412,6 +3645,303 @@ function MenuPageContent() {
           );
         })}
       </div>
+
+      {showMenuSettingsDialog ? (
+        <div
+          className="menu-dialog-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Настройки меню"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) closeMenuSettingsDialog();
+          }}
+        >
+          <div
+            className="menu-dialog menu-settings-dialog"
+            style={{ width: "min(760px, 96vw)", maxHeight: "88vh", overflow: "auto" }}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" }}>
+              <h3 style={{ margin: 0 }}>Настройки меню</h3>
+              <button type="button" className="btn" onClick={closeMenuSettingsDialog}>
+                Закрыть
+              </button>
+            </div>
+
+            <div
+              style={{
+                marginTop: "10px",
+                border: "1px solid var(--border-default)",
+                borderRadius: "10px",
+                padding: "10px",
+                display: "grid",
+                gap: "8px",
+              }}
+            >
+              <strong style={{ fontSize: "14px" }}>Структура дня</strong>
+              <div
+                role="group"
+                aria-label="Режим отображения дня"
+                style={{
+                  display: "inline-flex",
+                  border: "1px solid var(--border-default)",
+                  borderRadius: "999px",
+                  padding: "2px",
+                  width: "fit-content",
+                }}
+              >
+                <button
+                  type="button"
+                  className={dayStructureMode === "list" ? "btn btn-primary" : "btn"}
+                  style={{ padding: "4px 10px", fontSize: "12px", minHeight: "30px" }}
+                  onClick={() => setDayStructureMode("list")}
+                >
+                  Список
+                </button>
+                <button
+                  type="button"
+                  className={dayStructureMode === "meals" ? "btn btn-primary" : "btn"}
+                  style={{ padding: "4px 10px", fontSize: "12px", minHeight: "30px" }}
+                  onClick={() => setDayStructureMode("meals")}
+                >
+                  По приемам
+                </button>
+              </div>
+              <div>
+                <button type="button" className="btn" onClick={() => setShowMealSettingsDialog(true)}>
+                  Настроить приемы
+                </button>
+              </div>
+            </div>
+
+            <label style={{ marginTop: "10px", display: "inline-flex", alignItems: "center", gap: "8px" }}>
+              <input
+                type="checkbox"
+                checked={mergeShoppingWithAllMenus}
+                onChange={(e) => setMergeShoppingWithAllMenus(e.target.checked)}
+              />
+              Объединять все меню в один список покупок
+            </label>
+
+            <div style={{ marginTop: "10px", display: "grid", gap: "8px" }}>
+              {menuProfiles.map((menu) => (
+                <div
+                  key={menu.id}
+                  style={{
+                    display: "grid",
+                    gap: "8px",
+                    border: "1px solid var(--border-default)",
+                    borderRadius: "10px",
+                    padding: "8px",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                    <input
+                      className="input"
+                      style={{ minWidth: "180px", flex: "1 1 220px" }}
+                      value={nameDrafts[menu.id] || ""}
+                      aria-label={`Название меню ${menu.name}`}
+                      onChange={(e) =>
+                        setNameDrafts((prev) => ({
+                          ...prev,
+                          [menu.id]: e.target.value,
+                        }))
+                      }
+                    />
+                    <button type="button" className="btn btn-primary" onClick={() => saveMenuName(menu.id)}>
+                      Сохранить
+                    </button>
+                    {menu.id === activeMenuId ? (
+                      <span className="muted" style={{ fontSize: "12px" }}>
+                        Текущее меню
+                      </span>
+                    ) : null}
+                  </div>
+
+                  <div
+                    style={{
+                      borderTop: "1px solid var(--border-default)",
+                      paddingTop: "8px",
+                      display: "flex",
+                      justifyContent: "flex-end",
+                    }}
+                  >
+                    <button
+                      type="button"
+                      className="btn btn-danger"
+                      style={{ padding: "6px 10px" }}
+                      onClick={() => requestRemoveMenu(menu.id)}
+                      disabled={menuProfiles.length <= 1}
+                    >
+                      Удалить меню
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ marginTop: "10px", display: "flex", justifyContent: "flex-start" }}>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => {
+                  setNewMenuNameDraft("");
+                  setIsCreateMenuDialogOpen(true);
+                }}
+              >
+                + Добавить меню
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {showMealSettingsDialog ? (
+        <div className="menu-dialog-overlay" role="dialog" aria-modal="true" aria-label="Настроить приемы">
+          <div className="menu-dialog" style={{ maxWidth: "680px" }}>
+            <h3 style={{ marginTop: 0, marginBottom: "12px" }}>Настроить приемы</h3>
+            <div style={{ display: "grid", gap: "8px" }}>
+              {orderedMealSlots.map((slot, index) => (
+                <div
+                  key={slot.id}
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "auto 1fr auto auto",
+                    gap: "8px",
+                    alignItems: "center",
+                    border: "1px solid var(--border-default)",
+                    borderRadius: "8px",
+                    padding: "8px",
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={slot.visible}
+                    onChange={() => toggleMealVisibility(slot.id)}
+                    title="Показывать прием"
+                  />
+                  <input
+                    className="input"
+                    defaultValue={slot.name}
+                    onBlur={(e) => renameMealSlot(slot.id, e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        renameMealSlot(slot.id, (e.target as HTMLInputElement).value);
+                        (e.target as HTMLInputElement).blur();
+                      }
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={() => moveMealSlot(slot.id, -1)}
+                    disabled={index === 0}
+                    style={{ padding: "2px 8px" }}
+                  >
+                    ↑
+                  </button>
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={() => moveMealSlot(slot.id, 1)}
+                    disabled={index === orderedMealSlots.length - 1}
+                    style={{ padding: "2px 8px" }}
+                  >
+                    ↓
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ marginTop: "10px", display: "flex", gap: "8px", flexWrap: "wrap" }}>
+              <input
+                className="input"
+                type="text"
+                placeholder="Новый прием"
+                value={newMealSlotName}
+                onChange={(e) => setNewMealSlotName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") addMealSlot();
+                }}
+                style={{ flex: "1 1 220px" }}
+              />
+              <button type="button" className="btn btn-primary" onClick={addMealSlot}>
+                + Добавить прием
+              </button>
+            </div>
+
+            <label style={{ marginTop: "12px", display: "inline-flex", gap: "8px", alignItems: "center", fontSize: "13px" }}>
+              <input
+                type="checkbox"
+                checked={saveMealSlotsAsDefault}
+                onChange={(e) => setSaveMealSlotsAsDefault(e.target.checked)}
+              />
+              Использовать по умолчанию
+            </label>
+
+            <div className="menu-dialog__actions">
+              <button type="button" className="menu-dialog__confirm" onClick={handleMealSettingsDone}>
+                Сохранить
+              </button>
+              <button type="button" className="menu-dialog__cancel" onClick={closeMealSettingsDialog}>
+                Отмена
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {isCreateMenuDialogOpen ? (
+        <div className="menu-dialog-overlay" role="dialog" aria-modal="true" aria-label="Новое меню">
+          <div className="menu-dialog" style={{ maxWidth: "420px" }}>
+            <h3 style={{ marginTop: 0, marginBottom: "12px" }}>Новое меню</h3>
+            <input
+              className="menu-dialog__input"
+              value={newMenuNameDraft}
+              onChange={(e) => setNewMenuNameDraft(e.target.value)}
+              placeholder="Название меню"
+              autoFocus
+            />
+            <div className="menu-dialog__actions">
+              <button
+                type="button"
+                className="menu-dialog__confirm"
+                onClick={addMenu}
+                disabled={!newMenuNameDraft.trim()}
+              >
+                Создать
+              </button>
+              <button type="button" className="menu-dialog__cancel" onClick={() => setIsCreateMenuDialogOpen(false)}>
+                Отмена
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {pendingDeleteMenu ? (
+        <div className="menu-dialog-overlay" role="dialog" aria-modal="true" aria-label="Удалить меню">
+          <div className="menu-dialog" style={{ maxWidth: "420px" }}>
+            <h3 style={{ marginTop: 0, marginBottom: "8px" }}>Удалить меню</h3>
+            <p style={{ marginTop: 0 }}>
+              Удалить меню <strong>{pendingDeleteMenu.name}</strong>?
+            </p>
+            <div className="menu-dialog__actions">
+              <button
+                type="button"
+                className="menu-dialog__confirm"
+                style={{ background: "#9b4d3a" }}
+                onClick={() => removeMenu(pendingDeleteMenu.id)}
+              >
+                Удалить
+              </button>
+              <button type="button" className="menu-dialog__cancel" onClick={() => setPendingDeleteMenuId(null)}>
+                Отмена
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <DropdownMenu />
       <MoveDialog />
