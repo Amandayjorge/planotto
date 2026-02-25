@@ -620,9 +620,9 @@ body {
 
 .pantry-page {
   background:
-    radial-gradient(180% 120% at 0% 0%, rgba(255, 250, 239, 0.96) 0%, rgba(245, 234, 212, 0.96) 64%, rgba(239, 226, 202, 0.96) 100%),
-    repeating-linear-gradient(135deg, rgba(114, 90, 58, 0.018) 0 2px, rgba(255, 255, 255, 0) 2px 6px),
-    repeating-linear-gradient(45deg, rgba(120, 96, 62, 0.012) 0 1px, rgba(255, 255, 255, 0) 1px 5px);
+    radial-gradient(180% 120% at 0% 0%, rgba(249, 236, 211, 0.95) 0%, rgba(238, 220, 186, 0.95) 62%, rgba(230, 209, 173, 0.95) 100%),
+    repeating-linear-gradient(135deg, rgba(114, 90, 58, 0.022) 0 2px, rgba(255, 255, 255, 0) 2px 6px),
+    repeating-linear-gradient(45deg, rgba(120, 96, 62, 0.014) 0 1px, rgba(255, 255, 255, 0) 1px 5px);
 }
 
 .pantry-cards {
@@ -637,13 +637,13 @@ body {
   border-radius: 14px;
   padding: 16px;
   background:
-    linear-gradient(180deg, rgba(255, 253, 247, 0.97) 0%, rgba(250, 241, 224, 0.97) 100%),
-    radial-gradient(150% 130% at 0% 0%, rgba(255, 255, 255, 0.58) 0%, rgba(255, 255, 255, 0) 58%),
-    repeating-linear-gradient(135deg, rgba(130, 102, 68, 0.03) 0 2px, rgba(255, 255, 255, 0) 2px 6px);
+    linear-gradient(180deg, rgba(255, 255, 252, 0.98) 0%, rgba(252, 247, 237, 0.98) 100%),
+    radial-gradient(150% 130% at 0% 0%, rgba(255, 255, 255, 0.68) 0%, rgba(255, 255, 255, 0) 58%),
+    repeating-linear-gradient(135deg, rgba(130, 102, 68, 0.024) 0 2px, rgba(255, 255, 255, 0) 2px 6px);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.5),
     inset 0 -1px 0 rgba(120, 95, 62, 0.08),
-    0 12px 24px rgba(70, 54, 38, 0.11);
+    0 14px 24px rgba(70, 54, 38, 0.13);
 }
 
 .pantry-cards .pantry-card:nth-child(3n + 1) {
@@ -746,6 +746,18 @@ body {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+.pantry-card__delete-btn {
+  color: #8f6a55;
+  background: rgba(255, 255, 255, 0.62);
+  border: 1px solid rgba(165, 132, 106, 0.3);
+}
+
+.pantry-card__delete-btn:hover {
+  background: rgba(255, 245, 239, 0.88);
+  border-color: rgba(165, 132, 106, 0.45);
+  color: #825f4b;
 }
 
 .pantry-card__editor-grid {

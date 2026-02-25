@@ -545,8 +545,8 @@ export default function PantryPage() {
                       <button onClick={() => startEdit(index)} className="btn">
                         Редактировать
                       </button>
-                      <button onClick={() => removePantryItem(index)} className="btn btn-danger">
-                        Удалить
+                      <button onClick={() => removePantryItem(index)} className="btn pantry-card__delete-btn">
+                        🗑 Удалить
                       </button>
                     </div>
                   </>
