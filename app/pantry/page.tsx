@@ -93,6 +93,17 @@ const formatUpdatedLabel = (iso: string): string => {
   return targetStart.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric" });
 };
 
+const isUpdatedToday = (iso: string): boolean => {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return false;
+  const now = new Date();
+  return (
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() &&
+    date.getDate() === now.getDate()
+  );
+};
+
 export default function PantryPage() {
   const [pantry, setPantry] = useState<PantryItem[]>(() => {
     if (typeof window === "undefined") return [];
@@ -523,7 +534,13 @@ export default function PantryPage() {
                     <div className="pantry-card__amount">
                       {item.amount} {item.unit}
                     </div>
-                    <div className="pantry-card__updated">Обновлено {formatUpdatedLabel(item.updatedAt)}</div>
+                    <div className="pantry-card__updated">
+                      <span
+                        className={`pantry-card__updated-dot${isUpdatedToday(item.updatedAt) ? " pantry-card__updated-dot--today" : ""}`}
+                        aria-hidden="true"
+                      />
+                      <span>Обновлено {formatUpdatedLabel(item.updatedAt)}</span>
+                    </div>
                     <div className="pantry-card__actions">
                       <button onClick={() => startEdit(index)} className="btn">
                         Редактировать
