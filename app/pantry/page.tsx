@@ -386,7 +386,7 @@ export default function PantryPage() {
   );
 
   return (
-    <section className="card">
+    <section className="card pantry-page">
       <div style={{ marginBottom: "20px" }}>
         <Link href="/menu" className="btn" style={{ marginRight: "20px" }}>
           ← Назад к меню
