@@ -11,7 +11,6 @@ const NAV_ITEMS = [
   { path: "/menu", label: "Меню" },
   { path: "/pantry", label: "Кладовка" },
   { path: "/shopping-list", label: "Покупки" },
-  { path: "/settings", label: "Настройки" },
   { path: "/auth", label: "Аккаунт" },
 ];
 

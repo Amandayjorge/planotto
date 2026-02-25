@@ -3723,6 +3723,34 @@ function MenuPageContent() {
               Объединять все меню в один список покупок
             </label>
 
+            <div
+              style={{
+                marginTop: "10px",
+                border: "1px solid var(--border-default)",
+                borderRadius: "10px",
+                padding: "10px",
+                display: "grid",
+                gap: "8px",
+              }}
+            >
+              <strong style={{ fontSize: "14px" }}>Активные продукты</strong>
+              <span className="muted" style={{ fontSize: "13px" }}>
+                Активных: {visibleActiveProductsCount}
+              </span>
+              <div>
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => {
+                    closeMenuSettingsDialog();
+                    router.push("/priority-products");
+                  }}
+                >
+                  Открыть
+                </button>
+              </div>
+            </div>
+
             <div style={{ marginTop: "10px", display: "grid", gap: "8px" }}>
               {menuProfiles.map((menu) => (
                 <div
