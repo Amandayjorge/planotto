@@ -64,13 +64,11 @@ interface PantryItem {
 }
 
 type StoreCategory = "Овощи" | "Мясо" | "Молочное" | "Бакалея" | "Прочее";
-type StoreCategoryFilter = "all" | StoreCategory;
 
 const STORE_CATEGORY_ORDER: StoreCategory[] = ["Овощи", "Мясо", "Молочное", "Бакалея", "Прочее"];
 const PRIMARY_STORE_CATEGORIES: StoreCategory[] = STORE_CATEGORY_ORDER.filter(
   (category) => category !== "Прочее"
 );
-const STORE_CATEGORY_FILTERS: StoreCategoryFilter[] = ["all", ...STORE_CATEGORY_ORDER];
 
 const STORE_CATEGORY_KEYWORDS: Record<StoreCategory, string[]> = {
   Овощи: ["овощ", "картофел", "морков", "огур", "помид", "капуст", "перец", "баклаж", "бакл", "редис", "лук", "чеснок", "зелень", "свекл", "тыкв", "шпинат"],
@@ -133,6 +131,14 @@ const MANUAL_ITEMS_KEY = "manualShoppingItems";
 const SHOPPING_SELECTED_MENU_ID_KEY = "shoppingSelectedMenuId";
 const SHOPPING_SELECTED_MENU_NAME_KEY = "shoppingSelectedMenuName";
 const SHOPPING_USE_MERGED_MENUS_KEY = "shoppingUseMergedMenus";
+const SHOPPING_SETTINGS_KEY = "shoppingListSettingsV1";
+
+interface ShoppingListSettings {
+  includeCookedDishes: boolean;
+  mergeMenus: boolean;
+  defaultDatePreset: "today" | "tomorrow" | "period";
+  groupByCategories: boolean;
+}
 
 const getMonday = (date: Date): Date => {
   const d = new Date(date);
@@ -147,12 +153,6 @@ const formatDate = (date: Date): string => {
 
 const formatDisplayDate = (date: Date): string => {
   return date.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" });
-};
-
-const getWeekRange = (weekStart: Date, weeks: number): string => {
-  const endDate = new Date(weekStart);
-  endDate.setDate(endDate.getDate() + weeks * 7 - 1);
-  return `${formatDisplayDate(weekStart)}–${formatDisplayDate(endDate)}`;
 };
 
 interface MenuPeriodOption {
@@ -263,8 +263,6 @@ const parseMenuProfilesFromRangeStorage = (
   }
 };
 
-const WEEKDAY_SHORT = ["Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"];
-
 const ensureWeekStart = (): string => {
   if (typeof window === "undefined") {
     return formatDate(getMonday(new Date()));
@@ -298,13 +296,7 @@ const buildPeriodDates = (weekStart: string, weeks: number): string[] => {
   return dates;
 };
 
-const getWeekdayShort = (isoDate: string): string => {
-  const date = new Date(isoDate);
-  const day = date.getDay();
-  return WEEKDAY_SHORT[day] || "";
-};
-
-type QuickDatePreset = "today" | "tomorrow" | "period" | "custom";
+type QuickDatePreset = "today" | "tomorrow" | "period";
 
 const loadManualItemsFromStorage = (menuScopeKey = "default"): ManualShoppingItem[] => {
   if (typeof window === "undefined") return [];
@@ -361,11 +353,6 @@ const loadPurchasedItemsForRange = (weeks: number, menuScopeKey = "default"): Re
   return {};
 };
 
-const getInitialSelectedDates = (weeks: number): string[] => {
-  if (typeof window === "undefined") return [];
-  return buildPeriodDates(ensureWeekStart(), weeks);
-};
-
 const readGuestReminderState = (): { show: boolean; strong: boolean } => {
   if (typeof window === "undefined") return { show: false, strong: false };
 
@@ -408,6 +395,53 @@ const shouldUseStrongGuestReminder = (recipesCount: number): boolean => {
   );
 };
 
+const getDefaultShoppingSettings = (initialMergeMenus: boolean): ShoppingListSettings => ({
+  includeCookedDishes: false,
+  mergeMenus: initialMergeMenus,
+  defaultDatePreset: "period",
+  groupByCategories: true,
+});
+
+const loadShoppingSettings = (initialMergeMenus: boolean): ShoppingListSettings => {
+  if (typeof window === "undefined") return getDefaultShoppingSettings(initialMergeMenus);
+  const fallback = getDefaultShoppingSettings(initialMergeMenus);
+  try {
+    const raw = localStorage.getItem(SHOPPING_SETTINGS_KEY);
+    if (!raw) return fallback;
+    const parsed = JSON.parse(raw) as Partial<ShoppingListSettings>;
+    const defaultDatePreset =
+      parsed.defaultDatePreset === "today" || parsed.defaultDatePreset === "tomorrow" || parsed.defaultDatePreset === "period"
+        ? parsed.defaultDatePreset
+        : fallback.defaultDatePreset;
+    return {
+      includeCookedDishes: parsed.includeCookedDishes === true,
+      mergeMenus: typeof parsed.mergeMenus === "boolean" ? parsed.mergeMenus : fallback.mergeMenus,
+      defaultDatePreset,
+      groupByCategories: parsed.groupByCategories !== false,
+    };
+  } catch {
+    return fallback;
+  }
+};
+
+const resolvePresetSelection = (
+  weeks: number,
+  preset: ShoppingListSettings["defaultDatePreset"]
+): { preset: QuickDatePreset; dates: string[] } => {
+  const availableDates = buildPeriodDates(ensureWeekStart(), weeks);
+  const todayIso = formatDate(new Date());
+  const tomorrowIso = formatDate(addDays(new Date(), 1));
+
+  if (preset === "today" || preset === "tomorrow") {
+    const target = preset === "today" ? todayIso : tomorrowIso;
+    if (availableDates.includes(target)) {
+      return { preset, dates: [target] };
+    }
+  }
+
+  return { preset: "period", dates: availableDates };
+};
+
 const roundAmount = (value: number): number => {
   return Math.round((value + Number.EPSILON) * 100) / 100;
 };
@@ -428,34 +462,34 @@ export default function ShoppingListPage() {
     if (typeof window === "undefined") return "";
     return window.sessionStorage.getItem(SHOPPING_SELECTED_MENU_NAME_KEY) || "";
   });
-  const [shoppingUseMergedMenus] = useState<boolean>(() => {
+  const [initialMergeMenus] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
     return window.sessionStorage.getItem(SHOPPING_USE_MERGED_MENUS_KEY) === "1";
   });
+  const [shoppingSettings, setShoppingSettings] = useState<ShoppingListSettings>(() =>
+    loadShoppingSettings(initialMergeMenus)
+  );
+
   const shoppingScopeKey = useMemo(
-    () => (shoppingUseMergedMenus ? "merged" : shoppingSelectedMenuId || "default"),
-    [shoppingSelectedMenuId, shoppingUseMergedMenus]
+    () => (shoppingSettings.mergeMenus ? "merged" : shoppingSelectedMenuId || "default"),
+    [shoppingSelectedMenuId, shoppingSettings.mergeMenus]
   );
 
   const [pantryItems, setPantryItems] = useState<PantryItem[]>(() =>
     loadPantryItemsFromStorage()
   );
-  const [rangeWeeks, setRangeWeeks] = useState<number>(() => {
+  const [rangeWeeks] = useState<number>(() => {
     if (typeof window === "undefined") return 1;
     const stored = localStorage.getItem(SHOPPING_RANGE_KEY);
     return stored ? parseInt(stored, 10) : 1;
   });
 
+  const initialPresetSelection = resolvePresetSelection(rangeWeeks, shoppingSettings.defaultDatePreset);
   const periodDates = useMemo(() => buildPeriodDates(ensureWeekStart(), rangeWeeks), [rangeWeeks]);
-  const [selectedDates, setSelectedDates] = useState<string[]>(() =>
-    getInitialSelectedDates(rangeWeeks)
-  );
-  const [activeDatePreset, setActiveDatePreset] = useState<QuickDatePreset>("period");
-  const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
-  const [activeStoreCategoryFilter, setActiveStoreCategoryFilter] =
-    useState<StoreCategoryFilter>("all");
+  const [selectedDates, setSelectedDates] = useState<string[]>(initialPresetSelection.dates);
+  const [activeDatePreset, setActiveDatePreset] = useState<QuickDatePreset>(initialPresetSelection.preset);
+  const [isShoppingSettingsOpen, setIsShoppingSettingsOpen] = useState(false);
 
-  const [copyConfirmation, setCopyConfirmation] = useState(false);
   const [showMenuAddedHint] = useState(() => {
     if (typeof window === "undefined") return false;
     const fromMenuAdded = window.sessionStorage.getItem("shoppingFromMenuAdded") === "1";
@@ -468,8 +502,6 @@ export default function ShoppingListPage() {
     if (updated) window.sessionStorage.removeItem("shoppingListUpdatedFromMenu");
     return updated;
   });
-  const [includeCookedDishes, setIncludeCookedDishes] = useState(false);
-
   const guestReminderState = useMemo(() => readGuestReminderState(), []);
   const [showGuestReminder, setShowGuestReminder] = useState(guestReminderState.show);
   const guestReminderStrong = guestReminderState.strong;
@@ -481,7 +513,7 @@ export default function ShoppingListPage() {
   const [manualItems, setManualItems] = useState<ManualShoppingItem[]>(() =>
     loadManualItemsFromStorage(shoppingScopeKey)
   );
-  const shoppingSourceLabel = shoppingUseMergedMenus
+  const shoppingSourceLabel = shoppingSettings.mergeMenus
     ? "Источник: объединенный список всех меню периода"
     : shoppingSelectedMenuName
       ? `Источник: меню «${shoppingSelectedMenuName}»`
@@ -491,28 +523,23 @@ export default function ShoppingListPage() {
   const [manualName, setManualName] = useState("");
   const [manualAmount, setManualAmount] = useState("");
   const [manualUnit, setManualUnit] = useState("");
-
-  // период (подпись)
-  const getPeriodDisplay = () => {
-    const weekStart = ensureWeekStart();
-    const startDate = new Date(weekStart);
-    return getWeekRange(startDate, rangeWeeks);
-  };
-
-  const handleRangeWeeksChange = (weeks: number) => {
-    const weekStart = ensureWeekStart();
-    const dates = buildPeriodDates(weekStart, weeks);
-    setRangeWeeks(weeks);
-    setSelectedDates(dates);
-    setActiveDatePreset("period");
-    setIsDatePickerOpen(false);
-    setPurchasedItems(loadPurchasedItemsForRange(weeks, shoppingScopeKey));
+  const updateShoppingSettings = (patch: Partial<ShoppingListSettings>) => {
+    setShoppingSettings((prev) => ({ ...prev, ...patch }));
   };
 
   // сохраняем rangeWeeks
   useEffect(() => {
     localStorage.setItem(SHOPPING_RANGE_KEY, rangeWeeks.toString());
   }, [rangeWeeks]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    localStorage.setItem(SHOPPING_SETTINGS_KEY, JSON.stringify(shoppingSettings));
+    window.sessionStorage.setItem(
+      SHOPPING_USE_MERGED_MENUS_KEY,
+      shoppingSettings.mergeMenus ? "1" : "0"
+    );
+  }, [shoppingSettings]);
 
   // сохраняем purchasedItems
   useEffect(() => {
@@ -581,7 +608,7 @@ export default function ShoppingListPage() {
                 fallbackCooked
               );
               if (profiles.length > 0) {
-                const scopedProfiles = shoppingUseMergedMenus
+                const scopedProfiles = shoppingSettings.mergeMenus
                   ? profiles
                   : shoppingSelectedMenuId
                     ? profiles.filter((menu) => menu.id === shoppingSelectedMenuId)
@@ -629,7 +656,7 @@ export default function ShoppingListPage() {
             fallbackCooked = {};
           }
           const profiles = parseMenuProfilesFromRangeStorage(storedMenu, fallbackCounts, fallbackCooked);
-          const scopedProfiles = shoppingUseMergedMenus
+          const scopedProfiles = shoppingSettings.mergeMenus
             ? profiles
             : shoppingSelectedMenuId
               ? profiles.filter((menu) => menu.id === shoppingSelectedMenuId)
@@ -654,7 +681,7 @@ export default function ShoppingListPage() {
           menuItems.forEach((menuItem) => {
             const cookedFromMap = Boolean(menuItem.id && cookedStatusMap[menuItem.id]);
             const isCooked = menuItem.cooked === true || cookedFromMap;
-            if (!includeCookedDishes && isCooked) {
+            if (!shoppingSettings.includeCookedDishes && isCooked) {
               return;
             }
 
@@ -736,7 +763,7 @@ export default function ShoppingListPage() {
       console.error("Failed to generate shopping list:", error);
       return [];
     }
-  }, [includeCookedDishes, rangeWeeks, selectedDates, shoppingSelectedMenuId, shoppingUseMergedMenus]);
+  }, [rangeWeeks, selectedDates, shoppingSelectedMenuId, shoppingSettings.includeCookedDishes, shoppingSettings.mergeMenus]);
 
   // сохраняем pantryItems
   useEffect(() => {
@@ -845,33 +872,12 @@ export default function ShoppingListPage() {
   const filteredMenuUnpurchased = filterUnpurchased(shoppingList);
   const filteredMenuPurchased = filterPurchased(shoppingList);
 
-  const manualCategoryMatchesFilter =
-    activeStoreCategoryFilter === "all" || activeStoreCategoryFilter === "Прочее";
-
-  const filteredManualUnpurchased = manualCategoryMatchesFilter
-    ? filterUnpurchased(manualListItems)
-    : [];
-
-  const filteredManualPurchased = manualCategoryMatchesFilter
-    ? filterPurchased(manualListItems)
-    : [];
+  const filteredManualUnpurchased = filterUnpurchased(manualListItems);
+  const filteredManualPurchased = filterPurchased(manualListItems);
 
   const combinedUnpurchasedList = [...filteredMenuUnpurchased, ...filteredManualUnpurchased];
   const combinedPurchasedList = [...filteredMenuPurchased, ...filteredManualPurchased];
-
-  const purchasedCount = combinedPurchasedList.length;
-  const totalCount = combinedUnpurchasedList.length;
-  const totalPositions = shoppingList.length + manualItems.length;
-  const progressPercent =
-    totalPositions === 0 ? 0 : Math.round((purchasedCount / totalPositions) * 100);
-
-  const visibleItemsCount =
-    combinedUnpurchasedList.length + combinedPurchasedList.length;
-
-  const currentCategoryOrder =
-    activeStoreCategoryFilter === "all" ? STORE_CATEGORY_ORDER : [activeStoreCategoryFilter];
-
-  const categorySections = currentCategoryOrder
+  const categorySections = STORE_CATEGORY_ORDER
     .map((category) => {
       const itemsInCategory = [
         ...filteredMenuUnpurchased.filter((item) => item.category === category),
@@ -882,28 +888,7 @@ export default function ShoppingListPage() {
     .filter((section) => section.items.length > 0);
 
   const manualSectionItems = [...filteredManualUnpurchased, ...filteredManualPurchased];
-
-  const handleCopyList = () => {
-    const periodDisplay = getPeriodDisplay();
-    const listText = combinedUnpurchasedList
-      .map((item) => {
-        const remaining = getRemainingAmount(item.name, item.unit, item.totalAmount);
-        return `• ${item.name} — ${formatAmount(remaining)} ${item.unit}`;
-      })
-      .join("\n");
-
-    const fullText = `Список покупок за период: ${periodDisplay}\n\n${listText}`;
-
-    navigator.clipboard
-      .writeText(fullText)
-      .then(() => {
-        setCopyConfirmation(true);
-        setTimeout(() => setCopyConfirmation(false), 2000);
-      })
-      .catch((err) => console.error("Failed to copy text: ", err));
-  };
-
-  const handlePrintList = () => window.print();
+  const flatVisibleItems = [...combinedUnpurchasedList, ...combinedPurchasedList];
 
   const manualSectionLabel = "Ручные позиции";
   const toggleSectionCollapse = (section: string) => {
@@ -970,8 +955,6 @@ export default function ShoppingListPage() {
       : buildPeriodDates(ensureWeekStart(), rangeWeeks);
 
   const handleQuickDatePreset = (preset: QuickDatePreset) => {
-    if (preset === "custom") return;
-
     const availableDates = getEffectivePeriodDates();
     let nextSelection: string[] = [];
     let resolvedPreset = preset;
@@ -990,51 +973,12 @@ export default function ShoppingListPage() {
 
     setActiveDatePreset(resolvedPreset);
     setSelectedDates(nextSelection);
-    setIsDatePickerOpen(false);
-  };
-
-  const toggleDaySelection = (date: string) => {
-    setActiveDatePreset("custom");
-    setSelectedDates((prev) => {
-      const alreadySelected = prev.includes(date);
-      if (alreadySelected) {
-        return prev.filter((day) => day !== date);
-      }
-
-      const next = [...prev, date];
-      if (periodDates.length > 0) {
-        const order = new Map(periodDates.map((day, index) => [day, index]));
-        next.sort((a, b) => (order.get(a) ?? 0) - (order.get(b) ?? 0));
-      }
-      return next;
-    });
   };
 
   return (
     <section className="card">
       <div className="shopping-list__header">
         <h1 className="h1">Список покупок</h1>
-        <p className="muted" style={{ margin: "4px 0 0 0", fontSize: "13px" }}>
-          {shoppingSourceLabel}
-        </p>
-
-        <div className="shopping-list__period">
-          <label className="shopping-list__period-label">
-            Период:
-            <select
-              className="shopping-list__period-select"
-              value={rangeWeeks}
-              onChange={(e) => handleRangeWeeksChange(parseInt(e.target.value, 10))}
-            >
-              <option value={1}>1 неделя</option>
-              <option value={2}>2 недели</option>
-              <option value={3}>3 недели</option>
-              <option value={4}>4 недели</option>
-            </select>
-          </label>
-
-            <span className="shopping-list__period-range">{getPeriodDisplay()}</span>
-        </div>
 
         <div className="shopping-list__date-filter">
           <div className="shopping-list__quick-buttons">
@@ -1078,51 +1022,13 @@ export default function ShoppingListPage() {
           <button
             type="button"
             className="shopping-list__custom-days-btn"
-            onClick={() => setIsDatePickerOpen((prev) => !prev)}
+            onClick={() => setIsShoppingSettingsOpen(true)}
+            title="Настройки покупок"
+            aria-label="Настройки покупок"
           >
-            Выбрать дни
+            ⚙
           </button>
-
-          <label
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "6px",
-              fontSize: "13px",
-              color: "var(--text-secondary)",
-            }}
-          >
-            <input
-              type="checkbox"
-              checked={includeCookedDishes}
-              onChange={(e) => setIncludeCookedDishes(e.target.checked)}
-            />
-            Учитывать приготовленные блюда
-          </label>
         </div>
-
-        {isDatePickerOpen && periodDates.length > 0 && (
-          <div className="shopping-list__date-grid">
-            {periodDates.map((date) => {
-              const isSelected = selectedDates.includes(date);
-              return (
-                <button
-                  key={date}
-                  type="button"
-                  className={`shopping-list__date-cell ${
-                    isSelected ? "shopping-list__date-cell--selected" : ""
-                  }`}
-                  aria-pressed={isSelected}
-                  onClick={() => toggleDaySelection(date)}
-                >
-                  <span className="shopping-list__date-cell-day">{getWeekdayShort(date)}</span>
-                  <span className="shopping-list__date-cell-date">{formatDisplayDate(new Date(date))}</span>
-                </button>
-              );
-            })}
-          </div>
-        )}
-
 
         {showMenuAddedHint && (
           <p className="muted" style={{ marginTop: "8px", marginBottom: 0, fontSize: "13px" }}>
@@ -1164,50 +1070,6 @@ export default function ShoppingListPage() {
           </div>
         )}
 
-        {shoppingList.length > 0 && (
-          <>
-            <div className="shopping-list__progress">
-              <div className="shopping-list__progress-item">
-                <span className="shopping-list__progress-number">{totalPositions}</span>
-                <span className="shopping-list__progress-label">позиций</span>
-              </div>
-              <div className="shopping-list__progress-item">
-                <span className="shopping-list__progress-number">{purchasedCount}</span>
-                <span className="shopping-list__progress-label">куплено</span>
-              </div>
-              <div className="shopping-list__progress-item">
-                <span className="shopping-list__progress-number">{totalCount}</span>
-                <span className="shopping-list__progress-label">осталось</span>
-              </div>
-            </div>
-            <div className="shopping-list__progress-meter">
-              <div
-                className="shopping-list__progress-meter-fill"
-                style={{ width: `${progressPercent}%` }}
-                aria-hidden="true"
-              />
-              <span className="shopping-list__progress-meter-label">
-                {progressPercent}% куплено
-              </span>
-            </div>
-
-            <div className="shopping-list__category-filter">
-              {STORE_CATEGORY_FILTERS.map((category) => (
-                <button
-                  key={category}
-                  type="button"
-                  className={`shopping-list__category-btn ${
-                    activeStoreCategoryFilter === category ? "shopping-list__category-btn--active" : ""
-                  }`}
-                  onClick={() => setActiveStoreCategoryFilter(category)}
-                  aria-pressed={activeStoreCategoryFilter === category}
-                >
-                  {category === "all" ? "Все категории" : category}
-                </button>
-              ))}
-            </div>
-          </>
-        )}
       </div>
 
       {shoppingList.length === 0 ? (
@@ -1234,81 +1096,68 @@ export default function ShoppingListPage() {
         </div>
       ) : (
         <div>
-          <div className="shopping-list__controls">
-            <div className="shopping-list__exports">
-              <button className="shopping-list__export-btn" onClick={handleCopyList}>
-                Скопировать список
-              </button>
-              <button className="shopping-list__export-btn" onClick={handlePrintList}>
-                Печать
-              </button>
-
-              {copyConfirmation && (
-                <span className="shopping-list__copy-confirmation">Скопировано</span>
-              )}
-            </div>
-          </div>
-
-          <p className="muted">
-            Ингредиенты из выбранных рецептов ({visibleItemsCount} наименований):
-          </p>
-
           <div className="shopping-list">
-            {categorySections.length === 0 && manualSectionItems.length === 0 ? (
+            {flatVisibleItems.length === 0 ? (
               <p className="muted shopping-list__empty-filter">
-                В выбранной категории пока нет позиций.
+                Пока нет позиций для выбранного периода.
               </p>
             ) : (
               <>
-                {categorySections.map((section) => {
-                  const sectionCollapsed = isSectionCollapsed(section.category);
-                  return (
-                    <div key={section.category} className="shopping-list__category-section">
-                      <div className="shopping-list__category-heading">
-                        <button
-                          type="button"
-                          className="shopping-list__category-toggle"
-                          onClick={() => toggleSectionCollapse(section.category)}
-                          aria-expanded={!sectionCollapsed}
-                        >
-                          <span className="shopping-list__category-heading-label">
-                            {section.category}
-                          </span>
-                          <span className="shopping-list__category-count">
-                            {section.items.length} позиций
-                          </span>
-                          <span className="shopping-list__category-chevron" aria-hidden="true">
-                            {sectionCollapsed ? "+" : "-"}
-                          </span>
-                        </button>
+                {shoppingSettings.groupByCategories ? (
+                  <>
+                    {categorySections.map((section) => {
+                      const sectionCollapsed = isSectionCollapsed(section.category);
+                      return (
+                        <div key={section.category} className="shopping-list__category-section">
+                          <div className="shopping-list__category-heading">
+                            <button
+                              type="button"
+                              className="shopping-list__category-toggle"
+                              onClick={() => toggleSectionCollapse(section.category)}
+                              aria-expanded={!sectionCollapsed}
+                            >
+                              <span className="shopping-list__category-heading-label">
+                                {section.category}
+                              </span>
+                              <span className="shopping-list__category-count">
+                                {section.items.length} позиций
+                              </span>
+                              <span className="shopping-list__category-chevron" aria-hidden="true">
+                                {sectionCollapsed ? "+" : "-"}
+                              </span>
+                            </button>
+                          </div>
+                          {!sectionCollapsed && section.items.map((item) => renderShoppingItem(item))}
+                        </div>
+                      );
+                    })}
+                    {manualSectionItems.length > 0 && (
+                      <div className="shopping-list__manual-group">
+                        <div className="shopping-list__manual-heading">
+                          <button
+                            type="button"
+                            className="shopping-list__manual-toggle"
+                            onClick={() => toggleSectionCollapse(manualSectionLabel)}
+                            aria-expanded={!isSectionCollapsed(manualSectionLabel)}
+                          >
+                            <span className="shopping-list__category-heading-label">
+                              {manualSectionLabel}
+                            </span>
+                            <span className="shopping-list__category-count">
+                              {manualSectionItems.length} позиций
+                            </span>
+                            <span className="shopping-list__category-chevron" aria-hidden="true">
+                              {isSectionCollapsed(manualSectionLabel) ? "+" : "-"}
+                            </span>
+                          </button>
+                        </div>
+                        {!isSectionCollapsed(manualSectionLabel) &&
+                          manualSectionItems.map((item) => renderShoppingItem(item))}
                       </div>
-                      {!sectionCollapsed && section.items.map((item) => renderShoppingItem(item))}
-                    </div>
-                  );
-                })}
-                {manualSectionItems.length > 0 && manualCategoryMatchesFilter && (
-                  <div className="shopping-list__manual-group">
-                    <div className="shopping-list__manual-heading">
-                      <button
-                        type="button"
-                        className="shopping-list__manual-toggle"
-                        onClick={() => toggleSectionCollapse(manualSectionLabel)}
-                        aria-expanded={!isSectionCollapsed(manualSectionLabel)}
-                      >
-                        <span className="shopping-list__category-heading-label">
-                          {manualSectionLabel}
-                        </span>
-                        <span className="shopping-list__category-count">
-                          {manualSectionItems.length} позиций
-                        </span>
-                        <span className="shopping-list__category-chevron" aria-hidden="true">
-                          {isSectionCollapsed(manualSectionLabel) ? "+" : "-"}
-                        </span>
-                      </button>
-                    </div>
-                    {!isSectionCollapsed(manualSectionLabel) &&
-                      manualSectionItems.map((item) => renderShoppingItem(item))}
-                  </div>
+                    )}
+                  </>
+                ) : (
+                  flatVisibleItems.map((item) => renderShoppingItem(item))
                 )}
               </>
             )}
@@ -1318,6 +1167,74 @@ export default function ShoppingListPage() {
             <Link href="/menu" className="shopping-list__link">
               ← Вернуться к меню
             </Link>
+          </div>
+        </div>
+      )}
+      {isShoppingSettingsOpen && (
+        <div className="menu-dialog-overlay" role="dialog" aria-modal="true" aria-label="Настройки покупок">
+          <div className="menu-dialog" style={{ maxWidth: "460px" }}>
+            <h3 style={{ marginTop: 0, marginBottom: "10px" }}>Настройки покупок</h3>
+            <p className="muted" style={{ marginBottom: "12px", fontSize: "13px" }}>
+              {shoppingSourceLabel}
+            </p>
+
+            <div style={{ display: "grid", gap: "10px" }}>
+              <label style={{ display: "inline-flex", alignItems: "center", gap: "8px", fontSize: "14px" }}>
+                <input
+                  type="checkbox"
+                  checked={shoppingSettings.includeCookedDishes}
+                  onChange={(e) => updateShoppingSettings({ includeCookedDishes: e.target.checked })}
+                />
+                Учитывать приготовленные блюда
+              </label>
+
+              <label style={{ display: "inline-flex", alignItems: "center", gap: "8px", fontSize: "14px" }}>
+                <input
+                  type="checkbox"
+                  checked={shoppingSettings.mergeMenus}
+                  onChange={(e) => {
+                    const nextMergeMenus = e.target.checked;
+                    const nextScopeKey = nextMergeMenus ? "merged" : shoppingSelectedMenuId || "default";
+                    updateShoppingSettings({ mergeMenus: nextMergeMenus });
+                    setPurchasedItems(loadPurchasedItemsForRange(rangeWeeks, nextScopeKey));
+                    setManualItems(loadManualItemsFromStorage(nextScopeKey));
+                  }}
+                />
+                Объединять меню
+              </label>
+
+              <label style={{ display: "grid", gap: "6px", fontSize: "14px" }}>
+                <span>Период по умолчанию</span>
+                <select
+                  className="menu-dialog__select"
+                  value={shoppingSettings.defaultDatePreset}
+                  onChange={(e) => {
+                    const preset = e.target.value as ShoppingListSettings["defaultDatePreset"];
+                    updateShoppingSettings({ defaultDatePreset: preset });
+                    handleQuickDatePreset(preset);
+                  }}
+                >
+                  <option value="today">Сегодня</option>
+                  <option value="tomorrow">Завтра</option>
+                  <option value="period">Весь период</option>
+                </select>
+              </label>
+
+              <label style={{ display: "inline-flex", alignItems: "center", gap: "8px", fontSize: "14px" }}>
+                <input
+                  type="checkbox"
+                  checked={shoppingSettings.groupByCategories}
+                  onChange={(e) => updateShoppingSettings({ groupByCategories: e.target.checked })}
+                />
+                Группировать по категориям
+              </label>
+            </div>
+
+            <div className="menu-dialog__actions">
+              <button type="button" className="menu-dialog__confirm" onClick={() => setIsShoppingSettingsOpen(false)}>
+                Готово
+              </button>
+            </div>
           </div>
         </div>
       )}
