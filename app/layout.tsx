@@ -1,6 +1,7 @@
-﻿import "./globals.css";
+import "./globals.css";
 import Header from "./header";
 import HouseAssistant from "./components/HouseAssistant";
+import { I18nProvider } from "./components/I18nProvider";
 import type { Metadata, Viewport } from "next";
 
 export const metadata: Metadata = {
@@ -22,14 +23,16 @@ export default function RootLayout({
   return (
     <html lang="ru">
       <body>
-        <Header />
-        <main className="container main">{children}</main>
-        <HouseAssistant />
-        <footer className="footer">
-          <div className="container footer__inner">
-            <span>Planotto</span>
-          </div>
-        </footer>
+        <I18nProvider>
+          <Header />
+          <main className="container main">{children}</main>
+          <HouseAssistant />
+          <footer className="footer">
+            <div className="container footer__inner">
+              <span>Planotto</span>
+            </div>
+          </footer>
+        </I18nProvider>
       </body>
     </html>
   );

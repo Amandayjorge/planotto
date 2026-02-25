@@ -1,0 +1,706 @@
+{
+  "header": {
+    "slogan": "Планируй, готовь и покупай",
+    "nav": {
+      "recipes": "Рецепты",
+      "menu": "Меню",
+      "pantry": "Кладовка",
+      "shopping": "Покупки",
+      "account": "Аккаунт"
+    },
+    "aria": {
+      "openMenu": "Открыть меню",
+      "closeMenu": "Закрыть меню",
+      "navigation": "Навигация",
+      "logoAlt": "Маскот Planotto"
+    }
+  },
+  "home": {
+    "title": "Сервис для планирования еды и покупок",
+    "description": "Экономит время и помогает избегать лишних покупок.",
+    "cta": {
+      "continue": "Продолжить планирование",
+      "start": "Начать планирование бесплатно"
+    },
+    "howLink": "↘ Как это работает",
+    "how": {
+      "title": "Как это работает",
+      "step1": {
+        "title": "Добавь рецепты",
+        "description": "Сохрани 2-3 любимых блюда."
+      },
+      "step2": {
+        "title": "Составь меню",
+        "description": "Распредели блюда по дням."
+      },
+      "step3": {
+        "title": "Получи список покупок",
+        "description": "Он сформируется автоматически."
+      }
+    },
+    "example": {
+      "title": "Пример одного дня",
+      "dinnerLabel": "Ужин",
+      "dinnerValue": "Паста с тунцом",
+      "shoppingLabel": "Список покупок",
+      "shoppingValue": "Паста, тунец, помидоры",
+      "mascotAlt": "Маскот Planotto"
+    }
+  },
+  "auth": {
+    "title": "Аккаунт",
+    "messages": {
+      "enterEmailPassword": "Введите email и пароль.",
+      "signedIn": "Вход выполнен.",
+      "registered": "Регистрация выполнена. Если включено подтверждение, проверьте email.",
+      "authError": "Ошибка авторизации.",
+      "profileSaved": "Профиль сохранен.",
+      "profileSaveError": "Не удалось сохранить профиль.",
+      "invalidImage": "Выберите файл изображения.",
+      "signedOut": "Вы вышли из аккаунта."
+    },
+    "language": {
+      "label": "Язык интерфейса"
+    },
+    "profile": {
+      "section": "Профиль",
+      "nameLabel": "Имя",
+      "namePlaceholder": "Например, Катя",
+      "avatarTitle": "Аватар",
+      "avatarPresetTitle": "Выберите аватар",
+      "uploadPhoto": "Загрузить фото",
+      "removeAvatar": "Убрать аватар",
+      "frameTitle": "Рамка",
+      "noFrame": "Без рамки",
+      "pickAvatar": "Выбрать аватар",
+      "pickFrame": "Выбрать рамку",
+      "avatarAlt": "Аватар",
+      "frameAlt": "Рамка",
+      "currentAvatarAlt": "Текущий аватар",
+      "currentFrameAlt": "Рамка аватара",
+      "noName": "Без имени"
+    },
+    "preferences": {
+      "section": "Предпочтения (если реально работают)",
+      "infoAllergies": "Аллергии и строгие ограничения: эти продукты никогда не используются в рекомендациях и автоподборе меню.",
+      "infoDislikes": "Не люблю продукты: эти продукты предлагаются реже и отмечаются в рекомендациях.",
+      "dietType": "Тип питания",
+      "allergies": "Аллергии",
+      "allergyPlaceholder": "Например: арахис",
+      "dislikes": "Не люблю",
+      "dislikePlaceholder": "Например: лук",
+      "add": "Добавить",
+      "remove": "Удалить"
+    },
+    "serviceUsage": {
+      "section": "Использование сервиса",
+      "goal": "Цель",
+      "days": "Сколько дней",
+      "mealsPerDay": "Сколько приемов пищи"
+    },
+    "actions": {
+      "saveProfile": "Сохранить профиль",
+      "savingProfile": "Сохраняем...",
+      "toRecipes": "К рецептам",
+      "signOut": "Выйти",
+      "signInTab": "Вход",
+      "signUpTab": "Регистрация",
+      "email": "Email",
+      "password": "Пароль",
+      "pleaseWait": "Подождите...",
+      "signIn": "Войти",
+      "signUp": "Зарегистрироваться",
+      "back": "Назад"
+    },
+    "options": {
+      "goal": {
+        "menu": "Планировать меню",
+        "recipes": "Рецепты и поиск",
+        "shopping": "Список покупок",
+        "explore": "Пока просто смотрю"
+      },
+      "mealsPerDay": {
+        "3": "3",
+        "1-2": "1-2",
+        "4+": "4+",
+        "variable": "По-разному"
+      },
+      "planDays": {
+        "all": "Все дни",
+        "weekdays": "Будни",
+        "weekends": "Выходные"
+      },
+      "diet": {
+        "none": "Без ограничений",
+        "vegetarian": "Вегетарианское",
+        "vegan": "Веганское",
+        "gluten_free": "Без глютена",
+        "lactose_free": "Без лактозы",
+        "pp": "ПП"
+      }
+    }
+  },
+  "pantry": {
+    "title": "Кладовка",
+    "categories": {
+      "vegetablesFruits": "Овощи и фрукты",
+      "meatFish": "Мясо и рыба",
+      "dairy": "Молочные продукты",
+      "breadBakery": "Выпечка и хлеб",
+      "grocery": "Бакалея",
+      "frozen": "Заморозка",
+      "drinks": "Напитки",
+      "snacksSweets": "Снеки и сладости",
+      "spicesSauces": "Специи и соусы"
+    },
+    "updated": {
+      "label": "Обновлено",
+      "today": "сегодня",
+      "yesterday": "вчера",
+      "unknown": "неизвестно"
+    },
+    "words": {
+      "productOne": "продукт",
+      "productFew": "продукта",
+      "productsPlural": "продуктов"
+    },
+    "validation": {
+      "nameRequired": "Название не может быть пустым",
+      "amountRequired": "Введите количество",
+      "amountPositive": "Количество должно быть больше 0"
+    },
+    "starter": {
+      "milk": "Молоко",
+      "eggs": "Яйца",
+      "bread": "Хлеб"
+    },
+    "filters": {
+      "all": "Все",
+      "uncategorized": "Без категории",
+      "scrollHint": "Листайте категории →"
+    },
+    "count": {
+      "inPantry": "В кладовке {{count}} {{word}}",
+      "available": "{{count}} {{word}} в наличии"
+    },
+    "form": {
+      "namePlaceholder": "Название",
+      "categoryPlaceholder": "Категория (например: Овощи)",
+      "searchPlaceholder": "Поиск по продуктам"
+    },
+    "sort": {
+      "updatedAt": "Сортировка: по дате обновления",
+      "name": "Сортировка: по названию",
+      "amount": "Сортировка: по количеству"
+    },
+    "actions": {
+      "backToMenu": "← Назад к меню",
+      "addProduct": "+ Добавить продукт",
+      "addStarter": "Добавить несколько продуктов",
+      "openShopping": "Открыть покупки",
+      "save": "Сохранить",
+      "cancel": "Отмена",
+      "edit": "Редактировать",
+      "delete": "Удалить",
+      "editItemAria": "Редактировать {{name}}",
+      "deleteItemAria": "Удалить {{name}}"
+    },
+    "empty": {
+      "title": "Кладовка пока пуста",
+      "description1": "Добавляйте продукты, которые есть дома.",
+      "description2": "Они будут учитываться в меню и списке покупок.",
+      "notFound": "Ничего не найдено"
+    },
+    "editor": {
+      "addTitle": "Добавление продукта",
+      "editTitle": "Редактирование"
+    },
+    "savedCount": "Сохранено продуктов: {{count}}"
+  },
+  "shopping": {
+    "title": "Список покупок",
+    "source": {
+      "merged": "Источник: объединенный список всех меню периода",
+      "selectedMenu": "Источник: меню «{{name}}»",
+      "currentMenu": "Источник: текущее меню периода"
+    },
+    "manualSection": "Ручные позиции",
+    "categories": {
+      "vegetables": "Овощи",
+      "meat": "Мясо",
+      "dairy": "Молочное",
+      "grocery": "Бакалея",
+      "other": "Прочее"
+    },
+    "buyAmount": "Купить: {{amount}}",
+    "period": {
+      "today": "Сегодня",
+      "tomorrow": "Завтра",
+      "full": "Весь период"
+    },
+    "hints": {
+      "menuIngredientsAdded": "Ингредиенты из меню уже добавлены. Можно отмечать купленные товары.",
+      "listUpdated": "Список обновлен."
+    },
+    "guestReminder": {
+      "strong": "Чтобы данные не потерялись, зарегистрируйтесь.",
+      "normal": "Чтобы сохранить ваши рецепты и меню, создайте аккаунт.",
+      "createAccount": "Создать аккаунт",
+      "later": "Позже"
+    },
+    "empty": {
+      "title": "Список покупок пока пуст",
+      "description1": "Список покупок формируется автоматически из меню и рецептов.",
+      "description2": "Он учитывает кладовку и приоритеты периода.",
+      "example": "Пример: молоко, яйца, творог.",
+      "footer": "Продукты, которые есть дома, автоматически исключаются из списка.",
+      "filtered": "Пока нет позиций для выбранного периода."
+    },
+    "positionsCount": "{{count}} позиций",
+    "settings": {
+      "title": "Настройки покупок",
+      "includeCooked": "Учитывать приготовленные блюда",
+      "mergeMenus": "Объединять меню",
+      "defaultPeriod": "Период по умолчанию",
+      "groupByCategories": "Группировать по категориям"
+    },
+    "manualModal": {
+      "title": "Добавить позицию",
+      "closeAria": "Закрыть форму",
+      "nameLabel": "Название",
+      "namePlaceholder": "Например, лимон",
+      "amountLabel": "Количество",
+      "unitLabel": "Единица (по желанию)",
+      "unitPlaceholder": "шт, г, мл..."
+    },
+    "actions": {
+      "addManual": "+ Добавить позицию",
+      "buildMenu": "Составить меню",
+      "addRecipe": "Добавить рецепт",
+      "backToMenu": "← Вернуться к меню",
+      "markPurchasedAria": "Отметить {{name}} как куплено",
+      "unmarkPurchasedAria": "Снять отметку \"Куплено\" для {{name}}",
+      "purchased": "Куплено",
+      "done": "Готово",
+      "cancel": "Отмена",
+      "add": "Добавить"
+    }
+  },
+  "menu": {
+    "title": "Меню на период",
+    "loading": "Загрузка меню...",
+    "actions": {
+      "close": "Закрыть",
+      "save": "Сохранить",
+      "cancel": "Отмена",
+      "add": "Добавить",
+      "create": "Создать",
+      "delete": "Удалить",
+      "edit": "Редактировать",
+      "move": "Переместить",
+      "open": "Открыть",
+      "actions": "Действия",
+      "generateShoppingList": "Сформировать список покупок",
+      "clearPeriod": "Очистить период"
+    },
+    "dialog": {
+      "addDish": "Добавить блюдо",
+      "editDish": "Редактировать блюдо",
+      "typeRecipe": "Рецепт",
+      "typeText": "Текст",
+      "chooseRecipe": "Выберите рецепт",
+      "chooseRecipePlaceholder": "Выберите рецепт...",
+      "servingsCount": "Количество порций",
+      "howManyServings": "Сколько порций?",
+      "enterText": "Введите текст...",
+      "includeInShopping": "Включить в список покупок",
+      "ingredients": "Ингредиенты:",
+      "ingredientName": "Название",
+      "ingredientAmount": "Кол-во",
+      "otherUnit": "другое",
+      "unitPlaceholder": "ед. изм.",
+      "removeIngredient": "Удалить ингредиент",
+      "addIngredient": "+ Добавить ингредиент"
+    },
+    "activeProducts": {
+      "allTitle": "Все активные продукты",
+      "count": "Активных: {{count}}",
+      "addPlaceholder": "Добавить продукт",
+      "searchPlaceholder": "Поиск по названию и заметке",
+      "saved": "Сохранено",
+      "scopeLabel": "Действует",
+      "scopeInMenuOption": "В этом меню",
+      "scopePersistentOption": "До отмены",
+      "scopeUntilDateOption": "До даты",
+      "dateLabel": "Дата",
+      "noteLabel": "Заметка (до {{max}} символов)",
+      "notePlaceholder": "Например: по акции / использовать остаток",
+      "priority": "В приоритете",
+      "notFound": "По вашему запросу ничего не найдено.",
+      "scopePersistent": "до отмены",
+      "scopeUntilDate": "до даты",
+      "scopeUntilDateValue": "до {{date}}",
+      "scopeInMenu": "в этом меню"
+    },
+    "item": {
+      "cooked": "Приготовлено",
+      "noRecipe": "Без рецепта",
+      "hasIngredients": "Есть ингредиенты"
+    },
+    "onboarding": {
+      "firstVisitAria": "Первый вход в календарь",
+      "title": "Добавим первый рецепт",
+      "description": "Чтобы составить меню, добавьте один рецепт.",
+      "addFirstRecipe": "Добавить первый рецепт",
+      "tryWithout": "Можно попробовать без рецептов"
+    },
+    "notice": {
+      "dishAdded": "Блюдо добавлено в меню.",
+      "ingredientsAdded": "Ингредиенты добавлены в список покупок.",
+      "noIngredientsYet": "Для этого блюда пока нет ингредиентов в списке покупок.",
+      "openShopping": "Посмотреть список покупок",
+      "continuePlanning": "Продолжить планирование"
+    },
+    "guestReminder": {
+      "strong": "Чтобы данные не потерялись, зарегистрируйтесь.",
+      "normal": "Чтобы сохранить ваши рецепты и меню, создайте аккаунт.",
+      "createAccount": "Создать аккаунт",
+      "later": "Позже"
+    },
+    "quickAdd": {
+      "confirmAria": "Подтверждение добавления блюда",
+      "confirmText": "Добавить {{recipe}} в {{day}} ({{meal}})?",
+      "chooseAnotherDay": "Выбрать другой день"
+    },
+    "period": {
+      "previousAria": "Предыдущий период",
+      "nextAria": "Следующий период",
+      "daysCount": "{{count}} дней"
+    },
+    "selector": {
+      "label": "Меню:",
+      "aria": "Выбор активного меню"
+    },
+    "mode": {
+      "label": "Режим:",
+      "aria": "Режим отображения дня",
+      "list": "Список",
+      "meals": "По приемам"
+    },
+    "inlineHint": {
+      "textBefore": "Подсказка: нажмите",
+      "textAfter": "в любом дне, чтобы добавить блюдо в меню.",
+      "ok": "Понятно"
+    },
+    "day": {
+      "fillAria": "Заполненность дня {{percent}}%",
+      "dishesOfDay": "Блюда дня",
+      "addDishToDay": "Добавить блюдо в день",
+      "addDishWithMeal": "Добавить блюдо ({{meal}})",
+      "addDish": "+ Добавить блюдо"
+    },
+    "settings": {
+      "title": "Настройки меню",
+      "dayStructure": "Структура дня",
+      "configureMeals": "Настроить приемы",
+      "mergeMenusForShopping": "Объединять все меню в один список покупок",
+      "activeProducts": "Активные продукты",
+      "manageMenus": "Управление меню",
+      "menuNameAria": "Название меню {{name}}",
+      "currentMenu": "Текущее меню",
+      "deleteMenu": "Удалить меню",
+      "addMenu": "+ Добавить меню"
+    },
+    "mealsConfig": {
+      "title": "Настроить приемы",
+      "showMeal": "Показывать прием",
+      "newMealPlaceholder": "Новый прием",
+      "addMeal": "+ Добавить прием",
+      "useAsDefault": "Использовать по умолчанию"
+    },
+    "createMenu": {
+      "title": "Новое меню",
+      "namePlaceholder": "Название меню"
+    },
+    "deleteMenu": {
+      "title": "Удалить меню",
+      "confirm": "Удалить меню {{name}}?"
+    },
+    "moveDialog": {
+      "title": "Перемещение блюда",
+      "selectedItem": "Выбранный элемент:",
+      "dayLabel": "День:",
+      "mealLabel": "Прием:",
+      "choose": "Выберите..."
+    },
+    "ai": {
+      "noSuggestion": "ИИ не смог предложить.",
+      "failedToGetSuggestion": "Не удалось получить предложение ИИ."
+    },
+    "errors": {
+      "weeklyMenusTableMissing": "Не найдена таблица weekly_menus в Supabase. Выполните SQL из supabase/schema.sql.",
+      "saveFailed": "Ошибка сохранения меню."
+    },
+    "confirm": {
+      "clearPeriod": "Вы уверены, что хотите очистить меню периода?",
+      "clearCurrentMenu": "Вы уверены, что хотите очистить текущее меню?"
+    },
+    "fallback": {
+      "recipeTitle": "рецепт"
+    },
+    "shopping": {
+      "allMenusPeriod": "Все меню периода"
+    }
+  },
+  "recipes": {
+    "title": "Рецепты",
+    "loading": "Загрузка...",
+    "loadingList": "Загрузка рецептов...",
+    "messages": {
+      "localMode": "Сейчас работаем в локальном режиме. Ваши рецепты доступны на этом устройстве.",
+      "alreadyInMine": "Рецепт уже был в моих рецептах.",
+      "addedToMine": "Рецепт добавлен в мои рецепты.",
+      "allergyWarningMany": "В рецепте есть продукты из «Аллергии»: {{listed}}. Добавить вручную?",
+      "allergyWarningOne": "В рецепте есть продукт из «Аллергии». Добавить вручную?",
+      "supabaseTableMissingAlreadyLocal": "Таблица рецептов в Supabase не инициализирована. Рецепт уже есть локально.",
+      "supabaseTableMissingAddedLocal": "Таблица рецептов в Supabase не инициализирована. Рецепт добавлен локально.",
+      "copyFailed": "Не удалось скопировать рецепт.",
+      "clearAllConfirm": "Удалить все ваши рецепты? Локальные черновики тоже будут очищены.",
+      "cleared": "Рецепты очищены. Можно загружать новые для теста.",
+      "clearFailed": "Не удалось очистить рецепты.",
+      "deleteOneConfirm": "Удалить рецепт \"{{title}}\"?",
+      "deleted": "Рецепт удален.",
+      "deleteFailed": "Не удалось удалить рецепт."
+    },
+    "account": {
+      "guestName": "Гость",
+      "tapToLogin": "Нажмите, чтобы войти",
+      "avatarAlt": "Аватар",
+      "frameAlt": "Рамка",
+      "accountLabel": "Аккаунт",
+      "authLabel": "Авторизация"
+    },
+    "onboarding": {
+      "firstRecipeAria": "Первый рецепт",
+      "title": "Выбери рецепт для старта",
+      "description": "Чтобы составить меню, добавьте один рецепт.",
+      "chooseReady": "Выбрать из готовых рецептов",
+      "addOwn": "Добавить свой рецепт"
+    },
+    "subtitle": {
+      "public": "Примеры для старта: выберите рецепт и добавьте копию в свою библиотеку.",
+      "mine": "Твои рецепты: храни, редактируй и используй для планирования меню."
+    },
+    "tabs": {
+      "mine": "Мои",
+      "public": "Примеры для старта"
+    },
+    "sort": {
+      "newest": "Новые",
+      "oldest": "Старые",
+      "titleAsc": "По названию А-Я",
+      "titleDesc": "По названию Я-А",
+      "oftenCooked": "Часто готовлю",
+      "rarelyCooked": "Редко готовлю"
+    },
+    "filters": {
+      "searchPlaceholder": "Поиск по названию и ингредиентам",
+      "button": "Фильтры",
+      "withPhoto": "С фото",
+      "withoutPhoto": "Без фото",
+      "withNotes": "Есть заметки",
+      "activeProductsDisabled": "Добавьте активные продукты в Меню",
+      "activeProductsTooltip": "Показывать только рецепты с совпадениями по активным продуктам",
+      "onlyWithActiveProducts": "Только с активными продуктами",
+      "pantryEmpty": "Кладовка пуста",
+      "onlyFromPantryTooltip": "Показывать только рецепты, которые можно собрать из кладовки",
+      "onlyFromPantry": "Только из кладовки",
+      "resetAll": "Сбросить всё",
+      "tags": "Теги",
+      "resetTags": "Сбросить теги"
+    },
+    "actions": {
+      "backToMenu": "← Назад к меню",
+      "addRecipe": "+ Добавить рецепт",
+      "clearMine": "Очистить мои рецепты",
+      "goToMine": "Перейти в мои рецепты"
+    },
+    "guestReminder": {
+      "text": "Вы уже добавили несколько рецептов. Чтобы они не потерялись, создайте аккаунт.",
+      "createAccount": "Создать аккаунт",
+      "later": "Позже"
+    },
+    "success": {
+      "firstAddedAria": "Первый рецепт добавлен",
+      "title": "Отлично! Первый рецепт добавлен.",
+      "description": "Теперь используем его в меню.",
+      "addToMenu": "Добавить в меню"
+    },
+    "empty": {
+      "title": "У тебя пока нет рецептов",
+      "description": "Это нормально для первого входа. Начни с первого рецепта.",
+      "addFirst": "Добавить первый рецепт"
+    },
+    "emptyFiltered": {
+      "title": "Ничего не найдено",
+      "description": "Попробуйте убрать часть фильтров или изменить запрос."
+    },
+    "card": {
+      "sourcePublicAdded": "Из примеров • уже в моих рецептах",
+      "sourcePublic": "Из примеров",
+      "sourceMine": "Мой рецепт",
+      "matchTooltip": "Совпадает с активными: {{names}}{{extra}}",
+      "dislikeTooltip": "В рецепте есть из «не люблю»: {{names}}{{extra}}",
+      "alreadyMine": "Уже в моих",
+      "adding": "Добавляю...",
+      "addToMine": "Добавить в мои",
+      "open": "Открыть",
+      "pantryCoverageTitle": "Ингредиентов в кладовке: {{matched}} из {{total}}",
+      "matches": "Совпадений: {{count}}",
+      "dislikeBadge": "⚪ не люблю",
+      "dislikeHint": "В рецепте есть продукт из списка «не люблю».",
+      "servings": "Порции: {{count}}"
+    },
+    "visibility": {
+      "publicTitle": "Публичный рецепт: доступен другим пользователям",
+      "linkTitle": "Рецепт доступен только по прямой ссылке",
+      "invitedTitle": "Рецепт доступен только приглашенным пользователям"
+    },
+    "new": {
+      "title": "????? ??????",
+      "localDraftMode": "????? ?????????: ?????? ?????????? ???????? ?? ???? ??????????.",
+      "ottoPrefix": "????",
+      "quickStart": "??????? ?????: ?????????? ???????? ? ????????????. ????????? ????? ???????? ?????.",
+      "step1": {
+        "title": "??? 1. ????????"
+      },
+      "step2": {
+        "hide": "?????? ??????????????",
+        "show": "??? 2. ????????????? (?????????????)"
+      },
+      "fields": {
+        "title": "????????",
+        "access": "??????",
+        "ingredients": "???????????",
+        "ingredientNamePlaceholder": "????????",
+        "ingredientAmountPlaceholder": "???-??",
+        "instructions": "?????? ?????????????",
+        "shortDescription": "???????? ????????",
+        "servings": "??????",
+        "source": "???????? (?????????????)",
+        "sourceHint": "???? ?????? ???? ?? ????? ??? ?????, ??????? ????????.",
+        "sourceWarning": "???? ???????? ?? ??????, ??????????????? ?? ?????????? ???????? ?? ???.",
+        "tags": "???? (?????????????)",
+        "image": "????????",
+        "imagePreviewAlt": "?????? ???????",
+        "notes": "?????? ???????"
+      },
+      "access": {
+        "private": {
+          "label": "??????",
+          "description": "?????? ????????."
+        },
+        "public": {
+          "label": "?????????",
+          "description": "????? ???? ? ??????????."
+        },
+        "link": {
+          "label": "?? ??????",
+          "description": "?????? ?? ?????? ??????."
+        },
+        "invited": {
+          "label": "?? ???????????",
+          "description": "?????? ???????????? ?????????????."
+        },
+        "loginRequired": "??? ??????? ?????????, ?? ?????? ? ?? ??????????? ??????? ? ???????.",
+        "linkAvailableAfterSave": "?????? ????? ???????? ????? ?????????? ???????.",
+        "generateLink": "????????????? ??????",
+        "token": "?????",
+        "manage": "????????? ????????",
+        "invitedPlaceholder": "email ?????????????, ?? ?????? ? ??????",
+        "invitedHelp": "??????????? ???????????? ?? email, ?????? ???????? ????? ????? ? ???????."
+      },
+      "import": {
+        "show": "????????????? ?????? (?????????????)",
+        "hide": "?????? ??????",
+        "byUrl": "?????? ?? ??????",
+        "byPhoto": "?????? ?? ????",
+        "urlPlaceholder": "???????? ?????? ?? ??????",
+        "importAction": "?????????????",
+        "importing": "??????????...",
+        "urlRequired": "???????? ?????? ?? ??????.",
+        "urlInvalid": "??????? ?????????? ??????.",
+        "urlUnsupported": "??? ?????? ?? ??????????????.",
+        "urlSuccess": "?????????????. ????????? ? ?????????.",
+        "urlFailed": "?? ??????? ????????????? ?????? ?? ??????. ?????????? ?????? ?????? ??? ????????? ???????.",
+        "photoRequired": "???????? ???? ???????.",
+        "preparingPhoto": "????????????? ????...",
+        "photoLoaded": "????????? ????: {{count}}. ??????? ????????????.",
+        "photoPrepareFailed": "?? ??????? ??????????? ????. ?????????? ?????? ????.",
+        "cameraReadFailed": "?? ??????? ???????? ???? ? ??????.",
+        "cameraPhotoAdded": "???? ? ?????? ?????????. ??????? ????????????.",
+        "cameraPrepareFailed": "?? ??????? ??????????? ???? ? ??????.",
+        "waitPreparing": "?????????, ???? ??? ????????????????.",
+        "photoAtLeastOne": "??????? ????????? ???? ?? ???? ???? ???????.",
+        "recognizing": "?????????...",
+        "recognizeAction": "??????????",
+        "photoSuccess": "?????? ?????????, ????????? ? ?????????.",
+        "photoRecognizeFailed": "?? ??????? ?????????? ????. ?????????? ?????? ???? ??? ????????? ???????.",
+        "photoUnavailable": "?????? ?? ???? ???????? ??????????. ?????????? ????? ??? ????????? ???????.",
+        "takePhoto": "????? ? ??????",
+        "clearPhoto": "???????? ????",
+        "photosCount": "???? ??? ?????????????: {{count}}",
+        "removePhoto": "??????? ????",
+        "photoN": "???? {{index}}",
+        "reviewAfterImport": "????????? ????? ???????:"
+      },
+      "ai": {
+        "needIngredient": "??????? ???????? ???? ?? ???? ??????????.",
+        "hintsFound": "?? ????????? ???????? ????????.",
+        "hintsNotFound": "????????? ?? ???????.",
+        "hintsFailed": "?? ??????? ???????? ????????? ????????????.",
+        "tagsFound": "?? ????????? ????.",
+        "tagsNotFound": "?? ?? ????? ????? ?????.",
+        "tagsFailed": "?? ??????? ???????? ????????? ?????.",
+        "servingsReady": "????????? ?? ??????? ??????.",
+        "servingsFailed": "?? ??????? ???????? ????????? ?? ???????.",
+        "imageReady": "???? ?????????????.",
+        "imageMissing": "?? ?? ?????? ???????????.",
+        "imageFailed": "?? ??????? ????????????? ????.",
+        "showTools": "???? ??????? (?????????????)",
+        "hideTools": "?????? ????????? ????",
+        "toolsHint": "??? ??????????????? ?????????. ?????? ????? ????????? ? ??? ???.",
+        "searching": "???...",
+        "suggestNames": "?????????? ????????",
+        "counting": "??????...",
+        "suggestServings": "?????????? ??????",
+        "thinking": "?????...",
+        "suggestTags": "?????????? ????",
+        "generating": "?????????...",
+        "generatePhoto": "????????????? ????",
+        "applyServings": "????????? ??????: {{count}}",
+        "addSuggestedTags": "???????? ???????????? ????"
+      },
+      "actions": {
+        "backToRecipes": "? ????? ? ????????",
+        "addIngredient": "+ ???????? ??????????",
+        "deleteIngredient": "???????",
+        "deleteImage": "??????? ????????",
+        "saveRecipe": "????????? ??????",
+        "saving": "??????????...",
+        "cancel": "??????"
+      },
+      "messages": {
+        "titleRequired": "???????? ??????? ???????????",
+        "saveFailed": "?? ??????? ????????? ??????.",
+        "invitesPartial": "????? ??????????? ?? ??????????: {{emails}}",
+        "checkAmountAndUnit": "????????? ?????????? ? ??????? ????? ???????."
+      }
+    }
+  },
+  "languages": {
+    "ru": "Русский",
+    "en": "English",
+    "es": "Español"
+  }
+}

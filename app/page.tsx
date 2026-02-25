@@ -3,6 +3,7 @@
 import { useSyncExternalStore } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { useI18n } from "./components/I18nProvider";
 
 const RECIPES_STORAGE_KEY = "recipes";
 const MENU_STORAGE_PREFIX = "weeklyMenu:";
@@ -87,6 +88,7 @@ const hasStartedPlanning = (): boolean => {
 };
 
 export default function Home() {
+  const { t } = useI18n();
   const startedPlanning = useSyncExternalStore(
     (onStoreChange) => {
       if (typeof window === "undefined") return () => undefined;
@@ -115,14 +117,16 @@ export default function Home() {
   );
 
   const primaryCtaHref = startedPlanning ? "/menu" : "/menu?first=1";
-  const primaryCtaText = startedPlanning ? "Продолжить планирование" : "Начать планирование бесплатно";
+  const primaryCtaText = startedPlanning
+    ? t("home.cta.continue")
+    : t("home.cta.start");
 
   return (
     <section className="home card">
       <div className="home-hero">
         <div className="home-hero__text">
-          <h1 className="home-hero__title">Сервис для планирования еды и покупок</h1>
-          <p className="home-hero__description">Экономит время и помогает избегать лишних покупок.</p>
+          <h1 className="home-hero__title">{t("home.title")}</h1>
+          <p className="home-hero__description">{t("home.description")}</p>
 
           <div className="home-hero__actions">
             <Link className="btn btn-primary" href={primaryCtaHref}>
@@ -131,7 +135,7 @@ export default function Home() {
           </div>
 
           <Link className="home-hero__how-link" href="#how-it-works">
-            ↘ Как это работает
+            {t("home.howLink")}
           </Link>
         </div>
 
@@ -139,7 +143,7 @@ export default function Home() {
           <div className="home-hero__image-wrap">
             <Image
               src="/mascot/pages/home.png"
-              alt="Маскот Planotto"
+              alt={t("home.example.mascotAlt")}
               width={520}
               height={520}
               priority
@@ -150,36 +154,36 @@ export default function Home() {
       </div>
 
       <div id="how-it-works" className="home-flow">
-        <h2 className="home-flow__title">Как это работает</h2>
+        <h2 className="home-flow__title">{t("home.how.title")}</h2>
         <div className="home-flow__steps">
           <article className="home-flow__step">
             <div className="home-flow__step-num">1</div>
-            <h3>Добавь рецепты</h3>
-            <p>Сохрани 2-3 любимых блюда.</p>
+            <h3>{t("home.how.step1.title")}</h3>
+            <p>{t("home.how.step1.description")}</p>
           </article>
           <article className="home-flow__step">
             <div className="home-flow__step-num">2</div>
-            <h3>Составь меню</h3>
-            <p>Распредели блюда по дням.</p>
+            <h3>{t("home.how.step2.title")}</h3>
+            <p>{t("home.how.step2.description")}</p>
           </article>
           <article className="home-flow__step">
             <div className="home-flow__step-num">3</div>
-            <h3>Получи список покупок</h3>
-            <p>Он сформируется автоматически.</p>
+            <h3>{t("home.how.step3.title")}</h3>
+            <p>{t("home.how.step3.description")}</p>
           </article>
         </div>
       </div>
 
       <div className="home-example">
-        <h2 className="home-example__title">Пример одного дня</h2>
+        <h2 className="home-example__title">{t("home.example.title")}</h2>
         <div className="home-example__grid">
           <article className="home-example__card">
-            <div className="home-example__label">Ужин</div>
-            <div className="home-example__value">Паста с тунцом</div>
+            <div className="home-example__label">{t("home.example.dinnerLabel")}</div>
+            <div className="home-example__value">{t("home.example.dinnerValue")}</div>
           </article>
           <article className="home-example__card">
-            <div className="home-example__label">Список покупок</div>
-            <div className="home-example__value">Паста, тунец, помидоры</div>
+            <div className="home-example__label">{t("home.example.shoppingLabel")}</div>
+            <div className="home-example__value">{t("home.example.shoppingValue")}</div>
           </article>
         </div>
       </div>

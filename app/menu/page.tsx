@@ -22,6 +22,7 @@ import {
   type PublicWeekSummary,
   upsertMineWeekMenu,
 } from "../lib/weeklyMenusSupabase";
+import { useI18n } from "../components/I18nProvider";
 
 const MENU_STORAGE_KEY = "weeklyMenu";
 const RECIPES_STORAGE_KEY = "recipes";
@@ -543,6 +544,7 @@ const AddEditDialog = memo(({
   onClose, 
   onConfirm 
 }: AddEditDialogProps) => {
+  const { t } = useI18n();
   const getDefaultIngredient = (): Ingredient => ({
     id: crypto.randomUUID(),
     name: "",
@@ -780,7 +782,9 @@ const AddEditDialog = memo(({
         ) : null}
 
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-          <h3 style={{ margin: 0, color: "#333" }}>{editingItem ? "Редактировать блюдо" : "Добавить блюдо"}</h3>
+          <h3 style={{ margin: 0, color: "#333" }}>
+            {editingItem ? t("menu.dialog.editDish") : t("menu.dialog.addDish")}
+          </h3>
 
           <button
             type="button"
@@ -802,7 +806,7 @@ const AddEditDialog = memo(({
               justifyContent: "center",
               borderRadius: "50%",
             }}
-            title="Закрыть"
+            title={t("menu.actions.close")}
           >
             ×
           </button>
@@ -817,7 +821,7 @@ const AddEditDialog = memo(({
               checked={localItemType === "recipe"}
               onChange={(e) => setLocalItemType(e.target.value as "recipe" | "text")}
             />
-            Рецепт
+            {t("menu.dialog.typeRecipe")}
           </label>
           <label>
             <input
@@ -827,16 +831,16 @@ const AddEditDialog = memo(({
               checked={localItemType === "text"}
               onChange={(e) => setLocalItemType(e.target.value as "recipe" | "text")}
             />
-            Текст
+            {t("menu.dialog.typeText")}
           </label>
         </div>
 
         {localItemType === "recipe" ? (
           <div className="menu-dialog__recipe-selector">
             <label style={{ display: "flex", flexDirection: "column", gap: "4px", marginBottom: "12px" }}>
-              Выберите рецепт
+              {t("menu.dialog.chooseRecipe")}
               <select value={localRecipeId} onChange={(e) => setLocalRecipeId(e.target.value)} className="menu-dialog__select">
-                <option value="">Выберите рецепт...</option>
+                <option value="">{t("menu.dialog.chooseRecipePlaceholder")}</option>
                 {recipes.map((recipe) => (
                   <option key={recipe.id} value={recipe.id}>
                     {recipe.title}
@@ -845,7 +849,7 @@ const AddEditDialog = memo(({
               </select>
             </label>
             <label style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-              Количество порций
+              {t("menu.dialog.servingsCount")}
               <input
                 type="number"
                 value={localPeopleInput}
@@ -860,7 +864,7 @@ const AddEditDialog = memo(({
           <div className="menu-dialog__text-input">
             <div className="menu-dialog__people-count">
               <label>
-                Сколько порций?
+                {t("menu.dialog.howManyServings")}
                 <input
                   type="number"
                   value={localPeopleInput}
@@ -875,7 +879,7 @@ const AddEditDialog = memo(({
               type="text"
               value={localText}
               onChange={(e) => setLocalText(e.target.value)}
-              placeholder="Введите текст..."
+              placeholder={t("menu.dialog.enterText")}
               className="menu-dialog__input"
             />
 
@@ -886,13 +890,13 @@ const AddEditDialog = memo(({
                   checked={localIncludeInShopping}
                   onChange={(e) => setLocalIncludeInShopping(e.target.checked)}
                 />
-                Включить в список покупок
+                {t("menu.dialog.includeInShopping")}
               </label>
             </div>
 
             {localIncludeInShopping && (
               <div className="menu-dialog__ingredients">
-                <h4>Ингредиенты:</h4>
+                <h4>{t("menu.dialog.ingredients")}</h4>
 
                 {localIngredients.map((ingredient, index) => (
                   <div key={ingredient.id} className="menu-dialog__ingredient-row">
@@ -911,7 +915,7 @@ const AddEditDialog = memo(({
                           }, 120);
                         }}
                         autoComplete="off"
-                        placeholder="Название"
+                        placeholder={t("menu.dialog.ingredientName")}
                         className="menu-dialog__ingredient-name"
                       />
                       {activeSuggestionIndex === index && (
@@ -937,7 +941,7 @@ const AddEditDialog = memo(({
                       type="number"
                       value={ingredient.amount || ""}
                       onChange={(e) => handleIngredientChange(index, "amount", parseFloat(e.target.value) || 0)}
-                      placeholder="Кол-во"
+                      placeholder={t("menu.dialog.ingredientAmount")}
                       className="menu-dialog__ingredient-amount"
                       min="0"
                       step="0.1"
@@ -954,14 +958,14 @@ const AddEditDialog = memo(({
                             {unit}
                           </option>
                         ))}
-                        <option value="другое">другое</option>
+                        <option value="другое">{t("menu.dialog.otherUnit")}</option>
                       </select>
                     ) : (
                       <input
                         type="text"
                         value={ingredient.unit}
                         onChange={(e) => handleIngredientChange(index, "unit", e.target.value)}
-                        placeholder="ед. изм."
+                        placeholder={t("menu.dialog.unitPlaceholder")}
                         className="menu-dialog__ingredient-unit"
                       />
                     )}
@@ -970,7 +974,7 @@ const AddEditDialog = memo(({
                       type="button"
                       onClick={() => removeIngredientField(index)}
                       className="menu-dialog__ingredient-remove"
-                      title="Удалить ингредиент"
+                      title={t("menu.dialog.removeIngredient")}
                     >
                       ×
                     </button>
@@ -978,7 +982,7 @@ const AddEditDialog = memo(({
                 ))}
 
                 <button type="button" onClick={addIngredientField} className="menu-dialog__add-ingredient">
-                  + Добавить ингредиент
+                  {t("menu.dialog.addIngredient")}
                 </button>
               </div>
             )}
@@ -992,11 +996,11 @@ const AddEditDialog = memo(({
             disabled={(localItemType === "recipe" && !localRecipeId) || (localItemType === "text" && !localText.trim())}
             className="menu-dialog__confirm"
           >
-            Сохранить
+            {t("menu.actions.save")}
           </button>
 
           <button type="button" onClick={onClose} className="menu-dialog__cancel">
-            Отмена
+            {t("menu.actions.cancel")}
           </button>
         </div>
       </div>
@@ -1008,6 +1012,7 @@ const AddEditDialog = memo(({
 AddEditDialog.displayName = "AddEditDialog";
 
 function MenuPageContent() {
+  const { t } = useI18n();
   const initialRangeStart = formatDate(getMonday(new Date()));
   const initialRangeEnd = formatDate(addDays(getMonday(new Date()), 6));
   const initialMealRangeKey = `${initialRangeStart}__${initialRangeEnd}`;
@@ -1686,13 +1691,13 @@ function MenuPageContent() {
   };
 
   const getActiveProductScopeLabel = (product: ActivePeriodProduct): string => {
-    if (product.scope === "persistent") return "до отмены";
+    if (product.scope === "persistent") return t("menu.activeProducts.scopePersistent");
     if (product.scope === "until_date" && product.untilDate) {
       const parsed = parseDateSafe(product.untilDate);
-      if (parsed) return `до ${formatDisplayDate(parsed)}`;
-      return "до даты";
+      if (parsed) return t("menu.activeProducts.scopeUntilDateValue", { date: formatDisplayDate(parsed) });
+      return t("menu.activeProducts.scopeUntilDate");
     }
-    return "в этом меню";
+    return t("menu.activeProducts.scopeInMenu");
   };
 
   const handleAiMenuSuggestion = useCallback(async (prompt = "") => {
@@ -1750,21 +1755,21 @@ function MenuPageContent() {
         recipes: recipes.map((recipe) => recipe.title).slice(0, 120),
       });
 
-      const message = data.message || "ИИ не смог предложить.";
+      const message = data.message || t("menu.ai.noSuggestion");
       window.dispatchEvent(
         new CustomEvent("planotto:menu-ai-status", {
           detail: { isLoading: false, message },
         })
       );
     } catch (error) {
-      const text = error instanceof Error ? error.message : "Не удалось получить предложение ИИ.";
+      const text = error instanceof Error ? error.message : t("menu.ai.failedToGetSuggestion");
       window.dispatchEvent(
         new CustomEvent("planotto:menu-ai-status", {
           detail: { isLoading: false, message: text },
         })
       );
     }
-  }, [activeProducts, cellPeopleCount, pantry.length, periodDays, recipes]);
+  }, [activeProducts, cellPeopleCount, pantry.length, periodDays, recipes, t]);
 
   const ensureArray = (items: MenuItem | MenuItem[] | undefined): MenuItem[] => {
     if (!items) return [];
@@ -1820,13 +1825,13 @@ function MenuPageContent() {
       const code = typeof typed.code === "string" ? typed.code : "";
 
       if (code === "42P01" || message.toLowerCase().includes("weekly_menus")) {
-        return "Не найдена таблица weekly_menus в Supabase. Выполните SQL из supabase/schema.sql.";
+        return t("menu.errors.weeklyMenusTableMissing");
       }
 
       if (message) return message;
     }
 
-    return "Ошибка сохранения меню.";
+    return t("menu.errors.saveFailed");
   };
 
   const getDisplayText = (items: MenuItem[] | undefined): string => {
@@ -2338,7 +2343,7 @@ function MenuPageContent() {
         // ignore corrupted local recipes cache
       }
     }
-    if (!selectedTitle) selectedTitle = "рецепт";
+    if (!selectedTitle) selectedTitle = t("menu.fallback.recipeTitle");
 
     const todayKey = formatDate(new Date());
     const tomorrowKey = formatDate(addDays(new Date(), 1));
@@ -2369,7 +2374,7 @@ function MenuPageContent() {
     });
 
     router.replace("/menu");
-  }, [dayKeys, hasLoaded, recipes, router, searchParams]);
+  }, [dayKeys, hasLoaded, recipes, router, searchParams, t]);
 
   const handleSelectMenuProfile = (menuId: string) => {
     if (!menuId || menuId === activeMenuId) return;
@@ -2528,7 +2533,10 @@ function MenuPageContent() {
     sessionStorage.setItem("menuDishes", JSON.stringify(dishNames));
     sessionStorage.setItem("cellPeopleCount", JSON.stringify(targetMenu.cellPeopleCount));
     sessionStorage.setItem("shoppingSelectedMenuId", mergeShoppingWithAllMenus ? "merged" : menuId);
-    sessionStorage.setItem("shoppingSelectedMenuName", mergeShoppingWithAllMenus ? "Все меню периода" : targetMenu.name);
+    sessionStorage.setItem(
+      "shoppingSelectedMenuName",
+      mergeShoppingWithAllMenus ? t("menu.shopping.allMenusPeriod") : targetMenu.name
+    );
     sessionStorage.setItem("shoppingUseMergedMenus", mergeShoppingWithAllMenus ? "1" : "0");
     sessionStorage.setItem("shoppingListUpdatedFromMenu", "1");
     router.push("/shopping-list");
@@ -2706,7 +2714,7 @@ function MenuPageContent() {
   };
 
   const handleDeleteItem = (cellKey: string, itemIndex: number) => {
-    if (confirm("Вы уверены, что хотите очистить меню периода?")) {
+    if (confirm(t("menu.confirm.clearPeriod"))) {
       handleRemoveItem(cellKey, itemIndex);
     }
     closeDropdownMenu();
@@ -2805,7 +2813,7 @@ function MenuPageContent() {
   };
 
   const clearWeek = () => {
-    if (confirm("Вы уверены, что хотите очистить текущее меню?")) {
+    if (confirm(t("menu.confirm.clearCurrentMenu"))) {
       setMealData({});
       setCellPeopleCount({});
       setCookedStatus({});
@@ -2903,13 +2911,13 @@ function MenuPageContent() {
         }}
       >
         <button type="button" onClick={() => handleEditItem(cellKey, index)} className="menu-grid__item-menu-edit">
-          Редактировать
+          {t("menu.actions.edit")}
         </button>
         <button type="button" onClick={() => handleMoveClick(cellKey, index)} className="menu-grid__item-menu-move">
-          Переместить
+          {t("menu.actions.move")}
         </button>
         <button type="button" onClick={() => handleDeleteItem(cellKey, index)} className="menu-grid__item-menu-delete">
-          Удалить
+          {t("menu.actions.delete")}
         </button>
       </div>,
       document.body
@@ -2951,10 +2959,10 @@ function MenuPageContent() {
           }}
           onMouseDown={(e) => e.stopPropagation()}
         >
-          <h3>Перемещение блюда</h3>
+          <h3>{t("menu.moveDialog.title")}</h3>
 
           <div style={{ marginBottom: "12px", fontSize: "14px", color: "#666" }}>
-            Выбранный элемент:{" "}
+            {t("menu.moveDialog.selectedItem")}{" "}
             <strong>
               {item?.type === "recipe" && item.recipeId
                 ? recipes.find((r) => r.id === item.recipeId)?.title || ""
@@ -2963,7 +2971,7 @@ function MenuPageContent() {
           </div>
 
           <div className="move-dialog-row">
-            <label>День:</label>
+            <label>{t("menu.moveDialog.dayLabel")}</label>
             <select
               value={moveTargetDay}
               onChange={(e) => {
@@ -2975,7 +2983,7 @@ function MenuPageContent() {
               }}
               className="move-dialog-select"
             >
-              <option value="">Выберите...</option>
+              <option value="">{t("menu.moveDialog.choose")}</option>
               {dayEntries.map((dayEntry) => (
                 <option key={dayEntry.dateKey} value={dayEntry.dateKey}>
                   {dayEntry.dayLabel} {dayEntry.displayDate}
@@ -2986,9 +2994,9 @@ function MenuPageContent() {
 
           {dayStructureMode === "meals" ? (
             <div className="move-dialog-row">
-              <label>Прием:</label>
+              <label>{t("menu.moveDialog.mealLabel")}</label>
               <select value={moveTargetMeal} onChange={(e) => setMoveTargetMeal(e.target.value)} className="move-dialog-select">
-                <option value="">Выберите...</option>
+                <option value="">{t("menu.moveDialog.choose")}</option>
                 {(moveTargetDay ? getDayMeals(moveTargetDay) : [...DEFAULT_DAY_MEALS]).map((meal) => (
                   <option key={meal} value={meal}>
                     {meal}
@@ -3005,10 +3013,10 @@ function MenuPageContent() {
               disabled={!moveTargetDay || (dayStructureMode === "meals" && !moveTargetMeal)}
               className="move-dialog-confirm"
             >
-              Переместить
+              {t("menu.actions.move")}
             </button>
             <button type="button" onClick={closeMoveDialog} className="move-dialog-cancel">
-              Отмена
+              {t("menu.actions.cancel")}
             </button>
           </div>
         </div>
@@ -3048,14 +3056,14 @@ function MenuPageContent() {
           onMouseDown={(e) => e.stopPropagation()}
         >
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px" }}>
-            <h3 style={{ margin: 0 }}>Все активные продукты</h3>
+            <h3 style={{ margin: 0 }}>{t("menu.activeProducts.allTitle")}</h3>
             <button type="button" className="btn" onClick={closeActiveProductsDialog}>
-              Закрыть
+              {t("menu.actions.close")}
             </button>
           </div>
 
           <p className="muted" style={{ margin: "8px 0 0 0", fontSize: "13px" }}>
-            Активных: {visibleActiveProductsCount}
+            {t("menu.activeProducts.count", { count: visibleActiveProductsCount })}
           </p>
 
           <div style={{ marginTop: "12px", display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
@@ -3064,7 +3072,7 @@ function MenuPageContent() {
                 value={activeProductName}
                 onChange={setActiveProductName}
                 suggestions={activeProductAutocompleteSuggestions}
-                placeholder="Добавить продукт"
+                placeholder={t("menu.activeProducts.addPlaceholder")}
               />
             </div>
             <button
@@ -3073,7 +3081,7 @@ function MenuPageContent() {
               onClick={addActiveProduct}
               disabled={activeProductName.trim().length === 0}
             >
-              Добавить
+              {t("menu.actions.add")}
             </button>
           </div>
 
@@ -3082,7 +3090,7 @@ function MenuPageContent() {
               <input
                 className="input"
                 type="text"
-                placeholder="Поиск по названию и заметке"
+                placeholder={t("menu.activeProducts.searchPlaceholder")}
                 value={activeProductsSearch}
                 onChange={(e) => setActiveProductsSearch(e.target.value)}
                 style={{ width: "100%" }}
@@ -3147,7 +3155,9 @@ function MenuPageContent() {
                                 <span style={{ color: "var(--text-secondary)", fontSize: "12px" }}>{notePreview}</span>
                               ) : null}
                               {activeProductSavedNoteId === product.id ? (
-                                <span style={{ color: "var(--accent-primary)", whiteSpace: "nowrap", fontSize: "11px" }}>Сохранено</span>
+                                <span style={{ color: "var(--accent-primary)", whiteSpace: "nowrap", fontSize: "11px" }}>
+                                  {t("menu.activeProducts.saved")}
+                                </span>
                               ) : null}
                             </span>
                           ) : null}
@@ -3158,8 +3168,8 @@ function MenuPageContent() {
                         type="button"
                         onClick={() => setExpandedActiveProductNoteId(product.id)}
                         style={actionIconButtonStyle}
-                        title="Редактировать"
-                        aria-label="Редактировать"
+                        title={t("menu.actions.edit")}
+                        aria-label={t("menu.actions.edit")}
                       >
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                           <path d="M3 17.25V21h3.75L17.8 9.94l-3.75-3.75L3 17.25z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
@@ -3170,8 +3180,8 @@ function MenuPageContent() {
                         type="button"
                         onClick={() => removeActiveProduct(product.id)}
                         style={actionIconButtonStyle}
-                        title="Удалить"
-                        aria-label="Удалить"
+                        title={t("menu.actions.delete")}
+                        aria-label={t("menu.actions.delete")}
                       >
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                           <path d="M4 7h16" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
@@ -3193,19 +3203,19 @@ function MenuPageContent() {
                           background: "var(--background-primary)",
                         }}
                       >
-                        <label style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Действует</label>
+                        <label style={{ fontSize: "12px", color: "var(--text-secondary)" }}>{t("menu.activeProducts.scopeLabel")}</label>
                         <select
                           className="input"
                           value={product.scope}
                           onChange={(e) => updateActiveProductScope(product.id, e.target.value as ActiveProductScope)}
                         >
-                          <option value="in_period">В этом меню</option>
-                          <option value="persistent">До отмены</option>
-                          <option value="until_date">До даты</option>
+                          <option value="in_period">{t("menu.activeProducts.scopeInMenuOption")}</option>
+                          <option value="persistent">{t("menu.activeProducts.scopePersistentOption")}</option>
+                          <option value="until_date">{t("menu.activeProducts.scopeUntilDateOption")}</option>
                         </select>
                         {product.scope === "until_date" ? (
                           <>
-                            <label style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Дата</label>
+                            <label style={{ fontSize: "12px", color: "var(--text-secondary)" }}>{t("menu.activeProducts.dateLabel")}</label>
                             <input
                               className="input"
                               type="date"
@@ -3215,12 +3225,12 @@ function MenuPageContent() {
                           </>
                         ) : null}
                         <label style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
-                          Заметка (до {ACTIVE_PRODUCT_NOTE_MAX_LENGTH} символов)
+                          {t("menu.activeProducts.noteLabel", { max: ACTIVE_PRODUCT_NOTE_MAX_LENGTH })}
                         </label>
                         <input
                           className="input"
                           type="text"
-                          placeholder="Например: по акции / использовать остаток"
+                          placeholder={t("menu.activeProducts.notePlaceholder")}
                           maxLength={ACTIVE_PRODUCT_NOTE_MAX_LENGTH}
                           value={getActiveProductNoteValue(product)}
                           onChange={(e) => handleActiveProductNoteDraftChange(product.id, e.target.value)}
@@ -3237,7 +3247,7 @@ function MenuPageContent() {
                             checked={product.prefer}
                             onChange={() => toggleActiveProductPriority(product.id)}
                           />
-                          В приоритете
+                          {t("menu.activeProducts.priority")}
                         </label>
                         <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
                           <button
@@ -3246,7 +3256,7 @@ function MenuPageContent() {
                             onClick={() => setExpandedActiveProductNoteId(null)}
                             style={{ padding: "2px 8px" }}
                           >
-                            Сохранить
+                            {t("menu.actions.save")}
                           </button>
                         </div>
                       </div>
@@ -3256,7 +3266,7 @@ function MenuPageContent() {
               })
             ) : (
               <p className="muted" style={{ margin: 0 }}>
-                По вашему запросу ничего не найдено.
+                {t("menu.activeProducts.notFound")}
               </p>
             )}
           </div>
@@ -3286,7 +3296,7 @@ function MenuPageContent() {
         </span>
 
         <div className="menu-slot-item__icons">
-          <label className="menu-slot-item__icon-toggle" title="Приготовлено">
+          <label className="menu-slot-item__icon-toggle" title={t("menu.item.cooked")}>
             <input
               type="checkbox"
               checked={getDefaultCookedStatus(dayKey, menuItem.id)}
@@ -3306,13 +3316,13 @@ function MenuPageContent() {
           </label>
 
           {menuItem.type === "text" ? (
-            <span className="menu-slot-item__icon" title="Без рецепта">
+            <span className="menu-slot-item__icon" title={t("menu.item.noRecipe")}>
               T
             </span>
           ) : null}
 
           {hasIngredients ? (
-            <span className="menu-slot-item__icon" title="Есть ингредиенты">
+            <span className="menu-slot-item__icon" title={t("menu.item.hasIngredients")}>
               I
             </span>
           ) : null}
@@ -3320,7 +3330,7 @@ function MenuPageContent() {
           <button
             className="menu-grid__item-more menu-slot-item__more"
             onClick={(e) => handleMoreMenuToggle(e, menuKey, cellKey, index)}
-            title="Действия"
+            title={t("menu.actions.actions")}
           >
             ...
           </button>
@@ -3336,7 +3346,7 @@ function MenuPageContent() {
   return (
     <>
       {showFirstVisitOnboarding && (
-        <div className="menu-first-onboarding" role="dialog" aria-modal="true" aria-label="Первый вход в календарь">
+        <div className="menu-first-onboarding" role="dialog" aria-modal="true" aria-label={t("menu.onboarding.firstVisitAria")}>
           <div className="menu-first-onboarding__card">
             <img
               src="/mascot/pages/menu-onboarding.png"
@@ -3348,16 +3358,16 @@ function MenuPageContent() {
                 event.currentTarget.src = "/mascot/pages/menu.png";
               }}
             />
-            <h2 className="menu-first-onboarding__title">Добавим первый рецепт</h2>
+            <h2 className="menu-first-onboarding__title">{t("menu.onboarding.title")}</h2>
             <p className="menu-first-onboarding__text">
-              Чтобы составить меню, добавьте один рецепт.
+              {t("menu.onboarding.description")}
             </p>
             <div className="menu-first-onboarding__actions">
               <button type="button" className="btn btn-primary" onClick={handleOnboardingAddFirstRecipe}>
-                Добавить первый рецепт
+                {t("menu.onboarding.addFirstRecipe")}
               </button>
               <button type="button" className="menu-first-onboarding__skip" onClick={handleOnboardingTryWithoutRecipes}>
-                Можно попробовать без рецептов
+                {t("menu.onboarding.tryWithout")}
               </button>
             </div>
           </div>
@@ -3374,11 +3384,11 @@ function MenuPageContent() {
             borderRadius: "10px",
           }}
         >
-          <p style={{ margin: "0", fontWeight: 700 }}>Блюдо добавлено в меню.</p>
+          <p style={{ margin: "0", fontWeight: 700 }}>{t("menu.notice.dishAdded")}</p>
           <p className="muted" style={{ margin: "4px 0 10px 0" }}>
             {menuAddedHasIngredients
-              ? "Ингредиенты добавлены в список покупок."
-              : "Для этого блюда пока нет ингредиентов в списке покупок."}
+              ? t("menu.notice.ingredientsAdded")
+              : t("menu.notice.noIngredientsYet")}
           </p>
           <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: "6px" }}>
             <button
@@ -3391,7 +3401,7 @@ function MenuPageContent() {
                 generateShoppingList();
               }}
             >
-              Посмотреть список покупок
+              {t("menu.notice.openShopping")}
             </button>
             <button
               type="button"
@@ -3405,7 +3415,7 @@ function MenuPageContent() {
                 }
               }}
             >
-              Продолжить планирование
+              {t("menu.notice.continuePlanning")}
             </button>
           </div>
         </div>
@@ -3430,8 +3440,8 @@ function MenuPageContent() {
           />
           <p style={{ margin: 0, fontWeight: 700 }}>
             {guestReminderStrong
-              ? "Чтобы данные не потерялись, зарегистрируйтесь."
-              : "Чтобы сохранить ваши рецепты и меню, создайте аккаунт."}
+              ? t("menu.guestReminder.strong")
+              : t("menu.guestReminder.normal")}
           </p>
           <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: "6px", marginTop: "8px" }}>
             <button
@@ -3442,7 +3452,7 @@ function MenuPageContent() {
                 router.push("/auth");
               }}
             >
-              Создать аккаунт
+              {t("menu.guestReminder.createAccount")}
             </button>
             <button
               type="button"
@@ -3450,7 +3460,7 @@ function MenuPageContent() {
               style={{ fontSize: "12px" }}
               onClick={() => setShowGuestReminder(false)}
             >
-              Позже
+              {t("menu.guestReminder.later")}
             </button>
           </div>
         </div>
@@ -3460,7 +3470,7 @@ function MenuPageContent() {
         <div
           role="dialog"
           aria-modal="true"
-          aria-label="Подтверждение добавления блюда"
+          aria-label={t("menu.quickAdd.confirmAria")}
           className="menu-first-onboarding"
         >
           <div className="menu-first-onboarding__card" style={{ width: "min(560px, 100%)", paddingTop: "26px" }}>
@@ -3471,14 +3481,18 @@ function MenuPageContent() {
               className="menu-first-onboarding__mascot"
             />
             <h3 style={{ margin: "0 0 8px 0", color: "#333", fontSize: "28px" }}>
-              Добавить {quickRecipeConfirm.recipeTitle} в {quickRecipeConfirm.dayLabel} ({quickRecipeConfirm.mealLabel})?
+              {t("menu.quickAdd.confirmText", {
+                recipe: quickRecipeConfirm.recipeTitle,
+                day: quickRecipeConfirm.dayLabel,
+                meal: quickRecipeConfirm.mealLabel,
+              })}
             </h3>
             <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
               <button type="button" className="btn btn-primary" onClick={handleQuickRecipeAdd}>
-                Добавить
+                {t("menu.actions.add")}
               </button>
               <button type="button" className="btn" onClick={handleQuickRecipeChooseAnotherDay}>
-                Выбрать другой день
+                {t("menu.quickAdd.chooseAnotherDay")}
               </button>
             </div>
           </div>
@@ -3486,25 +3500,25 @@ function MenuPageContent() {
       )}
       <section className="card">
       <div className="menu-header">
-        <h1 className="h1">Меню на период</h1>
+        <h1 className="h1">{t("menu.title")}</h1>
         <div className="week-navigation week-navigation--compact">
           <button
             className="week-nav-btn week-nav-btn--icon"
             onClick={goToPreviousWeek}
-            aria-label="Предыдущий период"
-            title="Предыдущий период"
+            aria-label={t("menu.period.previousAria")}
+            title={t("menu.period.previousAria")}
           >
             ‹
           </button>
           <div className="week-range-compact">
             <span className="week-range">{getRangeDisplay(weekStart, periodEnd)}</span>
-            <span className="week-range-meta">{periodDays} дней</span>
+            <span className="week-range-meta">{t("menu.period.daysCount", { count: periodDays })}</span>
           </div>
           <button
             className="week-nav-btn week-nav-btn--icon"
             onClick={goToNextWeek}
-            aria-label="Следующий период"
-            title="Следующий период"
+            aria-label={t("menu.period.nextAria")}
+            title={t("menu.period.nextAria")}
           >
             ›
           </button>
@@ -3514,14 +3528,14 @@ function MenuPageContent() {
       <div className="card" style={{ marginBottom: "10px", padding: "8px 10px" }}>
         <div style={{ display: "grid", gap: "4px" }}>
           <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "nowrap" }}>
-            <strong style={{ fontSize: "15px", whiteSpace: "nowrap" }}>Меню:</strong>
+            <strong style={{ fontSize: "15px", whiteSpace: "nowrap" }}>{t("menu.selector.label")}</strong>
             <select
               className="input"
               style={{ minWidth: "120px", maxWidth: "280px", flex: "1 1 auto" }}
               value={activeMenuId}
               onChange={(e) => handleSelectMenuProfile(e.target.value)}
-              title="Выбор активного меню"
-              aria-label="Выбор активного меню"
+              title={t("menu.selector.aria")}
+              aria-label={t("menu.selector.aria")}
             >
               {menuProfiles.map((menu) => (
                 <option key={menu.id} value={menu.id}>
@@ -3533,8 +3547,8 @@ function MenuPageContent() {
               type="button"
               className="btn"
               style={{ minWidth: "36px", padding: "6px 10px" }}
-              title="Настройки меню"
-              aria-label="Настройки меню"
+              title={t("menu.settings.title")}
+              aria-label={t("menu.settings.title")}
               onClick={() => setShowMenuSettingsDialog(true)}
             >
               ⚙
@@ -3542,11 +3556,11 @@ function MenuPageContent() {
           </div>
           <div style={{ display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" }}>
             <span className="muted" style={{ fontSize: "12px" }}>
-              Режим:
+              {t("menu.mode.label")}
             </span>
             <div
               role="group"
-              aria-label="Режим отображения дня"
+              aria-label={t("menu.mode.aria")}
               style={{
                 display: "inline-flex",
                 border: "1px solid var(--border-default)",
@@ -3561,7 +3575,7 @@ function MenuPageContent() {
                 style={{ padding: "4px 10px", fontSize: "12px", minHeight: "30px" }}
                 onClick={() => setDayStructureMode("list")}
               >
-                Список
+                {t("menu.mode.list")}
               </button>
               <button
                 type="button"
@@ -3569,7 +3583,7 @@ function MenuPageContent() {
                 style={{ padding: "4px 10px", fontSize: "12px", minHeight: "30px" }}
                 onClick={() => setDayStructureMode("meals")}
               >
-                По приемам
+                {t("menu.mode.meals")}
               </button>
             </div>
           </div>
@@ -3578,9 +3592,9 @@ function MenuPageContent() {
 
       {showCalendarInlineHint && recipes.length === 0 && (
         <div className="menu-inline-onboarding-hint">
-          Подсказка: нажмите <strong>+</strong> в любом дне, чтобы добавить блюдо в меню.
+          {t("menu.inlineHint.textBefore")} <strong>+</strong> {t("menu.inlineHint.textAfter")}
           <button type="button" className="menu-inline-onboarding-hint__close" onClick={dismissCalendarInlineHint}>
-            Понятно
+            {t("menu.inlineHint.ok")}
           </button>
         </div>
       )}
@@ -3601,7 +3615,7 @@ function MenuPageContent() {
                   <span className="menu-day-card__day">{dayEntry.dayLabel}</span>
                   <span className="menu-day-card__date">{dayEntry.displayDate}</span>
                 </div>
-                <div className="menu-day-card__progress" aria-label={`Заполненность дня ${dayFillPercent}%`}>
+                <div className="menu-day-card__progress" aria-label={t("menu.day.fillAria", { percent: dayFillPercent })}>
                   <div className="menu-day-card__progress-track">
                     <div
                       className="menu-day-card__progress-fill"
@@ -3619,14 +3633,14 @@ function MenuPageContent() {
                 <div className="menu-day-card__meals">
                   <section className="menu-slot" data-cell-key={listAddCellKey}>
                     <div className="menu-slot__header">
-                      <span className="menu-slot__meal">Блюда дня</span>
+                      <span className="menu-slot__meal">{t("menu.day.dishesOfDay")}</span>
                       <button
                         className="menu-slot__add"
                         onClick={(e) => {
                           e.stopPropagation();
                           handleAddItemClick(listAddCellKey);
                         }}
-                        title="Добавить блюдо в день"
+                        title={t("menu.day.addDishToDay")}
                       >
                         +
                       </button>
@@ -3644,7 +3658,7 @@ function MenuPageContent() {
                             handleAddItemClick(listAddCellKey);
                           }}
                         >
-                          + Добавить блюдо
+                          {t("menu.day.addDish")}
                         </button>
                       )}
                     </div>
@@ -3666,7 +3680,7 @@ function MenuPageContent() {
                               e.stopPropagation();
                               handleAddItemClick(key);
                             }}
-                            title={`Добавить блюдо (${meal})`}
+                            title={t("menu.day.addDishWithMeal", { meal })}
                           >
                             +
                           </button>
@@ -3683,7 +3697,7 @@ function MenuPageContent() {
                                 handleAddItemClick(key);
                               }}
                             >
-                              + Добавить блюдо
+                              {t("menu.day.addDish")}
                             </button>
                           )}
                         </div>
@@ -3702,7 +3716,7 @@ function MenuPageContent() {
           className="menu-dialog-overlay"
           role="dialog"
           aria-modal="true"
-          aria-label="Настройки меню"
+          aria-label={t("menu.settings.title")}
           onMouseDown={(e) => {
             if (e.target === e.currentTarget) closeMenuSettingsDialog();
           }}
@@ -3713,9 +3727,9 @@ function MenuPageContent() {
             onMouseDown={(e) => e.stopPropagation()}
           >
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" }}>
-              <h3 style={{ margin: 0 }}>Настройки меню</h3>
+              <h3 style={{ margin: 0 }}>{t("menu.settings.title")}</h3>
               <button type="button" className="btn" onClick={closeMenuSettingsDialog}>
-                Закрыть
+                {t("menu.actions.close")}
               </button>
             </div>
 
@@ -3729,10 +3743,10 @@ function MenuPageContent() {
                 gap: "8px",
               }}
             >
-              <strong style={{ fontSize: "14px" }}>Структура дня</strong>
+              <strong style={{ fontSize: "14px" }}>{t("menu.settings.dayStructure")}</strong>
               <div
                 role="group"
-                aria-label="Режим отображения дня"
+                aria-label={t("menu.mode.aria")}
                 style={{
                   display: "inline-flex",
                   border: "1px solid var(--border-default)",
@@ -3747,7 +3761,7 @@ function MenuPageContent() {
                   style={{ padding: "4px 10px", fontSize: "12px", minHeight: "30px" }}
                   onClick={() => setDayStructureMode("list")}
                 >
-                  Список
+                  {t("menu.mode.list")}
                 </button>
                 <button
                   type="button"
@@ -3755,12 +3769,12 @@ function MenuPageContent() {
                   style={{ padding: "4px 10px", fontSize: "12px", minHeight: "30px" }}
                   onClick={() => setDayStructureMode("meals")}
                 >
-                  По приемам
+                  {t("menu.mode.meals")}
                 </button>
               </div>
               <div>
                 <button type="button" className="btn" onClick={() => setShowMealSettingsDialog(true)}>
-                  Настроить приемы
+                  {t("menu.settings.configureMeals")}
                 </button>
               </div>
             </div>
@@ -3771,7 +3785,7 @@ function MenuPageContent() {
                 checked={mergeShoppingWithAllMenus}
                 onChange={(e) => setMergeShoppingWithAllMenus(e.target.checked)}
               />
-              Объединять все меню в один список покупок
+              {t("menu.settings.mergeMenusForShopping")}
             </label>
 
             <div
@@ -3784,9 +3798,9 @@ function MenuPageContent() {
                 gap: "8px",
               }}
             >
-              <strong style={{ fontSize: "14px" }}>Активные продукты</strong>
+              <strong style={{ fontSize: "14px" }}>{t("menu.settings.activeProducts")}</strong>
               <span className="muted" style={{ fontSize: "13px" }}>
-                Активных: {visibleActiveProductsCount}
+                {t("menu.activeProducts.count", { count: visibleActiveProductsCount })}
               </span>
               <div>
                 <button
@@ -3797,7 +3811,7 @@ function MenuPageContent() {
                     router.push("/priority-products");
                   }}
                 >
-                  Открыть
+                  {t("menu.actions.open")}
                 </button>
               </div>
             </div>
@@ -3811,7 +3825,7 @@ function MenuPageContent() {
                 gap: "8px",
               }}
             >
-              <strong style={{ fontSize: "14px" }}>Управление меню</strong>
+              <strong style={{ fontSize: "14px" }}>{t("menu.settings.manageMenus")}</strong>
               {menuProfiles.map((menu) => (
                 <div
                   key={menu.id}
@@ -3829,7 +3843,7 @@ function MenuPageContent() {
                       className="input"
                       style={{ minWidth: "180px", flex: "1 1 220px" }}
                       value={nameDrafts[menu.id] || ""}
-                      aria-label={`Название меню ${menu.name}`}
+                      aria-label={t("menu.settings.menuNameAria", { name: menu.name })}
                       onChange={(e) =>
                         setNameDrafts((prev) => ({
                           ...prev,
@@ -3843,11 +3857,11 @@ function MenuPageContent() {
                       style={{ padding: "6px 10px", fontSize: "13px" }}
                       onClick={() => saveMenuName(menu.id)}
                     >
-                      Сохранить
+                      {t("menu.actions.save")}
                     </button>
                     {menu.id === activeMenuId ? (
                       <span className="muted" style={{ fontSize: "12px" }}>
-                        Текущее меню
+                        {t("menu.settings.currentMenu")}
                       </span>
                     ) : null}
                   </div>
@@ -3867,7 +3881,7 @@ function MenuPageContent() {
                       onClick={() => requestRemoveMenu(menu.id)}
                       disabled={menuProfiles.length <= 1}
                     >
-                      Удалить меню
+                      {t("menu.settings.deleteMenu")}
                     </button>
                   </div>
                 </div>
@@ -3883,7 +3897,7 @@ function MenuPageContent() {
                   setIsCreateMenuDialogOpen(true);
                 }}
               >
-                + Добавить меню
+                {t("menu.settings.addMenu")}
               </button>
             </div>
           </div>
@@ -3891,9 +3905,9 @@ function MenuPageContent() {
       ) : null}
 
       {showMealSettingsDialog ? (
-        <div className="menu-dialog-overlay" role="dialog" aria-modal="true" aria-label="Настроить приемы">
+        <div className="menu-dialog-overlay" role="dialog" aria-modal="true" aria-label={t("menu.mealsConfig.title")}>
           <div className="menu-dialog" style={{ maxWidth: "680px" }}>
-            <h3 style={{ marginTop: 0, marginBottom: "12px" }}>Настроить приемы</h3>
+            <h3 style={{ marginTop: 0, marginBottom: "12px" }}>{t("menu.mealsConfig.title")}</h3>
             <div style={{ display: "grid", gap: "8px" }}>
               {orderedMealSlots.map((slot, index) => (
                 <div
@@ -3912,7 +3926,7 @@ function MenuPageContent() {
                     type="checkbox"
                     checked={slot.visible}
                     onChange={() => toggleMealVisibility(slot.id)}
-                    title="Показывать прием"
+                    title={t("menu.mealsConfig.showMeal")}
                   />
                   <input
                     className="input"
@@ -3951,7 +3965,7 @@ function MenuPageContent() {
               <input
                 className="input"
                 type="text"
-                placeholder="Новый прием"
+                placeholder={t("menu.mealsConfig.newMealPlaceholder")}
                 value={newMealSlotName}
                 onChange={(e) => setNewMealSlotName(e.target.value)}
                 onKeyDown={(e) => {
@@ -3960,7 +3974,7 @@ function MenuPageContent() {
                 style={{ flex: "1 1 220px" }}
               />
               <button type="button" className="btn btn-primary" onClick={addMealSlot}>
-                + Добавить прием
+                {t("menu.mealsConfig.addMeal")}
               </button>
             </div>
 
@@ -3970,15 +3984,15 @@ function MenuPageContent() {
                 checked={saveMealSlotsAsDefault}
                 onChange={(e) => setSaveMealSlotsAsDefault(e.target.checked)}
               />
-              Использовать по умолчанию
+              {t("menu.mealsConfig.useAsDefault")}
             </label>
 
             <div className="menu-dialog__actions">
               <button type="button" className="menu-dialog__confirm" onClick={handleMealSettingsDone}>
-                Сохранить
+                {t("menu.actions.save")}
               </button>
               <button type="button" className="menu-dialog__cancel" onClick={closeMealSettingsDialog}>
-                Отмена
+                {t("menu.actions.cancel")}
               </button>
             </div>
           </div>
@@ -3986,14 +4000,14 @@ function MenuPageContent() {
       ) : null}
 
       {isCreateMenuDialogOpen ? (
-        <div className="menu-dialog-overlay" role="dialog" aria-modal="true" aria-label="Новое меню">
+        <div className="menu-dialog-overlay" role="dialog" aria-modal="true" aria-label={t("menu.createMenu.title")}>
           <div className="menu-dialog" style={{ maxWidth: "420px" }}>
-            <h3 style={{ marginTop: 0, marginBottom: "12px" }}>Новое меню</h3>
+            <h3 style={{ marginTop: 0, marginBottom: "12px" }}>{t("menu.createMenu.title")}</h3>
             <input
               className="menu-dialog__input"
               value={newMenuNameDraft}
               onChange={(e) => setNewMenuNameDraft(e.target.value)}
-              placeholder="Название меню"
+              placeholder={t("menu.createMenu.namePlaceholder")}
               autoFocus
             />
             <div className="menu-dialog__actions">
@@ -4003,10 +4017,10 @@ function MenuPageContent() {
                 onClick={addMenu}
                 disabled={!newMenuNameDraft.trim()}
               >
-                Создать
+                {t("menu.actions.create")}
               </button>
               <button type="button" className="menu-dialog__cancel" onClick={() => setIsCreateMenuDialogOpen(false)}>
-                Отмена
+                {t("menu.actions.cancel")}
               </button>
             </div>
           </div>
@@ -4014,11 +4028,11 @@ function MenuPageContent() {
       ) : null}
 
       {pendingDeleteMenu ? (
-        <div className="menu-dialog-overlay" role="dialog" aria-modal="true" aria-label="Удалить меню">
+        <div className="menu-dialog-overlay" role="dialog" aria-modal="true" aria-label={t("menu.deleteMenu.title")}>
           <div className="menu-dialog" style={{ maxWidth: "420px" }}>
-            <h3 style={{ marginTop: 0, marginBottom: "8px" }}>Удалить меню</h3>
+            <h3 style={{ marginTop: 0, marginBottom: "8px" }}>{t("menu.deleteMenu.title")}</h3>
             <p style={{ marginTop: 0 }}>
-              Удалить меню <strong>{pendingDeleteMenu.name}</strong>?
+              {t("menu.deleteMenu.confirm", { name: pendingDeleteMenu.name })}
             </p>
             <div className="menu-dialog__actions">
               <button
@@ -4027,10 +4041,10 @@ function MenuPageContent() {
                 style={{ background: "#9b4d3a" }}
                 onClick={() => removeMenu(pendingDeleteMenu.id)}
               >
-                Удалить
+                {t("menu.actions.delete")}
               </button>
               <button type="button" className="menu-dialog__cancel" onClick={() => setPendingDeleteMenuId(null)}>
-                Отмена
+                {t("menu.actions.cancel")}
               </button>
             </div>
           </div>
@@ -4094,11 +4108,11 @@ function MenuPageContent() {
           onClick={generateShoppingList}
           disabled={Object.values(mealData).filter((item) => getDisplayText(item).trim() !== "").length === 0}
         >
-          Сформировать список покупок
+          {t("menu.actions.generateShoppingList")}
         </button>
 
         <button className="menu-actions__clear-btn" onClick={clearWeek} disabled={Object.keys(mealData).length === 0}>
-          Очистить период
+          {t("menu.actions.clearPeriod")}
         </button>
       </div>
       </section>
@@ -4107,8 +4121,9 @@ function MenuPageContent() {
 }
 
 export default function MenuPage() {
+  const { t } = useI18n();
   return (
-    <Suspense fallback={<section className="card"><h1 className="h1">Загрузка меню...</h1></section>}>
+    <Suspense fallback={<section className="card"><h1 className="h1">{t("menu.loading")}</h1></section>}>
       <MenuPageContent />
     </Suspense>
   );

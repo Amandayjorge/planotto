@@ -6,7 +6,8 @@ export type AiAssistAction =
   | "menu_suggestion"
   | "assistant_help"
   | "import_recipe_url"
-  | "import_recipe_photo";
+  | "import_recipe_photo"
+  | "recipe_translation";
 
 interface AiAssistRequest<TPayload extends Record<string, unknown>> {
   action: AiAssistAction;
@@ -68,6 +69,18 @@ export interface RecipeImportResponse {
   recipe: ImportedRecipeDraft | null;
   message?: string;
   issues?: string[];
+}
+
+export interface RecipeTranslationDraft {
+  title: string;
+  shortDescription?: string;
+  description?: string;
+  instructions?: string;
+}
+
+export interface RecipeTranslationDraftResponse {
+  translation: RecipeTranslationDraft;
+  message?: string;
 }
 
 const callAssist = async <TResponse, TPayload extends Record<string, unknown>>(
@@ -143,3 +156,12 @@ export const importRecipeByPhoto = (payload: {
   imageDataUrls: string[];
   knownProducts: string[];
 }) => callAssist<RecipeImportResponse, typeof payload>({ action: "import_recipe_photo", payload });
+
+export const getRecipeTranslationDraft = (payload: {
+  sourceLanguage: "ru" | "en" | "es";
+  targetLanguage: "ru" | "en" | "es";
+  title: string;
+  shortDescription?: string;
+  description?: string;
+  instructions?: string;
+}) => callAssist<RecipeTranslationDraftResponse, typeof payload>({ action: "recipe_translation", payload });

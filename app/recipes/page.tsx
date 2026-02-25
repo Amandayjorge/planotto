@@ -20,6 +20,7 @@ import {
 } from "../lib/recipesSupabase";
 import { getSupabaseClient, isSupabaseConfigured } from "../lib/supabaseClient";
 import { RECIPE_TAGS } from "../lib/recipeTags";
+import { useI18n } from "../components/I18nProvider";
 
 type ViewMode = "mine" | "public";
 type SortOption =
@@ -53,18 +54,18 @@ const TEMPLATE_IMAGE_FALLBACKS: Record<string, string> = {
 
 const VISIBILITY_BADGE_META: Record<
   Exclude<RecipeVisibility, "private">,
-  { title: string; emoji: string }
+  { titleKey: string; emoji: string }
 > = {
   public: {
-    title: "Публичный рецепт: доступен другим пользователям",
+    titleKey: "recipes.visibility.publicTitle",
     emoji: "🌍",
   },
   link: {
-    title: "Рецепт доступен только по прямой ссылке",
+    titleKey: "recipes.visibility.linkTitle",
     emoji: "🔗",
   },
   invited: {
-    title: "Рецепт доступен только приглашенным пользователям",
+    titleKey: "recipes.visibility.invitedTitle",
     emoji: "👥",
   },
 };
@@ -349,6 +350,7 @@ function resolveUserFrame(user: User | null | undefined): string | null {
 }
 
 function RecipesPageContent() {
+  const { t } = useI18n();
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -422,7 +424,7 @@ function RecipesPageContent() {
         } catch (mineError) {
           if (isMissingRecipesTableError(mineError)) {
             setRecipes(localMine());
-            setActionMessage("Сейчас работаем в локальном режиме. Ваши рецепты доступны на этом устройстве.");
+            setActionMessage(t("recipes.messages.localMode"));
             return;
           }
           throw mineError;
@@ -892,7 +894,9 @@ function RecipesPageContent() {
       setJustAddedRecipeTitles((prev) => ({ ...prev, [key]: true }));
     }
     setMineSyncVersion((prev) => prev + 1);
-    setAddedToastMessage(duplicate ? "Рецепт уже был в моих рецептах." : "Рецепт добавлен в мои рецепты.");
+    setAddedToastMessage(
+      duplicate ? t("recipes.messages.alreadyInMine") : t("recipes.messages.addedToMine")
+    );
     if (addedToastTimerRef.current !== null) {
       window.clearTimeout(addedToastTimerRef.current);
     }
@@ -1011,8 +1015,8 @@ function RecipesPageContent() {
     if ((allergyMeta?.allergyCount || 0) > 0) {
       const listed = (allergyMeta?.allergyMatches || []).slice(0, 3).join(", ");
       const warning = listed
-        ? `В рецепте есть продукты из «Аллергии»: ${listed}. Добавить вручную?`
-        : "В рецепте есть продукт из «Аллергии». Добавить вручную?";
+        ? t("recipes.messages.allergyWarningMany", { listed })
+        : t("recipes.messages.allergyWarningOne");
       const confirmed = confirm(warning);
       if (!confirmed) return;
     }
@@ -1094,7 +1098,7 @@ function RecipesPageContent() {
           if (showOverlayForThisCopy) {
             showFirstRecipeOverlay(existingLocal.id);
           } else {
-            setActionMessage("Таблица рецептов в Supabase не инициализирована. Рецепт уже есть локально.");
+            setActionMessage(t("recipes.messages.supabaseTableMissingAlreadyLocal"));
             showAddedFeedback(source.title || "", true);
           }
           return;
@@ -1113,12 +1117,12 @@ function RecipesPageContent() {
         if (showOverlayForThisCopy) {
           showFirstRecipeOverlay(localCopy.id);
         } else {
-          setActionMessage("Таблица рецептов в Supabase не инициализирована. Рецепт добавлен локально.");
+          setActionMessage(t("recipes.messages.supabaseTableMissingAddedLocal"));
           showAddedFeedback(source.title || "", false);
         }
         return;
       }
-      const text = toErrorText(copyError, "Не удалось скопировать рецепт.");
+      const text = toErrorText(copyError, t("recipes.messages.copyFailed"));
       setActionMessage(text);
     } finally {
       setPendingCopyRecipeId((prev) => (prev === recipeId ? null : prev));
@@ -1126,7 +1130,7 @@ function RecipesPageContent() {
   };
 
   const handleClearAllRecipes = async () => {
-    const ok = confirm("Удалить все ваши рецепты? Локальные черновики тоже будут очищены.");
+    const ok = confirm(t("recipes.messages.clearAllConfirm"));
     if (!ok) return;
 
     setIsLoading(true);
@@ -1156,14 +1160,14 @@ function RecipesPageContent() {
       }
 
       await refreshRecipes(viewMode, targetUserId || currentUserId);
-      setActionMessage("Рецепты очищены. Можно загружать новые для теста.");
+      setActionMessage(t("recipes.messages.cleared"));
     } catch (clearError) {
       const text =
         clearError instanceof Error
           ? clearError.message
           : typeof clearError === "object" && clearError && "message" in clearError
-            ? String((clearError as { message?: unknown }).message || "Не удалось очистить рецепты.")
-            : "Не удалось очистить рецепты.";
+            ? String((clearError as { message?: unknown }).message || t("recipes.messages.clearFailed"))
+            : t("recipes.messages.clearFailed");
       setActionMessage(text);
     } finally {
       setIsLoading(false);
@@ -1171,7 +1175,7 @@ function RecipesPageContent() {
   };
 
   const handleDeleteRecipe = async (recipe: RecipeModel) => {
-    const ok = confirm(`Удалить рецепт "${recipe.title}"?`);
+    const ok = confirm(t("recipes.messages.deleteOneConfirm", { title: recipe.title }));
     if (!ok) return;
 
     try {
@@ -1184,16 +1188,16 @@ function RecipesPageContent() {
 
       removeRecipeFromLocalCache(recipe.id);
       setRecipes((prev) => prev.filter((item) => item.id !== recipe.id));
-      setActionMessage("Рецепт удален.");
+      setActionMessage(t("recipes.messages.deleted"));
     } catch (deleteError) {
-      const text = deleteError instanceof Error ? deleteError.message : "Не удалось удалить рецепт.";
+      const text = deleteError instanceof Error ? deleteError.message : t("recipes.messages.deleteFailed");
       setActionMessage(text);
     }
   };
 
-  const accountNameView = currentUserName || "Гость";
-  const accountEmailView = currentUserEmail || "Нажмите, чтобы войти";
-  const accountInitial = accountNameView.charAt(0).toUpperCase() || "Г";
+  const accountNameView = currentUserName || t("recipes.account.guestName");
+  const accountEmailView = currentUserEmail || t("recipes.account.tapToLogin");
+  const accountInitial = accountNameView.charAt(0).toUpperCase() || "G";
   const hasAnyRecipes = recipes.length > 0;
   const hasActiveFilters =
     selectedTags.length > 0 ||
@@ -1221,7 +1225,7 @@ function RecipesPageContent() {
         <div
           role="dialog"
           aria-modal="true"
-          aria-label="Первый рецепт"
+          aria-label={t("recipes.onboarding.firstRecipeAria")}
           className="menu-first-onboarding"
         >
           <div className="menu-first-onboarding__card" style={{ width: "min(500px, 100%)" }}>
@@ -1235,20 +1239,20 @@ function RecipesPageContent() {
                 event.currentTarget.src = "/mascot/pages/recipes.png";
               }}
             />
-            <h2 className="menu-first-onboarding__title">Выбери рецепт для старта</h2>
+            <h2 className="menu-first-onboarding__title">{t("recipes.onboarding.title")}</h2>
             <p className="menu-first-onboarding__text">
-              Чтобы составить меню, добавьте один рецепт.
+              {t("recipes.onboarding.description")}
             </p>
             <div className="menu-first-onboarding__actions">
               <button type="button" className="btn btn-primary" onClick={handleChooseReadyRecipe}>
-                Выбрать из готовых рецептов
+                {t("recipes.onboarding.chooseReady")}
               </button>
               <button
                 type="button"
                 onClick={handleCreateFirstRecipe}
                 className="menu-first-onboarding__skip"
               >
-                Добавить свой рецепт
+                {t("recipes.onboarding.addOwn")}
               </button>
             </div>
           </div>
@@ -1259,14 +1263,14 @@ function RecipesPageContent() {
       <div className="recipes-topbar">
         <div className="recipes-topbar__actions">
           <button className="btn" onClick={() => router.push("/menu")}>
-            ← Назад к меню
+            {t("recipes.actions.backToMenu")}
           </button>
           <button className="btn btn-add" onClick={handleCreateRecipe}>
-            + Добавить рецепт
+            {t("recipes.actions.addRecipe")}
           </button>
           {viewMode === "mine" && hasAnyRecipes ? (
             <button className="btn btn-danger" onClick={handleClearAllRecipes}>
-              Очистить мои рецепты
+              {t("recipes.actions.clearMine")}
             </button>
           ) : null}
         </div>
@@ -1279,7 +1283,7 @@ function RecipesPageContent() {
             {currentUserAvatar ? (
               <img
                 src={currentUserAvatar}
-                alt="Аватар"
+                alt={t("recipes.account.avatarAlt")}
                 className={`recipes-account-chip__avatar-image ${
                   currentUserFrame ? "recipes-account-chip__avatar-image--framed" : ""
                 }`}
@@ -1290,14 +1294,14 @@ function RecipesPageContent() {
             {currentUserFrame ? (
               <img
                 src={currentUserFrame}
-                alt="Рамка"
+                alt={t("recipes.account.frameAlt")}
                 className="recipes-account-chip__avatar-frame"
               />
             ) : null}
           </span>
           <span className="recipes-account-chip__content">
             <span className="recipes-account-chip__meta">
-              {currentUserEmail ? "Аккаунт" : "Авторизация"}
+              {currentUserEmail ? t("recipes.account.accountLabel") : t("recipes.account.authLabel")}
             </span>
             <span className="recipes-account-chip__name" title={accountNameView}>
               {accountNameView}
@@ -1310,12 +1314,12 @@ function RecipesPageContent() {
       </div>
 
       <h1 className="h1" style={{ marginBottom: "20px" }}>
-        Рецепты
+        {t("recipes.title")}
       </h1>
       <p className="muted" style={{ marginTop: "-10px", marginBottom: "14px" }}>
         {viewMode === "public"
-          ? "Примеры для старта: выберите рецепт и добавьте копию в свою библиотеку."
-          : "Твои рецепты: храни, редактируй и используй для планирования меню."}
+          ? t("recipes.subtitle.public")
+          : t("recipes.subtitle.mine")}
       </p>
 
       <div style={{ marginBottom: "14px", display: "flex", gap: "8px", flexWrap: "wrap" }}>
@@ -1324,14 +1328,14 @@ function RecipesPageContent() {
           className={`btn ${viewMode === "mine" ? "btn-primary" : ""}`}
           onClick={() => setViewMode("mine")}
         >
-          Мои
+          {t("recipes.tabs.mine")}
         </button>
         <button
           type="button"
           className={`btn ${viewMode === "public" ? "btn-primary" : ""}`}
           onClick={() => setViewMode("public")}
         >
-          Примеры для старта
+          {t("recipes.tabs.public")}
         </button>
       </div>
 
@@ -1343,7 +1347,7 @@ function RecipesPageContent() {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Поиск по названию и ингредиентам"
+              placeholder={t("recipes.filters.searchPlaceholder")}
             />
             <select
               className="input"
@@ -1351,19 +1355,19 @@ function RecipesPageContent() {
               onChange={(e) => setSortBy(e.target.value as SortOption)}
               style={{ maxWidth: "250px" }}
             >
-              <option value="newest">Новые</option>
-              <option value="oldest">Старые</option>
-              <option value="title_asc">По названию А-Я</option>
-              <option value="title_desc">По названию Я-А</option>
-              <option value="often_cooked">Часто готовлю</option>
-              <option value="rarely_cooked">Редко готовлю</option>
+              <option value="newest">{t("recipes.sort.newest")}</option>
+              <option value="oldest">{t("recipes.sort.oldest")}</option>
+              <option value="title_asc">{t("recipes.sort.titleAsc")}</option>
+              <option value="title_desc">{t("recipes.sort.titleDesc")}</option>
+              <option value="often_cooked">{t("recipes.sort.oftenCooked")}</option>
+              <option value="rarely_cooked">{t("recipes.sort.rarelyCooked")}</option>
             </select>
             <button
               type="button"
               className={`btn ${showAdvancedFilters ? "btn-primary" : ""}`}
               onClick={() => setShowAdvancedFilters((prev) => !prev)}
             >
-              Фильтры{selectedTags.length > 0 ? ` (${selectedTags.length})` : ""}
+              {t("recipes.filters.button")}{selectedTags.length > 0 ? ` (${selectedTags.length})` : ""}
             </button>
           </div>
 
@@ -1376,7 +1380,7 @@ function RecipesPageContent() {
                 setOnlyWithoutPhoto(false);
               }}
             >
-              С фото
+              {t("recipes.filters.withPhoto")}
             </button>
             <button
               type="button"
@@ -1386,14 +1390,14 @@ function RecipesPageContent() {
                 setOnlyWithPhoto(false);
               }}
             >
-              Без фото
+              {t("recipes.filters.withoutPhoto")}
             </button>
             <button
               type="button"
               className={`btn ${onlyWithNotes ? "btn-primary" : ""}`}
               onClick={() => setOnlyWithNotes((prev) => !prev)}
             >
-              Есть заметки
+              {t("recipes.filters.withNotes")}
             </button>
             <button
               type="button"
@@ -1402,11 +1406,11 @@ function RecipesPageContent() {
               disabled={activeProductNames.length === 0}
               title={
                 activeProductNames.length === 0
-                  ? "Добавьте активные продукты в Меню"
-                  : "Показывать только рецепты с совпадениями по активным продуктам"
+                  ? t("recipes.filters.activeProductsDisabled")
+                  : t("recipes.filters.activeProductsTooltip")
               }
             >
-              Только с активными продуктами
+              {t("recipes.filters.onlyWithActiveProducts")}
             </button>
             <button
               type="button"
@@ -1415,11 +1419,11 @@ function RecipesPageContent() {
               disabled={pantryProductNames.length === 0}
               title={
                 pantryProductNames.length === 0
-                  ? "Кладовка пуста"
-                  : "Показывать только рецепты, которые можно собрать из кладовки"
+                  ? t("recipes.filters.pantryEmpty")
+                  : t("recipes.filters.onlyFromPantryTooltip")
               }
             >
-              Только из кладовки
+              {t("recipes.filters.onlyFromPantry")}
             </button>
             {hasActiveFilters && (
               <button
@@ -1435,14 +1439,14 @@ function RecipesPageContent() {
                   setSearchQuery("");
                 }}
               >
-                Сбросить всё
+                {t("recipes.filters.resetAll")}
               </button>
             )}
           </div>
 
           {showAdvancedFilters && (
             <div className="recipes-filters-advanced">
-              <div style={{ marginBottom: "8px", fontWeight: 600 }}>Теги</div>
+              <div style={{ marginBottom: "8px", fontWeight: 600 }}>{t("recipes.filters.tags")}</div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
                 {RECIPE_TAGS.map((tag) => {
                   const checked = selectedTags.includes(tag);
@@ -1479,7 +1483,7 @@ function RecipesPageContent() {
                     className="btn"
                     onClick={() => setSelectedTags([])}
                   >
-                    Сбросить теги
+                    {t("recipes.filters.resetTags")}
                   </button>
                 )}
               </div>
@@ -1505,7 +1509,7 @@ function RecipesPageContent() {
               setAddedToastMessage(null);
             }}
           >
-            Перейти в мои рецепты
+            {t("recipes.actions.goToMine")}
           </button>
         </div>
       ) : null}
@@ -1519,7 +1523,7 @@ function RecipesPageContent() {
             style={{ width: "74px", height: "74px", objectFit: "contain", marginBottom: "6px" }}
           />
           <p style={{ margin: 0, fontWeight: 700 }}>
-            Вы уже добавили несколько рецептов. Чтобы они не потерялись, создайте аккаунт.
+            {t("recipes.guestReminder.text")}
           </p>
           <div
             style={{
@@ -1531,10 +1535,10 @@ function RecipesPageContent() {
             }}
           >
             <button type="button" className="btn btn-primary" onClick={() => router.push("/auth")}>
-              Создать аккаунт
+              {t("recipes.guestReminder.createAccount")}
             </button>
             <button type="button" className="menu-first-onboarding__skip" onClick={handleDismissGuestRegisterReminder}>
-              Позже
+              {t("recipes.guestReminder.later")}
             </button>
           </div>
         </div>
@@ -1544,7 +1548,7 @@ function RecipesPageContent() {
         <div
           role="dialog"
           aria-modal="true"
-          aria-label="Первый рецепт добавлен"
+          aria-label={t("recipes.success.firstAddedAria")}
           className="menu-first-onboarding"
         >
           <div className="menu-first-onboarding__card" style={{ width: "min(520px, 100%)" }}>
@@ -1558,14 +1562,14 @@ function RecipesPageContent() {
                 event.currentTarget.src = "/mascot/pages/recipes.png";
               }}
             />
-            <h2 className="menu-first-onboarding__title">Отлично! Первый рецепт добавлен.</h2>
-            <p className="menu-first-onboarding__text">Теперь используем его в меню.</p>
+            <h2 className="menu-first-onboarding__title">{t("recipes.success.title")}</h2>
+            <p className="menu-first-onboarding__text">{t("recipes.success.description")}</p>
             <div className="menu-first-onboarding__actions">
               <button className="btn btn-primary" onClick={handleAddFirstRecipeToMenu}>
-                Добавить в меню
+                {t("recipes.success.addToMenu")}
               </button>
               <button type="button" className="menu-first-onboarding__skip" onClick={handleDismissFirstRecipeSuccess}>
-                Позже
+                {t("recipes.guestReminder.later")}
               </button>
             </div>
           </div>
@@ -1574,24 +1578,24 @@ function RecipesPageContent() {
 
       {showBlockingLoading ? (
         <div className="empty-state">
-          <div className="empty-state__title">Загрузка...</div>
+          <div className="empty-state__title">{t("recipes.loading")}</div>
         </div>
       ) : isEmptyState ? (
         showFirstRecipePrompt ? null : (
           <div className="empty-state">
-            <div className="empty-state__title">У тебя пока нет рецептов</div>
-            <div className="empty-state__description">Это нормально для первого входа. Начни с первого рецепта.</div>
+            <div className="empty-state__title">{t("recipes.empty.title")}</div>
+            <div className="empty-state__description">{t("recipes.empty.description")}</div>
             <div style={{ marginTop: "14px", display: "flex", gap: "8px", justifyContent: "center", flexWrap: "wrap" }}>
               <button className="btn btn-primary" onClick={handleCreateRecipe}>
-                Добавить первый рецепт
+                {t("recipes.empty.addFirst")}
               </button>
               {viewMode === "mine" ? (
                 <button className="btn" onClick={() => setViewMode("public")}>
-                  Выбрать из готовых рецептов
+                  {t("recipes.onboarding.chooseReady")}
                 </button>
               ) : (
                 <button className="btn" onClick={() => setViewMode("mine")}>
-                  Перейти в мои рецепты
+                  {t("recipes.actions.goToMine")}
                 </button>
               )}
             </div>
@@ -1599,8 +1603,8 @@ function RecipesPageContent() {
         )
       ) : isFilteredEmpty ? (
         <div className="empty-state">
-          <div className="empty-state__title">Ничего не найдено</div>
-          <div className="empty-state__description">Попробуйте убрать часть фильтров или изменить запрос.</div>
+          <div className="empty-state__title">{t("recipes.emptyFiltered.title")}</div>
+          <div className="empty-state__description">{t("recipes.emptyFiltered.description")}</div>
           {hasActiveFilters ? (
             <div style={{ marginTop: "14px" }}>
               <button
@@ -1615,7 +1619,7 @@ function RecipesPageContent() {
                   setSearchQuery("");
                 }}
               >
-                Сбросить фильтры
+                {t("recipes.filters.resetAll")}
               </button>
             </div>
           ) : null}
@@ -1637,9 +1641,9 @@ function RecipesPageContent() {
             const isAdding = pendingCopyRecipeId === recipe.id;
             const sourceLabel = isPublicSourceRecipe
               ? addDone
-                ? "Из примеров • уже в моих рецептах"
-                : "Из примеров"
-              : "Мой рецепт";
+                ? t("recipes.card.sourcePublicAdded")
+                : t("recipes.card.sourcePublic")
+              : t("recipes.card.sourceMine");
             const matchMeta = recipeActiveMatchMap.get(recipe.id) || { matchCount: 0, topMatches: [], extraMatches: 0 };
             const preferenceMeta = recipePreferenceMatchMap.get(recipe.id) || {
               allergyCount: 0,
@@ -1660,23 +1664,25 @@ function RecipesPageContent() {
                 : "";
             const matchTooltip =
               matchMeta.matchCount > 0
-                ? `Совпадает с активными: ${matchMeta.topMatches.join(", ")}${
-                  matchMeta.extraMatches > 0 ? ` (+${matchMeta.extraMatches})` : ""
-                }`
+                ? t("recipes.card.matchTooltip", {
+                    names: matchMeta.topMatches.join(", "),
+                    extra: matchMeta.extraMatches > 0 ? ` (+${matchMeta.extraMatches})` : "",
+                  })
                 : "";
             const dislikeTooltip =
               preferenceMeta.dislikeCount > 0
-                ? `В рецепте есть из «не люблю»: ${preferenceMeta.topDislikes.join(", ")}${
-                  preferenceMeta.extraDislikes > 0 ? ` (+${preferenceMeta.extraDislikes})` : ""
-                }`
+                ? t("recipes.card.dislikeTooltip", {
+                    names: preferenceMeta.topDislikes.join(", "),
+                    extra: preferenceMeta.extraDislikes > 0 ? ` (+${preferenceMeta.extraDislikes})` : "",
+                  })
                 : "";
             const mainActionLabel = isPublicSourceRecipe
               ? addDone
-                ? "Уже в моих"
+                ? t("recipes.card.alreadyMine")
                 : isAdding
-                ? "Добавляю..."
-                : "Добавить в мои"
-              : "Открыть";
+                ? t("recipes.card.adding")
+                : t("recipes.card.addToMine")
+              : t("recipes.card.open");
             const mainActionClassName = `btn ${isPublicSourceRecipe ? "btn-primary" : ""}`.trim();
             const handleMainAction = () => {
               if (isPublicSourceRecipe) {
@@ -1726,7 +1732,7 @@ function RecipesPageContent() {
                               const meta = VISIBILITY_BADGE_META[recipe.visibility as Exclude<RecipeVisibility, "private">];
                               return (
                                 <span
-                                  title={meta.title}
+                                  title={t(meta.titleKey)}
                                   style={{
                                     display: "inline-flex",
                                     alignItems: "center",
@@ -1747,7 +1753,10 @@ function RecipesPageContent() {
                           ) : null}
                           {pantryCoverageText ? (
                             <span
-                              title={`Ингредиентов в кладовке: ${pantryMeta.matchedIngredients} из ${pantryMeta.totalIngredients}`}
+                              title={t("recipes.card.pantryCoverageTitle", {
+                                matched: pantryMeta.matchedIngredients,
+                                total: pantryMeta.totalIngredients,
+                              })}
                               style={{
                                 display: "inline-flex",
                                 alignItems: "center",
@@ -1785,7 +1794,7 @@ function RecipesPageContent() {
                                 cursor: "pointer",
                               }}
                             >
-                              Совпадений: {matchMeta.matchCount}
+                              {t("recipes.card.matches", { count: matchMeta.matchCount })}
                             </button>
                           ) : null}
                           {preferenceMeta.dislikeCount > 0 ? (
@@ -1806,7 +1815,7 @@ function RecipesPageContent() {
                                 cursor: "pointer",
                               }}
                             >
-                              ⚪ не люблю
+                              {t("recipes.card.dislikeBadge")}
                             </button>
                           ) : null}
                         </div>
@@ -1817,12 +1826,12 @@ function RecipesPageContent() {
                         ) : null}
                         {openDislikeRecipeId === recipe.id && dislikeTooltip ? (
                           <div style={{ marginTop: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
-                            В рецепте есть продукт из списка «не люблю».
+                            {t("recipes.card.dislikeHint")}
                           </div>
                         ) : null}
                       </div>
                       <span style={{ fontSize: "13px", color: "var(--text-secondary)", flexShrink: 0 }}>
-                        Порции: {recipe.servings || 2}
+                        {t("recipes.card.servings", { count: recipe.servings || 2 })}
                       </span>
                     </div>
 
@@ -1855,7 +1864,7 @@ function RecipesPageContent() {
                       </button>
                       {isPublicSourceRecipe ? (
                         <button className="btn" onClick={() => router.push(`/recipes/${openTargetId}`)}>
-                          Открыть
+                          {t("recipes.card.open")}
                         </button>
                       ) : null}
                     </div>
@@ -1872,11 +1881,12 @@ function RecipesPageContent() {
 }
 
 export default function RecipesPage() {
+  const { t } = useI18n();
   return (
     <Suspense
       fallback={
         <section className="card">
-          <h1 className="h1">Загрузка рецептов...</h1>
+          <h1 className="h1">{t("recipes.loadingList")}</h1>
         </section>
       }
     >

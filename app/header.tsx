@@ -1,21 +1,23 @@
-﻿"use client";
+"use client";
 
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { useI18n } from "./components/I18nProvider";
 
 const SHOPPING_HIGHLIGHT_KEY = "planottoHighlightShoppingNav";
 const NAV_ITEMS = [
-  { path: "/recipes", label: "Рецепты" },
-  { path: "/menu", label: "Меню" },
-  { path: "/pantry", label: "Кладовка" },
-  { path: "/shopping-list", label: "Покупки" },
-  { path: "/auth", label: "Аккаунт" },
+  { path: "/recipes", labelKey: "header.nav.recipes" },
+  { path: "/menu", labelKey: "header.nav.menu" },
+  { path: "/pantry", labelKey: "header.nav.pantry" },
+  { path: "/shopping-list", labelKey: "header.nav.shopping" },
+  { path: "/auth", labelKey: "header.nav.account" },
 ];
 
 export default function Header() {
   const pathname = usePathname();
+  const { t } = useI18n();
   const [highlightShopping, setHighlightShopping] = useState(false);
   const [mobileMenuOpenedForPath, setMobileMenuOpenedForPath] = useState<string | null>(null);
   const isMobileMenuOpen = mobileMenuOpenedForPath === pathname;
@@ -73,16 +75,14 @@ export default function Header() {
         <Link className="brand header-mascot" href="/">
           <Image
             src={mascotSrc}
-            alt="Planotto mascot"
+            alt={t("header.aria.logoAlt")}
             width={40}
             height={40}
             className="header-mascot__image"
           />
           <div className="header-mascot__content">
             <div className="header-mascot__title">Planotto</div>
-            <div className="header-mascot__slogan">
-              Планируй, готовь и покупай
-            </div>
+            <div className="header-mascot__slogan">{t("header.slogan")}</div>
           </div>
         </Link>
 
@@ -98,7 +98,7 @@ export default function Header() {
               }`}
               onClick={() => item.path === "/shopping-list" && clearShoppingHighlight()}
             >
-              {item.label}
+              {t(item.labelKey)}
             </Link>
           ))}
         </nav>
@@ -106,7 +106,7 @@ export default function Header() {
           className="header__menu-btn"
           onClick={toggleMobileMenu}
           type="button"
-          aria-label="Открыть меню"
+          aria-label={t("header.aria.openMenu")}
         >
           <span className="header__menu-icon" />
         </button>
@@ -114,15 +114,21 @@ export default function Header() {
 
       {isMobileMenuOpen && (
         <div className="mobile-menu-overlay" onClick={closeMobileMenu}>
-          <div className="mobile-menu" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Навигация">
+          <div
+            className="mobile-menu"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-label={t("header.aria.navigation")}
+          >
             <div className="mobile-menu__header">
-              <span className="mobile-menu__title">Навигация</span>
+              <span className="mobile-menu__title">{t("header.aria.navigation")}</span>
               <button
                 type="button"
                 className="mobile-menu__close"
                 onClick={closeMobileMenu}
-                aria-label="Закрыть меню"
-                title="Закрыть"
+                aria-label={t("header.aria.closeMenu")}
+                title={t("header.aria.closeMenu")}
               >
                 ×
               </button>
@@ -138,7 +144,7 @@ export default function Header() {
                     if (item.path === "/shopping-list") clearShoppingHighlight();
                   }}
                 >
-                  {item.label}
+                  {t(item.labelKey)}
                 </Link>
               ))}
             </nav>

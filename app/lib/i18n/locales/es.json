@@ -1,0 +1,706 @@
+{
+  "header": {
+    "slogan": "Planifica, cocina y compra",
+    "nav": {
+      "recipes": "Recetas",
+      "menu": "Menú",
+      "pantry": "Despensa",
+      "shopping": "Compras",
+      "account": "Cuenta"
+    },
+    "aria": {
+      "openMenu": "Abrir menú",
+      "closeMenu": "Cerrar menú",
+      "navigation": "Navegación",
+      "logoAlt": "Mascota de Planotto"
+    }
+  },
+  "home": {
+    "title": "Servicio para planificar comidas y compras",
+    "description": "Ahorra tiempo y ayuda a evitar compras innecesarias.",
+    "cta": {
+      "continue": "Continuar planificación",
+      "start": "Empezar planificación gratis"
+    },
+    "howLink": "↘ Cómo funciona",
+    "how": {
+      "title": "Cómo funciona",
+      "step1": {
+        "title": "Añade recetas",
+        "description": "Guarda 2-3 platos favoritos."
+      },
+      "step2": {
+        "title": "Arma tu menú",
+        "description": "Distribuye platos por día."
+      },
+      "step3": {
+        "title": "Obtén lista de compras",
+        "description": "Se generará automáticamente."
+      }
+    },
+    "example": {
+      "title": "Ejemplo de un día",
+      "dinnerLabel": "Cena",
+      "dinnerValue": "Pasta con atún",
+      "shoppingLabel": "Lista de compras",
+      "shoppingValue": "Pasta, atún, tomates",
+      "mascotAlt": "Mascota de Planotto"
+    }
+  },
+  "auth": {
+    "title": "Cuenta",
+    "messages": {
+      "enterEmailPassword": "Introduce correo y contraseña.",
+      "signedIn": "Sesión iniciada.",
+      "registered": "Registro completado. Si la confirmación está activada, revisa tu correo.",
+      "authError": "Error de autenticación.",
+      "profileSaved": "Perfil guardado.",
+      "profileSaveError": "No se pudo guardar el perfil.",
+      "invalidImage": "Selecciona un archivo de imagen.",
+      "signedOut": "Has cerrado sesión."
+    },
+    "language": {
+      "label": "Idioma de la interfaz"
+    },
+    "profile": {
+      "section": "Perfil",
+      "nameLabel": "Nombre",
+      "namePlaceholder": "Por ejemplo, Kate",
+      "avatarTitle": "Avatar",
+      "avatarPresetTitle": "Elige avatar",
+      "uploadPhoto": "Subir foto",
+      "removeAvatar": "Quitar avatar",
+      "frameTitle": "Marco",
+      "noFrame": "Sin marco",
+      "pickAvatar": "Elegir avatar",
+      "pickFrame": "Elegir marco",
+      "avatarAlt": "Avatar",
+      "frameAlt": "Marco",
+      "currentAvatarAlt": "Avatar actual",
+      "currentFrameAlt": "Marco del avatar",
+      "noName": "Sin nombre"
+    },
+    "preferences": {
+      "section": "Preferencias (si realmente se usan)",
+      "infoAllergies": "Alergias y restricciones estrictas: estos productos nunca se usarán en recomendaciones ni en el menú automático.",
+      "infoDislikes": "Productos no preferidos: estos productos se sugerirán menos y se marcarán en recomendaciones.",
+      "dietType": "Tipo de alimentación",
+      "allergies": "Alergias",
+      "allergyPlaceholder": "Por ejemplo: cacahuete",
+      "dislikes": "No me gusta",
+      "dislikePlaceholder": "Por ejemplo: cebolla",
+      "add": "Añadir",
+      "remove": "Eliminar"
+    },
+    "serviceUsage": {
+      "section": "Uso del servicio",
+      "goal": "Objetivo",
+      "days": "Cuántos días",
+      "mealsPerDay": "Comidas por día"
+    },
+    "actions": {
+      "saveProfile": "Guardar perfil",
+      "savingProfile": "Guardando...",
+      "toRecipes": "A recetas",
+      "signOut": "Cerrar sesión",
+      "signInTab": "Entrar",
+      "signUpTab": "Registro",
+      "email": "Correo",
+      "password": "Contraseña",
+      "pleaseWait": "Espera...",
+      "signIn": "Entrar",
+      "signUp": "Registrarse",
+      "back": "Atrás"
+    },
+    "options": {
+      "goal": {
+        "menu": "Planificar menú",
+        "recipes": "Recetas y búsqueda",
+        "shopping": "Lista de compras",
+        "explore": "Solo explorar"
+      },
+      "mealsPerDay": {
+        "3": "3",
+        "1-2": "1-2",
+        "4+": "4+",
+        "variable": "Variable"
+      },
+      "planDays": {
+        "all": "Todos los días",
+        "weekdays": "Laborables",
+        "weekends": "Fin de semana"
+      },
+      "diet": {
+        "none": "Sin restricciones",
+        "vegetarian": "Vegetariana",
+        "vegan": "Vegana",
+        "gluten_free": "Sin gluten",
+        "lactose_free": "Sin lactosa",
+        "pp": "Saludable"
+      }
+    }
+  },
+  "pantry": {
+    "title": "Despensa",
+    "categories": {
+      "vegetablesFruits": "Frutas y verduras",
+      "meatFish": "Carne y pescado",
+      "dairy": "Lácteos",
+      "breadBakery": "Pan y bollería",
+      "grocery": "Despensa seca",
+      "frozen": "Congelados",
+      "drinks": "Bebidas",
+      "snacksSweets": "Snacks y dulces",
+      "spicesSauces": "Especias y salsas"
+    },
+    "updated": {
+      "label": "Actualizado",
+      "today": "hoy",
+      "yesterday": "ayer",
+      "unknown": "desconocido"
+    },
+    "words": {
+      "productOne": "producto",
+      "productFew": "productos",
+      "productsPlural": "productos"
+    },
+    "validation": {
+      "nameRequired": "El nombre no puede estar vacío",
+      "amountRequired": "Introduce cantidad",
+      "amountPositive": "La cantidad debe ser mayor que 0"
+    },
+    "starter": {
+      "milk": "Leche",
+      "eggs": "Huevos",
+      "bread": "Pan"
+    },
+    "filters": {
+      "all": "Todos",
+      "uncategorized": "Sin categoría",
+      "scrollHint": "Desliza categorías →"
+    },
+    "count": {
+      "inPantry": "En despensa: {{count}} {{word}}",
+      "available": "{{count}} {{word}} disponibles"
+    },
+    "form": {
+      "namePlaceholder": "Nombre",
+      "categoryPlaceholder": "Categoría (por ejemplo: Verduras)",
+      "searchPlaceholder": "Buscar productos"
+    },
+    "sort": {
+      "updatedAt": "Orden: fecha de actualización",
+      "name": "Orden: nombre",
+      "amount": "Orden: cantidad"
+    },
+    "actions": {
+      "backToMenu": "← Volver al menú",
+      "addProduct": "+ Añadir producto",
+      "addStarter": "Añadir productos iniciales",
+      "openShopping": "Abrir compras",
+      "save": "Guardar",
+      "cancel": "Cancelar",
+      "edit": "Editar",
+      "delete": "Eliminar",
+      "editItemAria": "Editar {{name}}",
+      "deleteItemAria": "Eliminar {{name}}"
+    },
+    "empty": {
+      "title": "La despensa está vacía",
+      "description1": "Añade productos que ya tienes en casa.",
+      "description2": "Se usarán en el menú y la lista de compras.",
+      "notFound": "No se encontró nada"
+    },
+    "editor": {
+      "addTitle": "Añadir producto",
+      "editTitle": "Editar producto"
+    },
+    "savedCount": "Productos guardados: {{count}}"
+  },
+  "shopping": {
+    "title": "Lista de compras",
+    "source": {
+      "merged": "Origen: lista unificada de todos los menús del período",
+      "selectedMenu": "Origen: menú «{{name}}»",
+      "currentMenu": "Origen: menú actual del período"
+    },
+    "manualSection": "Posiciones manuales",
+    "categories": {
+      "vegetables": "Verduras",
+      "meat": "Carne",
+      "dairy": "Lácteos",
+      "grocery": "Despensa seca",
+      "other": "Otros"
+    },
+    "buyAmount": "Comprar: {{amount}}",
+    "period": {
+      "today": "Hoy",
+      "tomorrow": "Mañana",
+      "full": "Todo el período"
+    },
+    "hints": {
+      "menuIngredientsAdded": "Los ingredientes del menú ya están añadidos. Puedes marcar productos comprados.",
+      "listUpdated": "Lista actualizada."
+    },
+    "guestReminder": {
+      "strong": "Regístrate para no perder tus datos.",
+      "normal": "Crea una cuenta para guardar tus recetas y menús.",
+      "createAccount": "Crear cuenta",
+      "later": "Después"
+    },
+    "empty": {
+      "title": "La lista de compras está vacía",
+      "description1": "La lista se genera automáticamente desde el menú y las recetas.",
+      "description2": "Tiene en cuenta la despensa y las prioridades del período.",
+      "example": "Ejemplo: leche, huevos, requesón.",
+      "footer": "Los productos que ya tienes en casa se excluyen automáticamente.",
+      "filtered": "Aún no hay posiciones para el período seleccionado."
+    },
+    "positionsCount": "{{count}} posiciones",
+    "settings": {
+      "title": "Ajustes de compras",
+      "includeCooked": "Incluir platos cocinados",
+      "mergeMenus": "Unificar menús",
+      "defaultPeriod": "Período por defecto",
+      "groupByCategories": "Agrupar por categorías"
+    },
+    "manualModal": {
+      "title": "Añadir posición",
+      "closeAria": "Cerrar formulario",
+      "nameLabel": "Nombre",
+      "namePlaceholder": "Por ejemplo, limón",
+      "amountLabel": "Cantidad",
+      "unitLabel": "Unidad (opcional)",
+      "unitPlaceholder": "ud, g, ml..."
+    },
+    "actions": {
+      "addManual": "+ Añadir posición",
+      "buildMenu": "Crear menú",
+      "addRecipe": "Añadir receta",
+      "backToMenu": "← Volver al menú",
+      "markPurchasedAria": "Marcar {{name}} como comprado",
+      "unmarkPurchasedAria": "Quitar marca \"Comprado\" para {{name}}",
+      "purchased": "Comprado",
+      "done": "Hecho",
+      "cancel": "Cancelar",
+      "add": "Añadir"
+    }
+  },
+  "menu": {
+    "title": "Menú del período",
+    "loading": "Cargando menú...",
+    "actions": {
+      "close": "Cerrar",
+      "save": "Guardar",
+      "cancel": "Cancelar",
+      "add": "Añadir",
+      "create": "Crear",
+      "delete": "Eliminar",
+      "edit": "Editar",
+      "move": "Mover",
+      "open": "Abrir",
+      "actions": "Acciones",
+      "generateShoppingList": "Generar lista de compras",
+      "clearPeriod": "Limpiar período"
+    },
+    "dialog": {
+      "addDish": "Añadir plato",
+      "editDish": "Editar plato",
+      "typeRecipe": "Receta",
+      "typeText": "Texto",
+      "chooseRecipe": "Elige receta",
+      "chooseRecipePlaceholder": "Elige receta...",
+      "servingsCount": "Cantidad de porciones",
+      "howManyServings": "¿Cuántas porciones?",
+      "enterText": "Escribe texto...",
+      "includeInShopping": "Incluir en lista de compras",
+      "ingredients": "Ingredientes:",
+      "ingredientName": "Nombre",
+      "ingredientAmount": "Cantidad",
+      "otherUnit": "otro",
+      "unitPlaceholder": "unidad",
+      "removeIngredient": "Eliminar ingrediente",
+      "addIngredient": "+ Añadir ingrediente"
+    },
+    "activeProducts": {
+      "allTitle": "Todos los productos activos",
+      "count": "Activos: {{count}}",
+      "addPlaceholder": "Añadir producto",
+      "searchPlaceholder": "Buscar por nombre y nota",
+      "saved": "Guardado",
+      "scopeLabel": "Vigencia",
+      "scopeInMenuOption": "En este menú",
+      "scopePersistentOption": "Hasta cancelar",
+      "scopeUntilDateOption": "Hasta fecha",
+      "dateLabel": "Fecha",
+      "noteLabel": "Nota (hasta {{max}} caracteres)",
+      "notePlaceholder": "Por ejemplo: oferta / usar restos",
+      "priority": "Prioritario",
+      "notFound": "No se encontró nada para tu búsqueda.",
+      "scopePersistent": "hasta cancelar",
+      "scopeUntilDate": "hasta fecha",
+      "scopeUntilDateValue": "hasta {{date}}",
+      "scopeInMenu": "en este menú"
+    },
+    "item": {
+      "cooked": "Preparado",
+      "noRecipe": "Sin receta",
+      "hasIngredients": "Tiene ingredientes"
+    },
+    "onboarding": {
+      "firstVisitAria": "Primera visita al calendario",
+      "title": "Añadamos la primera receta",
+      "description": "Para crear el menú, añade una receta.",
+      "addFirstRecipe": "Añadir primera receta",
+      "tryWithout": "Probar sin recetas"
+    },
+    "notice": {
+      "dishAdded": "Plato añadido al menú.",
+      "ingredientsAdded": "Ingredientes añadidos a la lista de compras.",
+      "noIngredientsYet": "Este plato aún no tiene ingredientes en la lista de compras.",
+      "openShopping": "Ver lista de compras",
+      "continuePlanning": "Continuar planificación"
+    },
+    "guestReminder": {
+      "strong": "Regístrate para no perder tus datos.",
+      "normal": "Crea una cuenta para guardar tus recetas y menús.",
+      "createAccount": "Crear cuenta",
+      "later": "Después"
+    },
+    "quickAdd": {
+      "confirmAria": "Confirmación de añadir plato",
+      "confirmText": "¿Añadir {{recipe}} a {{day}} ({{meal}})?",
+      "chooseAnotherDay": "Elegir otro día"
+    },
+    "period": {
+      "previousAria": "Período anterior",
+      "nextAria": "Período siguiente",
+      "daysCount": "{{count}} días"
+    },
+    "selector": {
+      "label": "Menú:",
+      "aria": "Selección de menú activo"
+    },
+    "mode": {
+      "label": "Modo:",
+      "aria": "Modo de vista del día",
+      "list": "Lista",
+      "meals": "Por comidas"
+    },
+    "inlineHint": {
+      "textBefore": "Consejo: pulsa",
+      "textAfter": "en cualquier día para añadir un plato al menú.",
+      "ok": "Entendido"
+    },
+    "day": {
+      "fillAria": "Relleno del día {{percent}}%",
+      "dishesOfDay": "Platos del día",
+      "addDishToDay": "Añadir plato al día",
+      "addDishWithMeal": "Añadir plato ({{meal}})",
+      "addDish": "+ Añadir plato"
+    },
+    "settings": {
+      "title": "Ajustes del menú",
+      "dayStructure": "Estructura del día",
+      "configureMeals": "Configurar comidas",
+      "mergeMenusForShopping": "Unificar todos los menús en una lista de compras",
+      "activeProducts": "Productos activos",
+      "manageMenus": "Gestión de menús",
+      "menuNameAria": "Nombre del menú {{name}}",
+      "currentMenu": "Menú actual",
+      "deleteMenu": "Eliminar menú",
+      "addMenu": "+ Añadir menú"
+    },
+    "mealsConfig": {
+      "title": "Configurar comidas",
+      "showMeal": "Mostrar comida",
+      "newMealPlaceholder": "Nueva comida",
+      "addMeal": "+ Añadir comida",
+      "useAsDefault": "Usar por defecto"
+    },
+    "createMenu": {
+      "title": "Nuevo menú",
+      "namePlaceholder": "Nombre del menú"
+    },
+    "deleteMenu": {
+      "title": "Eliminar menú",
+      "confirm": "¿Eliminar menú {{name}}?"
+    },
+    "moveDialog": {
+      "title": "Mover plato",
+      "selectedItem": "Elemento seleccionado:",
+      "dayLabel": "Día:",
+      "mealLabel": "Comida:",
+      "choose": "Elige..."
+    },
+    "ai": {
+      "noSuggestion": "La IA no pudo sugerir.",
+      "failedToGetSuggestion": "No se pudo obtener sugerencia de IA."
+    },
+    "errors": {
+      "weeklyMenusTableMissing": "No se encontró la tabla weekly_menus en Supabase. Ejecuta SQL desde supabase/schema.sql.",
+      "saveFailed": "Error al guardar menú."
+    },
+    "confirm": {
+      "clearPeriod": "¿Seguro que quieres limpiar el menú del período?",
+      "clearCurrentMenu": "¿Seguro que quieres limpiar el menú actual?"
+    },
+    "fallback": {
+      "recipeTitle": "receta"
+    },
+    "shopping": {
+      "allMenusPeriod": "Todos los menús del período"
+    }
+  },
+  "recipes": {
+    "title": "Recetas",
+    "loading": "Cargando...",
+    "loadingList": "Cargando recetas...",
+    "messages": {
+      "localMode": "Trabajamos en modo local. Tus recetas están en este dispositivo.",
+      "alreadyInMine": "La receta ya estaba en mis recetas.",
+      "addedToMine": "Receta añadida a mis recetas.",
+      "allergyWarningMany": "Esta receta contiene productos de “Alergias”: {{listed}}. ¿Añadir manualmente?",
+      "allergyWarningOne": "Esta receta contiene un producto de “Alergias”. ¿Añadir manualmente?",
+      "supabaseTableMissingAlreadyLocal": "La tabla de recetas en Supabase no está inicializada. La receta ya está local.",
+      "supabaseTableMissingAddedLocal": "La tabla de recetas en Supabase no está inicializada. Receta añadida localmente.",
+      "copyFailed": "No se pudo copiar la receta.",
+      "clearAllConfirm": "¿Eliminar todas tus recetas? También se borrarán borradores locales.",
+      "cleared": "Recetas limpiadas. Puedes cargar nuevas para probar.",
+      "clearFailed": "No se pudieron limpiar recetas.",
+      "deleteOneConfirm": "¿Eliminar receta \"{{title}}\"?",
+      "deleted": "Receta eliminada.",
+      "deleteFailed": "No se pudo eliminar la receta."
+    },
+    "account": {
+      "guestName": "Invitado",
+      "tapToLogin": "Pulsa para iniciar sesión",
+      "avatarAlt": "Avatar",
+      "frameAlt": "Marco",
+      "accountLabel": "Cuenta",
+      "authLabel": "Autorización"
+    },
+    "onboarding": {
+      "firstRecipeAria": "Primera receta",
+      "title": "Elige receta para empezar",
+      "description": "Para crear menú, añade una receta.",
+      "chooseReady": "Elegir de recetas listas",
+      "addOwn": "Añadir tu receta"
+    },
+    "subtitle": {
+      "public": "Ejemplos para empezar: elige una receta y copia a tu biblioteca.",
+      "mine": "Tus recetas: guarda, edita y usa para planificar menú."
+    },
+    "tabs": {
+      "mine": "Mías",
+      "public": "Ejemplos"
+    },
+    "sort": {
+      "newest": "Nuevas",
+      "oldest": "Antiguas",
+      "titleAsc": "Nombre A-Z",
+      "titleDesc": "Nombre Z-A",
+      "oftenCooked": "Cocino a menudo",
+      "rarelyCooked": "Cocino raro"
+    },
+    "filters": {
+      "searchPlaceholder": "Buscar por nombre e ingredientes",
+      "button": "Filtros",
+      "withPhoto": "Con foto",
+      "withoutPhoto": "Sin foto",
+      "withNotes": "Con notas",
+      "activeProductsDisabled": "Añade productos activos en Menú",
+      "activeProductsTooltip": "Mostrar solo recetas con productos activos",
+      "onlyWithActiveProducts": "Solo con productos activos",
+      "pantryEmpty": "La despensa está vacía",
+      "onlyFromPantryTooltip": "Mostrar solo recetas posibles con despensa",
+      "onlyFromPantry": "Solo de despensa",
+      "resetAll": "Restablecer todo",
+      "tags": "Etiquetas",
+      "resetTags": "Restablecer etiquetas"
+    },
+    "actions": {
+      "backToMenu": "← Volver al menú",
+      "addRecipe": "+ Añadir receta",
+      "clearMine": "Limpiar mis recetas",
+      "goToMine": "Ir a mis recetas"
+    },
+    "guestReminder": {
+      "text": "Ya añadiste varias recetas. Crea cuenta para no perderlas.",
+      "createAccount": "Crear cuenta",
+      "later": "Después"
+    },
+    "success": {
+      "firstAddedAria": "Primera receta añadida",
+      "title": "¡Perfecto! Primera receta añadida.",
+      "description": "Ahora la usamos en el menú.",
+      "addToMenu": "Añadir al menú"
+    },
+    "empty": {
+      "title": "Aún no tienes recetas",
+      "description": "Es normal al empezar. Comienza con tu primera receta.",
+      "addFirst": "Añadir primera receta"
+    },
+    "emptyFiltered": {
+      "title": "No se encontró nada",
+      "description": "Intenta quitar filtros o cambiar la búsqueda."
+    },
+    "card": {
+      "sourcePublicAdded": "De ejemplos • ya está en mis recetas",
+      "sourcePublic": "De ejemplos",
+      "sourceMine": "Mi receta",
+      "matchTooltip": "Coincide con activos: {{names}}{{extra}}",
+      "dislikeTooltip": "Contiene productos de “no me gusta”: {{names}}{{extra}}",
+      "alreadyMine": "Ya en mis recetas",
+      "adding": "Añadiendo...",
+      "addToMine": "Añadir a las mías",
+      "open": "Abrir",
+      "pantryCoverageTitle": "Ingredientes en despensa: {{matched}} de {{total}}",
+      "matches": "Coincidencias: {{count}}",
+      "dislikeBadge": "⚪ no me gusta",
+      "dislikeHint": "La receta contiene producto de la lista de “no me gusta”.",
+      "servings": "Porciones: {{count}}"
+    },
+    "visibility": {
+      "publicTitle": "Receta pública: visible para otros usuarios",
+      "linkTitle": "Receta disponible solo por enlace directo",
+      "invitedTitle": "Receta disponible solo para invitados"
+    },
+    "new": {
+      "title": "Nueva receta",
+      "localDraftMode": "Modo borrador: la receta se guardara localmente en este dispositivo.",
+      "ottoPrefix": "Otto",
+      "quickStart": "Inicio rapido: basta con titulo e ingredientes. El resto se puede agregar luego.",
+      "step1": {
+        "title": "Paso 1. Basico"
+      },
+      "step2": {
+        "hide": "Ocultar adicional",
+        "show": "Paso 2. Adicional (opcional)"
+      },
+      "fields": {
+        "title": "Nombre",
+        "access": "Acceso",
+        "ingredients": "Ingredientes",
+        "ingredientNamePlaceholder": "Nombre",
+        "ingredientAmountPlaceholder": "Cant.",
+        "instructions": "Preparacion",
+        "shortDescription": "Descripcion corta",
+        "servings": "Porciones",
+        "source": "Fuente (opcional)",
+        "sourceHint": "Si la receta viene de un libro o sitio, indique la fuente.",
+        "sourceWarning": "Si no se indica la fuente, la responsabilidad de publicacion es suya.",
+        "tags": "Etiquetas (opcional)",
+        "image": "Imagen",
+        "imagePreviewAlt": "Vista previa de receta",
+        "notes": "Notas personales"
+      },
+      "access": {
+        "private": {
+          "label": "Privado",
+          "description": "Solo propietario."
+        },
+        "public": {
+          "label": "Publico",
+          "description": "Visible para todos en la biblioteca."
+        },
+        "link": {
+          "label": "Por enlace",
+          "description": "Disponible por enlace directo."
+        },
+        "invited": {
+          "label": "Por invitacion",
+          "description": "Solo usuarios invitados."
+        },
+        "loginRequired": "Inicia sesion para usar Publico, Por enlace e Invitacion.",
+        "linkAvailableAfterSave": "El enlace estara disponible despues de guardar la receta.",
+        "generateLink": "Generar enlace",
+        "token": "Token",
+        "manage": "Gestionar acceso",
+        "invitedPlaceholder": "emails de usuarios, uno por linea",
+        "invitedHelp": "Las invitaciones se envian por email. El acceso se da despues de iniciar sesion."
+      },
+      "import": {
+        "show": "Importar receta (opcional)",
+        "hide": "Ocultar importacion",
+        "byUrl": "Importar por enlace",
+        "byPhoto": "Importar por foto",
+        "urlPlaceholder": "Pegue enlace de receta",
+        "importAction": "Importar",
+        "importing": "Importando...",
+        "urlRequired": "Pegue un enlace de receta.",
+        "urlInvalid": "Introduzca un enlace valido.",
+        "urlUnsupported": "Este enlace no esta soportado.",
+        "urlSuccess": "Importado. Revise y guarde.",
+        "urlFailed": "No se pudo importar por enlace. Pruebe otro enlace o complete manualmente.",
+        "photoRequired": "Seleccione una foto de receta.",
+        "preparingPhoto": "Preparando foto...",
+        "photoLoaded": "Fotos cargadas: {{count}}. Pulse \"Reconocer\".",
+        "photoPrepareFailed": "No se pudo preparar la foto. Pruebe otro archivo.",
+        "cameraReadFailed": "No se pudo obtener foto de la camara.",
+        "cameraPhotoAdded": "Foto de camara agregada. Pulse \"Reconocer\".",
+        "cameraPrepareFailed": "No se pudo preparar la foto de camara.",
+        "waitPreparing": "Espere, las fotos aun se estan preparando.",
+        "photoAtLeastOne": "Primero cargue al menos una foto de receta.",
+        "recognizing": "Reconociendo...",
+        "recognizeAction": "Reconocer",
+        "photoSuccess": "Receta reconocida, revise y guarde.",
+        "photoRecognizeFailed": "No se pudo reconocer la foto. Pruebe otra o complete manualmente.",
+        "photoUnavailable": "La importacion por foto esta temporalmente no disponible. Pruebe mas tarde o complete manualmente.",
+        "takePhoto": "Tomar con camara",
+        "clearPhoto": "Limpiar fotos",
+        "photosCount": "Fotos para reconocer: {{count}}",
+        "removePhoto": "Eliminar foto",
+        "photoN": "Foto {{index}}",
+        "reviewAfterImport": "Revise despues de importar:"
+      },
+      "ai": {
+        "needIngredient": "Primero agregue al menos un ingrediente.",
+        "hintsFound": "La IA sugirio variantes de nombres.",
+        "hintsNotFound": "No se encontraron sugerencias.",
+        "hintsFailed": "No se pudieron obtener sugerencias de ingredientes.",
+        "tagsFound": "La IA sugirio etiquetas.",
+        "tagsNotFound": "La IA no encontro etiquetas claras.",
+        "tagsFailed": "No se pudieron obtener sugerencias de etiquetas.",
+        "servingsReady": "La sugerencia de porciones esta lista.",
+        "servingsFailed": "No se pudo obtener sugerencia de porciones.",
+        "imageReady": "Imagen generada.",
+        "imageMissing": "La IA no devolvio imagen.",
+        "imageFailed": "No se pudo generar imagen.",
+        "showTools": "Otto puede ayudar (opcional)",
+        "hideTools": "Ocultar sugerencias de Otto",
+        "toolsHint": "Son sugerencias auxiliares. La receta puede guardarse sin ellas.",
+        "searching": "Buscando...",
+        "suggestNames": "Sugerir nombres",
+        "counting": "Calculando...",
+        "suggestServings": "Sugerir porciones",
+        "thinking": "Pensando...",
+        "suggestTags": "Sugerir etiquetas",
+        "generating": "Generando...",
+        "generatePhoto": "Generar foto",
+        "applyServings": "Aplicar porciones: {{count}}",
+        "addSuggestedTags": "Agregar etiquetas sugeridas"
+      },
+      "actions": {
+        "backToRecipes": "? Volver a recetas",
+        "addIngredient": "+ Agregar ingrediente",
+        "deleteIngredient": "Eliminar",
+        "deleteImage": "Eliminar imagen",
+        "saveRecipe": "Guardar receta",
+        "saving": "Guardando...",
+        "cancel": "Cancelar"
+      },
+      "messages": {
+        "titleRequired": "El nombre de la receta es obligatorio",
+        "saveFailed": "No se pudo guardar la receta.",
+        "invitesPartial": "No se enviaron algunas invitaciones: {{emails}}",
+        "checkAmountAndUnit": "Revise cantidad y unidad despues de importar."
+      }
+    }
+  },
+  "languages": {
+    "ru": "Русский",
+    "en": "English",
+    "es": "Español"
+  }
+}

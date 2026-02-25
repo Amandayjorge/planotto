@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState, type ChangeEvent, type Dispatch, type Set
 import { useRouter } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
 import { SUPABASE_UNAVAILABLE_MESSAGE, getSupabaseClient, isSupabaseConfigured } from "../lib/supabaseClient";
+import { useI18n } from "../components/I18nProvider";
+import { isLocale } from "../lib/i18n";
 import ProductAutocompleteInput from "../components/ProductAutocompleteInput";
 import { appendProductSuggestions, loadProductSuggestions } from "../lib/productSuggestions";
 
@@ -20,31 +22,10 @@ const FRAME_PRESETS = [
   "/avatar/frames/thumbs/2.png",
   "/avatar/frames/thumbs/5.png",
 ];
-const PROFILE_GOAL_OPTIONS = [
-  { value: "menu", label: "Планировать меню" },
-  { value: "recipes", label: "Рецепты и поиск" },
-  { value: "shopping", label: "Список покупок" },
-  { value: "explore", label: "Пока просто смотрю" },
-];
-const PROFILE_MEALS_OPTIONS = [
-  { value: "1-2", label: "1-2" },
-  { value: "3", label: "3" },
-  { value: "4+", label: "4+" },
-  { value: "variable", label: "По-разному" },
-];
-const PROFILE_PLAN_DAYS_OPTIONS = [
-  { value: "all", label: "Все дни" },
-  { value: "weekdays", label: "Будни" },
-  { value: "weekends", label: "Выходные" },
-];
-const PROFILE_DIET_OPTIONS = [
-  { value: "none", label: "Без ограничений" },
-  { value: "vegetarian", label: "Вегетарианское" },
-  { value: "vegan", label: "Веганское" },
-  { value: "gluten_free", label: "Без глютена" },
-  { value: "lactose_free", label: "Без лактозы" },
-  { value: "pp", label: "ПП" },
-];
+const PROFILE_GOAL_OPTIONS = ["menu", "recipes", "shopping", "explore"] as const;
+const PROFILE_MEALS_OPTIONS = ["1-2", "3", "4+", "variable"] as const;
+const PROFILE_PLAN_DAYS_OPTIONS = ["all", "weekdays", "weekends"] as const;
+const PROFILE_DIET_OPTIONS = ["none", "vegetarian", "vegan", "gluten_free", "lactose_free", "pp"] as const;
 
 const parseItemsList = (raw: string): string[] => {
   const seen = new Set<string>();
@@ -102,6 +83,7 @@ const resolveUserMetaValue = (user: User | null | undefined, key: string, fallba
 
 export default function AuthPage() {
   const router = useRouter();
+  const { locale, locales, setLocale, t } = useI18n();
   const [mode, setMode] = useState<Mode>("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -123,6 +105,15 @@ export default function AuthPage() {
   const [profileSaving, setProfileSaving] = useState(false);
   const [message, setMessage] = useState("");
 
+  const languageOptions = useMemo(
+    () =>
+      locales.map((code) => ({
+        value: code,
+        label: t(`languages.${code}`),
+      })),
+    [locales, t]
+  );
+
   useEffect(() => {
     if (!isSupabaseConfigured()) return;
     const supabase = getSupabaseClient();
@@ -132,6 +123,8 @@ export default function AuthPage() {
       setProfileName(resolveUserName(data.user));
       setProfileAvatar(resolveUserAvatar(data.user));
       setProfileFrame(resolveUserFrame(data.user));
+      const userLocale = resolveUserMetaValue(data.user, "ui_language", "");
+      if (isLocale(userLocale)) setLocale(userLocale);
       setProfileGoal(resolveUserMetaValue(data.user, "goal", "menu"));
       setProfilePeopleCount(resolveUserMetaValue(data.user, "people_count_default", "2"));
       setProfileMealsPerDay(resolveUserMetaValue(data.user, "meals_per_day", "3"));
@@ -146,6 +139,8 @@ export default function AuthPage() {
       setProfileName(resolveUserName(session?.user));
       setProfileAvatar(resolveUserAvatar(session?.user));
       setProfileFrame(resolveUserFrame(session?.user));
+      const userLocale = resolveUserMetaValue(session?.user, "ui_language", "");
+      if (isLocale(userLocale)) setLocale(userLocale);
       setProfileGoal(resolveUserMetaValue(session?.user, "goal", "menu"));
       setProfilePeopleCount(resolveUserMetaValue(session?.user, "people_count_default", "2"));
       setProfileMealsPerDay(resolveUserMetaValue(session?.user, "meals_per_day", "3"));
@@ -158,7 +153,7 @@ export default function AuthPage() {
     return () => {
       sub.subscription.unsubscribe();
     };
-  }, []);
+  }, [setLocale]);
 
   const handleSubmit = async () => {
     if (!isSupabaseConfigured()) {
@@ -166,7 +161,7 @@ export default function AuthPage() {
       return;
     }
     if (!email.trim() || !password.trim()) {
-      setMessage("Введите email и пароль.");
+      setMessage(t("auth.messages.enterEmailPassword"));
       return;
     }
 
@@ -178,15 +173,15 @@ export default function AuthPage() {
       if (mode === "signin") {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
-        setMessage("Вход выполнен.");
+        setMessage(t("auth.messages.signedIn"));
         router.push("/recipes");
       } else {
         const { error } = await supabase.auth.signUp({ email, password });
         if (error) throw error;
-        setMessage("Регистрация выполнена. Если включено подтверждение, проверьте email.");
+        setMessage(t("auth.messages.registered"));
       }
     } catch (error) {
-      const text = error instanceof Error ? error.message : "Ошибка авторизации.";
+      const text = error instanceof Error ? error.message : t("auth.messages.authError");
       setMessage(text);
     } finally {
       setLoading(false);
@@ -211,15 +206,16 @@ export default function AuthPage() {
           meals_per_day: profileMealsPerDay,
           plan_days: profilePlanDays,
           diet_type: profileDiet,
+          ui_language: locale,
           allergies: serializeItemsList(profileAllergiesList),
           dislikes: serializeItemsList(profileDislikesList),
         },
       });
 
       if (error) throw error;
-      setMessage("Профиль сохранен.");
+      setMessage(t("auth.messages.profileSaved"));
     } catch (error) {
-      const text = error instanceof Error ? error.message : "Не удалось сохранить профиль.";
+      const text = error instanceof Error ? error.message : t("auth.messages.profileSaveError");
       setMessage(text);
     } finally {
       setProfileSaving(false);
@@ -231,7 +227,7 @@ export default function AuthPage() {
     if (!file) return;
 
     if (!file.type.startsWith("image/")) {
-      setMessage("Выберите файл изображения.");
+      setMessage(t("auth.messages.invalidImage"));
       return;
     }
 
@@ -249,7 +245,7 @@ export default function AuthPage() {
     if (!isSupabaseConfigured()) return;
     const supabase = getSupabaseClient();
     await supabase.auth.signOut();
-    setMessage("Вы вышли из аккаунта.");
+    setMessage(t("auth.messages.signedOut"));
     setProfileName("");
     setProfileAvatar("");
     setProfileFrame("");
@@ -276,13 +272,13 @@ export default function AuthPage() {
   };
 
   const previewInitial = useMemo(() => {
-    const base = profileName.trim() || (userEmail || "").split("@")[0] || "Г";
+    const base = profileName.trim() || (userEmail || "").split("@")[0] || "G";
     return base.charAt(0).toUpperCase();
   }, [profileName, userEmail]);
 
   return (
     <section className="card" style={{ maxWidth: "560px", margin: "0 auto" }}>
-      <h1 className="h1">Аккаунт</h1>
+      <h1 className="h1">{t("auth.title")}</h1>
 
       {userEmail ? (
         <div style={{ display: "grid", gap: "14px" }}>
@@ -316,7 +312,7 @@ export default function AuthPage() {
                 >
                   <img
                     src={profileAvatar}
-                    alt="Текущий аватар"
+                    alt={t("auth.profile.currentAvatarAlt")}
                     style={{
                       width: "100%",
                       height: "100%",
@@ -331,7 +327,7 @@ export default function AuthPage() {
               {profileFrame ? (
                 <img
                   src={profileFrame}
-                  alt="Рамка аватара"
+                  alt={t("auth.profile.currentFrameAlt")}
                   style={{
                     position: "absolute",
                     inset: 0,
@@ -348,7 +344,7 @@ export default function AuthPage() {
             </div>
             <div>
               <div style={{ fontWeight: 700, fontSize: "20px", color: "var(--text-primary)" }}>
-                {profileName.trim() || "Без имени"}
+                {profileName.trim() || t("auth.profile.noName")}
               </div>
               <div className="muted">{userEmail}</div>
             </div>
@@ -365,20 +361,38 @@ export default function AuthPage() {
             }}
           >
             <div style={{ fontSize: "15px", fontWeight: 700, color: "var(--text-primary)" }}>
-              Профиль
+              {t("auth.profile.section")}
             </div>
             <label style={{ display: "grid", gap: "6px" }}>
-              Имя
+              {t("auth.profile.nameLabel")}
               <input
                 className="input"
                 type="text"
                 value={profileName}
                 onChange={(e) => setProfileName(e.target.value)}
-                placeholder="Например, Катя"
+                placeholder={t("auth.profile.namePlaceholder")}
               />
             </label>
-            <div style={{ fontSize: "14px", fontWeight: 600, color: "var(--text-primary)" }}>Аватар</div>
-            <div style={{ fontSize: "14px", fontWeight: 600, color: "var(--text-primary)" }}>Выберите аватар</div>
+            <label style={{ display: "grid", gap: "6px" }}>
+              {t("auth.language.label")}
+              <select
+                className="input"
+                value={locale}
+                onChange={(event) => {
+                  if (isLocale(event.target.value)) {
+                    setLocale(event.target.value);
+                  }
+                }}
+              >
+                {languageOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div style={{ fontSize: "14px", fontWeight: 600, color: "var(--text-primary)" }}>{t("auth.profile.avatarTitle")}</div>
+            <div style={{ fontSize: "14px", fontWeight: 600, color: "var(--text-primary)" }}>{t("auth.profile.avatarPresetTitle")}</div>
             <div
               style={{
                 display: "grid",
@@ -399,11 +413,11 @@ export default function AuthPage() {
                     cursor: "pointer",
                     minHeight: "102px",
                   }}
-                  title="Выбрать аватар"
+                  title={t("auth.profile.pickAvatar")}
                 >
                   <img
                     src={src}
-                    alt="Аватар"
+                    alt={t("auth.profile.avatarAlt")}
                     style={{
                       width: "100%",
                       height: "84px",
@@ -418,7 +432,7 @@ export default function AuthPage() {
             </div>
             <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
               <label className="btn" style={{ cursor: "pointer" }}>
-                Загрузить фото
+                {t("auth.profile.uploadPhoto")}
                 <input
                   type="file"
                   accept="image/*"
@@ -427,10 +441,10 @@ export default function AuthPage() {
                 />
               </label>
               <button type="button" className="btn" onClick={() => setProfileAvatar("")}>
-                Убрать аватар
+                {t("auth.profile.removeAvatar")}
               </button>
             </div>
-            <div style={{ fontSize: "14px", fontWeight: 600, color: "var(--text-primary)" }}>Рамка</div>
+            <div style={{ fontSize: "14px", fontWeight: 600, color: "var(--text-primary)" }}>{t("auth.profile.frameTitle")}</div>
             <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
               <button
                 type="button"
@@ -440,7 +454,7 @@ export default function AuthPage() {
                   border: !profileFrame ? "2px solid var(--accent-primary)" : "1px solid var(--border-default)",
                 }}
               >
-                Без рамки
+                {t("auth.profile.noFrame")}
               </button>
               {FRAME_PRESETS.map((src) => (
                 <button
@@ -456,11 +470,11 @@ export default function AuthPage() {
                     width: "86px",
                     height: "86px",
                   }}
-                  title="Выбрать рамку"
+                  title={t("auth.profile.pickFrame")}
                 >
                   <img
                     src={src}
-                    alt="Рамка"
+                    alt={t("auth.profile.frameAlt")}
                     style={{
                       width: "100%",
                       height: "100%",
@@ -486,36 +500,36 @@ export default function AuthPage() {
             }}
           >
             <div style={{ fontSize: "15px", fontWeight: 700, color: "var(--text-primary)" }}>
-              Предпочтения <span style={{ fontWeight: 400, color: "var(--text-tertiary)" }}>(если реально работают)</span>
+              {t("auth.preferences.section")}
             </div>
             <div style={{ fontSize: "12px", color: "var(--text-tertiary)", display: "grid", gap: "3px" }}>
-              <div>Аллергии и строгие ограничения: эти продукты никогда не используются в рекомендациях и автоподборе меню.</div>
-              <div>Не люблю продукты: эти продукты предлагаются реже и отмечаются в рекомендациях.</div>
+              <div>{t("auth.preferences.infoAllergies")}</div>
+              <div>{t("auth.preferences.infoDislikes")}</div>
             </div>
             <label style={{ display: "grid", gap: "6px" }}>
-              Тип питания
+              {t("auth.preferences.dietType")}
               <select className="input" value={profileDiet} onChange={(e) => setProfileDiet(e.target.value)}>
-                {PROFILE_DIET_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
+                {PROFILE_DIET_OPTIONS.map((value) => (
+                  <option key={value} value={value}>
+                    {t(`auth.options.diet.${value}`)}
                   </option>
                 ))}
               </select>
             </label>
 
             <div style={{ display: "grid", gap: "6px" }}>
-              <span>Аллергии</span>
+              <span>{t("auth.preferences.allergies")}</span>
               <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
                 <div style={{ flex: "1 1 260px", minWidth: "220px" }}>
                   <ProductAutocompleteInput
                     value={allergyInput}
                     onChange={setAllergyInput}
                     suggestions={productSuggestions}
-                    placeholder="Например: арахис"
+                    placeholder={t("auth.preferences.allergyPlaceholder")}
                   />
                 </div>
                 <button type="button" className="btn" onClick={() => addListItem(allergyInput, setProfileAllergiesList, setAllergyInput)}>
-                  Добавить
+                  {t("auth.preferences.add")}
                 </button>
               </div>
               {profileAllergiesList.length > 0 ? (
@@ -544,18 +558,18 @@ export default function AuthPage() {
             </div>
 
             <div style={{ display: "grid", gap: "6px" }}>
-              <span>Не люблю</span>
+              <span>{t("auth.preferences.dislikes")}</span>
               <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
                 <div style={{ flex: "1 1 260px", minWidth: "220px" }}>
                   <ProductAutocompleteInput
                     value={dislikeInput}
                     onChange={setDislikeInput}
                     suggestions={productSuggestions}
-                    placeholder="Например: лук"
+                    placeholder={t("auth.preferences.dislikePlaceholder")}
                   />
                 </div>
                 <button type="button" className="btn" onClick={() => addListItem(dislikeInput, setProfileDislikesList, setDislikeInput)}>
-                  Добавить
+                  {t("auth.preferences.add")}
                 </button>
               </div>
               {profileDislikesList.length > 0 ? (
@@ -595,34 +609,34 @@ export default function AuthPage() {
             }}
           >
             <div style={{ fontSize: "15px", fontWeight: 700, color: "var(--text-primary)" }}>
-              Использование сервиса
+              {t("auth.serviceUsage.section")}
             </div>
             <label style={{ display: "grid", gap: "6px" }}>
-              Цель
+              {t("auth.serviceUsage.goal")}
               <select className="input" value={profileGoal} onChange={(e) => setProfileGoal(e.target.value)}>
-                {PROFILE_GOAL_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
+                {PROFILE_GOAL_OPTIONS.map((value) => (
+                  <option key={value} value={value}>
+                    {t(`auth.options.goal.${value}`)}
                   </option>
                 ))}
               </select>
             </label>
             <label style={{ display: "grid", gap: "6px" }}>
-              Сколько дней
+              {t("auth.serviceUsage.days")}
               <select className="input" value={profilePlanDays} onChange={(e) => setProfilePlanDays(e.target.value)}>
-                {PROFILE_PLAN_DAYS_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
+                {PROFILE_PLAN_DAYS_OPTIONS.map((value) => (
+                  <option key={value} value={value}>
+                    {t(`auth.options.planDays.${value}`)}
                   </option>
                 ))}
               </select>
             </label>
             <label style={{ display: "grid", gap: "6px" }}>
-              Сколько приемов пищи
+              {t("auth.serviceUsage.mealsPerDay")}
               <select className="input" value={profileMealsPerDay} onChange={(e) => setProfileMealsPerDay(e.target.value)}>
-                {PROFILE_MEALS_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
+                {PROFILE_MEALS_OPTIONS.map((value) => (
+                  <option key={value} value={value}>
+                    {t(`auth.options.mealsPerDay.${value}`)}
                   </option>
                 ))}
               </select>
@@ -631,10 +645,10 @@ export default function AuthPage() {
 
           <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
             <button type="button" className="btn btn-primary" onClick={handleSaveProfile} disabled={profileSaving}>
-              {profileSaving ? "Сохраняем..." : "Сохранить профиль"}
+              {profileSaving ? t("auth.actions.savingProfile") : t("auth.actions.saveProfile")}
             </button>
             <button type="button" className="btn" onClick={() => router.push("/recipes")} style={{ opacity: 0.95 }}>
-              К рецептам
+              {t("auth.actions.toRecipes")}
             </button>
             <button
               type="button"
@@ -648,45 +662,67 @@ export default function AuthPage() {
                 textUnderlineOffset: "2px",
               }}
             >
-              Выйти
+              {t("auth.actions.signOut")}
             </button>
           </div>
         </div>
       ) : (
         <div style={{ display: "grid", gap: "12px" }}>
+          <label style={{ display: "grid", gap: "6px" }}>
+            {t("auth.language.label")}
+            <select
+              className="input"
+              value={locale}
+              onChange={(event) => {
+                if (isLocale(event.target.value)) {
+                  setLocale(event.target.value);
+                }
+              }}
+            >
+              {languageOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
           <div style={{ display: "flex", gap: "8px" }}>
             <button
               type="button"
               className={`btn ${mode === "signin" ? "btn-primary" : ""}`}
               onClick={() => setMode("signin")}
             >
-              Вход
+              {t("auth.actions.signInTab")}
             </button>
             <button
               type="button"
               className={`btn ${mode === "signup" ? "btn-primary" : ""}`}
               onClick={() => setMode("signup")}
             >
-              Регистрация
+              {t("auth.actions.signUpTab")}
             </button>
           </div>
 
           <label style={{ display: "grid", gap: "6px" }}>
-            Email
+            {t("auth.actions.email")}
             <input className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
           </label>
 
           <label style={{ display: "grid", gap: "6px" }}>
-            Пароль
+            {t("auth.actions.password")}
             <input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
           </label>
 
           <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
             <button type="button" className="btn btn-primary" onClick={handleSubmit} disabled={loading}>
-              {loading ? "Подождите..." : mode === "signin" ? "Войти" : "Зарегистрироваться"}
+              {loading
+                ? t("auth.actions.pleaseWait")
+                : mode === "signin"
+                  ? t("auth.actions.signIn")
+                  : t("auth.actions.signUp")}
             </button>
             <button type="button" className="btn" onClick={() => router.push("/recipes")}>
-              Назад
+              {t("auth.actions.back")}
             </button>
           </div>
         </div>

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { appendProductSuggestions } from "../lib/productSuggestions";
+import { useI18n } from "../components/I18nProvider";
 
 interface Ingredient {
   name: string;
@@ -252,7 +253,7 @@ const parseMenuProfilesFromRangeStorage = (
     return [
       {
         id: "default",
-        name: "Семья",
+        name: "Main",
         mealData: normalizeMenuDataRecord(parsed),
         cellPeopleCount: fallbackCounts,
         cookedStatus: fallbackCooked,
@@ -446,14 +447,20 @@ const roundAmount = (value: number): number => {
   return Math.round((value + Number.EPSILON) * 100) / 100;
 };
 
-const formatAmount = (value: number): string => {
-  return new Intl.NumberFormat("ru-RU", {
+const formatAmount = (value: number, locale: string): string => {
+  const localeMap: Record<string, string> = {
+    ru: "ru-RU",
+    en: "en-US",
+    es: "es-ES",
+  };
+  return new Intl.NumberFormat(localeMap[locale] || "en-US", {
     minimumFractionDigits: 0,
     maximumFractionDigits: 2,
   }).format(roundAmount(value));
 };
 
 export default function ShoppingListPage() {
+  const { locale, t } = useI18n();
   const [shoppingSelectedMenuId] = useState<string>(() => {
     if (typeof window === "undefined") return "";
     return window.sessionStorage.getItem(SHOPPING_SELECTED_MENU_ID_KEY) || "";
@@ -514,10 +521,10 @@ export default function ShoppingListPage() {
     loadManualItemsFromStorage(shoppingScopeKey)
   );
   const shoppingSourceLabel = shoppingSettings.mergeMenus
-    ? "Источник: объединенный список всех меню периода"
+    ? t("shopping.source.merged")
     : shoppingSelectedMenuName
-      ? `Источник: меню «${shoppingSelectedMenuName}»`
-      : "Источник: текущее меню периода";
+      ? t("shopping.source.selectedMenu", { name: shoppingSelectedMenuName })
+      : t("shopping.source.currentMenu");
   const [collapsedSections, setCollapsedSections] = useState<string[]>([]);
   const [isManualModalOpen, setIsManualModalOpen] = useState(false);
   const [manualName, setManualName] = useState("");
@@ -890,7 +897,14 @@ export default function ShoppingListPage() {
   const manualSectionItems = [...filteredManualUnpurchased, ...filteredManualPurchased];
   const flatVisibleItems = [...combinedUnpurchasedList, ...combinedPurchasedList];
 
-  const manualSectionLabel = "Ручные позиции";
+  const manualSectionLabel = t("shopping.manualSection");
+  const getCategoryLabel = (category: StoreCategory): string => {
+    if (category === "Овощи") return t("shopping.categories.vegetables");
+    if (category === "Мясо") return t("shopping.categories.meat");
+    if (category === "Молочное") return t("shopping.categories.dairy");
+    if (category === "Бакалея") return t("shopping.categories.grocery");
+    return t("shopping.categories.other");
+  };
   const toggleSectionCollapse = (section: string) => {
     setCollapsedSections((prev) =>
       prev.includes(section) ? prev.filter((name) => name !== section) : [...prev, section]
@@ -920,7 +934,7 @@ export default function ShoppingListPage() {
                 haveEnough ? "shopping-list__buy--enough" : ""
               }`}
             >
-              Купить: {formatAmount(remainingAmount)} {item.unit}
+              {t("shopping.buyAmount", { amount: formatAmount(remainingAmount, locale) })} {item.unit}
             </span>
           </div>
         </div>
@@ -935,11 +949,11 @@ export default function ShoppingListPage() {
             aria-pressed={purchased}
             aria-label={
               purchased
-                ? `Снять отметку "Куплено" для ${item.name}`
-                : `Отметить ${item.name} как куплено`
+                ? t("shopping.actions.unmarkPurchasedAria", { name: item.name })
+                : t("shopping.actions.markPurchasedAria", { name: item.name })
             }
           >
-            Куплено
+            {t("shopping.actions.purchased")}
           </button>
         </div>
 
@@ -978,7 +992,7 @@ export default function ShoppingListPage() {
   return (
     <section className="card">
       <div className="shopping-list__header">
-        <h1 className="h1">Список покупок</h1>
+        <h1 className="h1">{t("shopping.title")}</h1>
 
         <div className="shopping-list__date-filter">
           <div className="shopping-list__quick-buttons">
@@ -989,7 +1003,7 @@ export default function ShoppingListPage() {
               }`}
               onClick={() => handleQuickDatePreset("today")}
             >
-              Сегодня
+              {t("shopping.period.today")}
             </button>
             <button
               type="button"
@@ -998,7 +1012,7 @@ export default function ShoppingListPage() {
               }`}
               onClick={() => handleQuickDatePreset("tomorrow")}
             >
-              Завтра
+              {t("shopping.period.tomorrow")}
             </button>
             <button
               type="button"
@@ -1007,7 +1021,7 @@ export default function ShoppingListPage() {
               }`}
               onClick={() => handleQuickDatePreset("period")}
             >
-              Весь период
+              {t("shopping.period.full")}
             </button>
           </div>
 
@@ -1016,15 +1030,15 @@ export default function ShoppingListPage() {
             className="shopping-list__add-manual-btn"
             onClick={() => setIsManualModalOpen(true)}
           >
-            + Добавить позицию
+            {t("shopping.actions.addManual")}
           </button>
 
           <button
             type="button"
             className="shopping-list__custom-days-btn"
             onClick={() => setIsShoppingSettingsOpen(true)}
-            title="Настройки покупок"
-            aria-label="Настройки покупок"
+            title={t("shopping.settings.title")}
+            aria-label={t("shopping.settings.title")}
           >
             ⚙
           </button>
@@ -1032,12 +1046,12 @@ export default function ShoppingListPage() {
 
         {showMenuAddedHint && (
           <p className="muted" style={{ marginTop: "8px", marginBottom: 0, fontSize: "13px" }}>
-            Ингредиенты из меню уже добавлены. Можно отмечать купленные товары.
+            {t("shopping.hints.menuIngredientsAdded")}
           </p>
         )}
         {showShoppingUpdatedHint && (
           <p className="muted" style={{ marginTop: "8px", marginBottom: 0, fontSize: "13px" }}>
-            Список обновлен.
+            {t("shopping.hints.listUpdated")}
           </p>
         )}
 
@@ -1051,12 +1065,12 @@ export default function ShoppingListPage() {
             />
             <p style={{ margin: 0, fontWeight: 700 }}>
               {guestReminderStrong
-                ? "Чтобы данные не потерялись, зарегистрируйтесь."
-                : "Чтобы сохранить ваши рецепты и меню, создайте аккаунт."}
+                ? t("shopping.guestReminder.strong")
+                : t("shopping.guestReminder.normal")}
             </p>
             <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: "6px", marginTop: "8px" }}>
               <Link href="/auth" className="btn btn-primary" onClick={() => setShowGuestReminder(false)}>
-                Создать аккаунт
+                {t("shopping.guestReminder.createAccount")}
               </Link>
               <button
                 type="button"
@@ -1064,7 +1078,7 @@ export default function ShoppingListPage() {
                 style={{ fontSize: "12px" }}
                 onClick={() => setShowGuestReminder(false)}
               >
-                Позже
+                {t("shopping.guestReminder.later")}
               </button>
             </div>
           </div>
@@ -1074,24 +1088,24 @@ export default function ShoppingListPage() {
 
       {shoppingList.length === 0 ? (
         <div className="empty-state">
-          <div className="empty-state__title">Список покупок пока пуст</div>
+          <div className="empty-state__title">{t("shopping.empty.title")}</div>
           <div className="empty-state__description">
-            Список покупок формируется автоматически из меню и рецептов.
+            {t("shopping.empty.description1")}
           </div>
           <div className="empty-state__description">
-            Он учитывает кладовку и приоритеты периода.
+            {t("shopping.empty.description2")}
           </div>
-          <div className="empty-state__description">Пример: молоко, яйца, творог.</div>
+          <div className="empty-state__description">{t("shopping.empty.example")}</div>
           <div style={{ marginTop: "16px", display: "flex", gap: "10px", flexWrap: "wrap", justifyContent: "center" }}>
             <Link href="/menu" className="btn btn-primary">
-              Составить меню
+              {t("shopping.actions.buildMenu")}
             </Link>
             <Link href="/recipes/new" className="btn btn-add">
-              Добавить рецепт
+              {t("shopping.actions.addRecipe")}
             </Link>
           </div>
           <div style={{ marginTop: "12px", fontSize: "13px", color: "var(--text-tertiary)" }}>
-            Продукты, которые есть дома, автоматически исключаются из списка.
+            {t("shopping.empty.footer")}
           </div>
         </div>
       ) : (
@@ -1099,7 +1113,7 @@ export default function ShoppingListPage() {
           <div className="shopping-list">
             {flatVisibleItems.length === 0 ? (
               <p className="muted shopping-list__empty-filter">
-                Пока нет позиций для выбранного периода.
+                {t("shopping.empty.filtered")}
               </p>
             ) : (
               <>
@@ -1117,10 +1131,10 @@ export default function ShoppingListPage() {
                               aria-expanded={!sectionCollapsed}
                             >
                               <span className="shopping-list__category-heading-label">
-                                {section.category}
+                                {getCategoryLabel(section.category)}
                               </span>
                               <span className="shopping-list__category-count">
-                                {section.items.length} позиций
+                                {t("shopping.positionsCount", { count: section.items.length })}
                               </span>
                               <span className="shopping-list__category-chevron" aria-hidden="true">
                                 {sectionCollapsed ? "+" : "-"}
@@ -1144,7 +1158,7 @@ export default function ShoppingListPage() {
                               {manualSectionLabel}
                             </span>
                             <span className="shopping-list__category-count">
-                              {manualSectionItems.length} позиций
+                              {t("shopping.positionsCount", { count: manualSectionItems.length })}
                             </span>
                             <span className="shopping-list__category-chevron" aria-hidden="true">
                               {isSectionCollapsed(manualSectionLabel) ? "+" : "-"}
@@ -1165,15 +1179,15 @@ export default function ShoppingListPage() {
 
           <div className="shopping-list__actions">
             <Link href="/menu" className="shopping-list__link">
-              ← Вернуться к меню
+              {t("shopping.actions.backToMenu")}
             </Link>
           </div>
         </div>
       )}
       {isShoppingSettingsOpen && (
-        <div className="menu-dialog-overlay" role="dialog" aria-modal="true" aria-label="Настройки покупок">
+        <div className="menu-dialog-overlay" role="dialog" aria-modal="true" aria-label={t("shopping.settings.title")}>
           <div className="menu-dialog" style={{ maxWidth: "460px" }}>
-            <h3 style={{ marginTop: 0, marginBottom: "10px" }}>Настройки покупок</h3>
+            <h3 style={{ marginTop: 0, marginBottom: "10px" }}>{t("shopping.settings.title")}</h3>
             <p className="muted" style={{ marginBottom: "12px", fontSize: "13px" }}>
               {shoppingSourceLabel}
             </p>
@@ -1185,7 +1199,7 @@ export default function ShoppingListPage() {
                   checked={shoppingSettings.includeCookedDishes}
                   onChange={(e) => updateShoppingSettings({ includeCookedDishes: e.target.checked })}
                 />
-                Учитывать приготовленные блюда
+                {t("shopping.settings.includeCooked")}
               </label>
 
               <label style={{ display: "inline-flex", alignItems: "center", gap: "8px", fontSize: "14px" }}>
@@ -1200,11 +1214,11 @@ export default function ShoppingListPage() {
                     setManualItems(loadManualItemsFromStorage(nextScopeKey));
                   }}
                 />
-                Объединять меню
+                {t("shopping.settings.mergeMenus")}
               </label>
 
               <label style={{ display: "grid", gap: "6px", fontSize: "14px" }}>
-                <span>Период по умолчанию</span>
+                <span>{t("shopping.settings.defaultPeriod")}</span>
                 <select
                   className="menu-dialog__select"
                   value={shoppingSettings.defaultDatePreset}
@@ -1214,9 +1228,9 @@ export default function ShoppingListPage() {
                     handleQuickDatePreset(preset);
                   }}
                 >
-                  <option value="today">Сегодня</option>
-                  <option value="tomorrow">Завтра</option>
-                  <option value="period">Весь период</option>
+                  <option value="today">{t("shopping.period.today")}</option>
+                  <option value="tomorrow">{t("shopping.period.tomorrow")}</option>
+                  <option value="period">{t("shopping.period.full")}</option>
                 </select>
               </label>
 
@@ -1226,13 +1240,13 @@ export default function ShoppingListPage() {
                   checked={shoppingSettings.groupByCategories}
                   onChange={(e) => updateShoppingSettings({ groupByCategories: e.target.checked })}
                 />
-                Группировать по категориям
+                {t("shopping.settings.groupByCategories")}
               </label>
             </div>
 
             <div className="menu-dialog__actions">
               <button type="button" className="menu-dialog__confirm" onClick={() => setIsShoppingSettingsOpen(false)}>
-                Готово
+                {t("shopping.actions.done")}
               </button>
             </div>
           </div>
@@ -1242,31 +1256,31 @@ export default function ShoppingListPage() {
         <div className="shopping-list__manual-modal" role="dialog" aria-modal="true">
           <div className="shopping-list__manual-dialog card">
             <div className="shopping-list__manual-header">
-              <span>Добавить позицию</span>
+              <span>{t("shopping.manualModal.title")}</span>
               <button
                 type="button"
                 className="shopping-list__manual-close"
                 onClick={() => setIsManualModalOpen(false)}
-                aria-label="Закрыть форму"
+                aria-label={t("shopping.manualModal.closeAria")}
               >
                 ×
               </button>
             </div>
 
             <div className="shopping-list__manual-field">
-              <label>Название</label>
+              <label>{t("shopping.manualModal.nameLabel")}</label>
               <input
                 type="text"
                 value={manualName}
                 onChange={(e) => setManualName(e.target.value)}
-                placeholder="Например, лимон"
+                placeholder={t("shopping.manualModal.namePlaceholder")}
                 className="shopping-list__manual-input"
                 autoFocus
               />
             </div>
 
             <div className="shopping-list__manual-field">
-              <label>Количество</label>
+              <label>{t("shopping.manualModal.amountLabel")}</label>
               <input
                 type="number"
                 min="0"
@@ -1279,12 +1293,12 @@ export default function ShoppingListPage() {
             </div>
 
             <div className="shopping-list__manual-field">
-              <label>Единица (по желанию)</label>
+              <label>{t("shopping.manualModal.unitLabel")}</label>
               <input
                 type="text"
                 value={manualUnit}
                 onChange={(e) => setManualUnit(e.target.value)}
-                placeholder="шт, г, мл..."
+                placeholder={t("shopping.manualModal.unitPlaceholder")}
                 className="shopping-list__manual-input"
               />
             </div>
@@ -1295,7 +1309,7 @@ export default function ShoppingListPage() {
                 className="btn btn-secondary"
                 onClick={() => setIsManualModalOpen(false)}
               >
-                Отмена
+                {t("shopping.actions.cancel")}
               </button>
               <button
                 type="button"
@@ -1303,7 +1317,7 @@ export default function ShoppingListPage() {
                 onClick={handleAddManualItem}
                 disabled={!manualName.trim()}
               >
-                Добавить
+                {t("shopping.actions.add")}
               </button>
             </div>
           </div>

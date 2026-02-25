@@ -1,0 +1,706 @@
+{
+  "header": {
+    "slogan": "Plan, cook and shop",
+    "nav": {
+      "recipes": "Recipes",
+      "menu": "Menu",
+      "pantry": "Pantry",
+      "shopping": "Shopping",
+      "account": "Account"
+    },
+    "aria": {
+      "openMenu": "Open menu",
+      "closeMenu": "Close menu",
+      "navigation": "Navigation",
+      "logoAlt": "Planotto mascot"
+    }
+  },
+  "home": {
+    "title": "Meal and shopping planning service",
+    "description": "Saves time and helps avoid unnecessary purchases.",
+    "cta": {
+      "continue": "Continue planning",
+      "start": "Start planning for free"
+    },
+    "howLink": "↘ How it works",
+    "how": {
+      "title": "How it works",
+      "step1": {
+        "title": "Add recipes",
+        "description": "Save 2-3 favorite dishes."
+      },
+      "step2": {
+        "title": "Build your menu",
+        "description": "Distribute dishes by day."
+      },
+      "step3": {
+        "title": "Get shopping list",
+        "description": "It will be generated automatically."
+      }
+    },
+    "example": {
+      "title": "One day example",
+      "dinnerLabel": "Dinner",
+      "dinnerValue": "Tuna pasta",
+      "shoppingLabel": "Shopping list",
+      "shoppingValue": "Pasta, tuna, tomatoes",
+      "mascotAlt": "Planotto mascot"
+    }
+  },
+  "auth": {
+    "title": "Account",
+    "messages": {
+      "enterEmailPassword": "Enter email and password.",
+      "signedIn": "Signed in.",
+      "registered": "Registration complete. If confirmation is enabled, check your email.",
+      "authError": "Authorization error.",
+      "profileSaved": "Profile saved.",
+      "profileSaveError": "Failed to save profile.",
+      "invalidImage": "Please choose an image file.",
+      "signedOut": "You have signed out."
+    },
+    "language": {
+      "label": "Interface language"
+    },
+    "profile": {
+      "section": "Profile",
+      "nameLabel": "Name",
+      "namePlaceholder": "For example, Kate",
+      "avatarTitle": "Avatar",
+      "avatarPresetTitle": "Choose avatar",
+      "uploadPhoto": "Upload photo",
+      "removeAvatar": "Remove avatar",
+      "frameTitle": "Frame",
+      "noFrame": "No frame",
+      "pickAvatar": "Choose avatar",
+      "pickFrame": "Choose frame",
+      "avatarAlt": "Avatar",
+      "frameAlt": "Frame",
+      "currentAvatarAlt": "Current avatar",
+      "currentFrameAlt": "Avatar frame",
+      "noName": "No name"
+    },
+    "preferences": {
+      "section": "Preferences (if they are actually used)",
+      "infoAllergies": "Allergies and strict restrictions: these products will never be used in recommendations and auto-generated menus.",
+      "infoDislikes": "Disliked products: these products will be suggested less often and marked in recommendations.",
+      "dietType": "Diet type",
+      "allergies": "Allergies",
+      "allergyPlaceholder": "For example: peanuts",
+      "dislikes": "Dislike",
+      "dislikePlaceholder": "For example: onion",
+      "add": "Add",
+      "remove": "Remove"
+    },
+    "serviceUsage": {
+      "section": "Service usage",
+      "goal": "Goal",
+      "days": "How many days",
+      "mealsPerDay": "Meals per day"
+    },
+    "actions": {
+      "saveProfile": "Save profile",
+      "savingProfile": "Saving...",
+      "toRecipes": "Go to recipes",
+      "signOut": "Sign out",
+      "signInTab": "Sign in",
+      "signUpTab": "Sign up",
+      "email": "Email",
+      "password": "Password",
+      "pleaseWait": "Please wait...",
+      "signIn": "Sign in",
+      "signUp": "Sign up",
+      "back": "Back"
+    },
+    "options": {
+      "goal": {
+        "menu": "Plan menu",
+        "recipes": "Recipes and search",
+        "shopping": "Shopping list",
+        "explore": "Just exploring"
+      },
+      "mealsPerDay": {
+        "3": "3",
+        "1-2": "1-2",
+        "4+": "4+",
+        "variable": "Varies"
+      },
+      "planDays": {
+        "all": "All days",
+        "weekdays": "Weekdays",
+        "weekends": "Weekends"
+      },
+      "diet": {
+        "none": "No restrictions",
+        "vegetarian": "Vegetarian",
+        "vegan": "Vegan",
+        "gluten_free": "Gluten free",
+        "lactose_free": "Lactose free",
+        "pp": "Healthy"
+      }
+    }
+  },
+  "pantry": {
+    "title": "Pantry",
+    "categories": {
+      "vegetablesFruits": "Vegetables and fruits",
+      "meatFish": "Meat and fish",
+      "dairy": "Dairy products",
+      "breadBakery": "Bakery and bread",
+      "grocery": "Groceries",
+      "frozen": "Frozen",
+      "drinks": "Drinks",
+      "snacksSweets": "Snacks and sweets",
+      "spicesSauces": "Spices and sauces"
+    },
+    "updated": {
+      "label": "Updated",
+      "today": "today",
+      "yesterday": "yesterday",
+      "unknown": "unknown"
+    },
+    "words": {
+      "productOne": "product",
+      "productFew": "products",
+      "productsPlural": "products"
+    },
+    "validation": {
+      "nameRequired": "Name cannot be empty",
+      "amountRequired": "Enter amount",
+      "amountPositive": "Amount must be greater than 0"
+    },
+    "starter": {
+      "milk": "Milk",
+      "eggs": "Eggs",
+      "bread": "Bread"
+    },
+    "filters": {
+      "all": "All",
+      "uncategorized": "Uncategorized",
+      "scrollHint": "Scroll categories →"
+    },
+    "count": {
+      "inPantry": "In pantry: {{count}} {{word}}",
+      "available": "{{count}} {{word}} available"
+    },
+    "form": {
+      "namePlaceholder": "Name",
+      "categoryPlaceholder": "Category (for example: Vegetables)",
+      "searchPlaceholder": "Search products"
+    },
+    "sort": {
+      "updatedAt": "Sort: updated date",
+      "name": "Sort: name",
+      "amount": "Sort: amount"
+    },
+    "actions": {
+      "backToMenu": "← Back to menu",
+      "addProduct": "+ Add product",
+      "addStarter": "Add starter products",
+      "openShopping": "Open shopping",
+      "save": "Save",
+      "cancel": "Cancel",
+      "edit": "Edit",
+      "delete": "Delete",
+      "editItemAria": "Edit {{name}}",
+      "deleteItemAria": "Delete {{name}}"
+    },
+    "empty": {
+      "title": "Pantry is empty",
+      "description1": "Add products you already have at home.",
+      "description2": "They will be used in menu and shopping list.",
+      "notFound": "Nothing found"
+    },
+    "editor": {
+      "addTitle": "Add product",
+      "editTitle": "Edit product"
+    },
+    "savedCount": "Saved products: {{count}}"
+  },
+  "shopping": {
+    "title": "Shopping list",
+    "source": {
+      "merged": "Source: merged list from all menus in period",
+      "selectedMenu": "Source: menu “{{name}}”",
+      "currentMenu": "Source: current menu in period"
+    },
+    "manualSection": "Manual items",
+    "categories": {
+      "vegetables": "Vegetables",
+      "meat": "Meat",
+      "dairy": "Dairy",
+      "grocery": "Groceries",
+      "other": "Other"
+    },
+    "buyAmount": "Buy: {{amount}}",
+    "period": {
+      "today": "Today",
+      "tomorrow": "Tomorrow",
+      "full": "Whole period"
+    },
+    "hints": {
+      "menuIngredientsAdded": "Menu ingredients are already added. You can mark purchased items.",
+      "listUpdated": "List updated."
+    },
+    "guestReminder": {
+      "strong": "Register to avoid losing your data.",
+      "normal": "Create an account to save your recipes and menus.",
+      "createAccount": "Create account",
+      "later": "Later"
+    },
+    "empty": {
+      "title": "Shopping list is empty",
+      "description1": "Shopping list is generated automatically from menus and recipes.",
+      "description2": "It takes pantry and period priorities into account.",
+      "example": "Example: milk, eggs, cottage cheese.",
+      "footer": "Products already at home are automatically excluded.",
+      "filtered": "No items for selected period yet."
+    },
+    "positionsCount": "{{count}} items",
+    "settings": {
+      "title": "Shopping settings",
+      "includeCooked": "Include cooked dishes",
+      "mergeMenus": "Merge menus",
+      "defaultPeriod": "Default period",
+      "groupByCategories": "Group by categories"
+    },
+    "manualModal": {
+      "title": "Add item",
+      "closeAria": "Close form",
+      "nameLabel": "Name",
+      "namePlaceholder": "For example, lemon",
+      "amountLabel": "Amount",
+      "unitLabel": "Unit (optional)",
+      "unitPlaceholder": "pcs, g, ml..."
+    },
+    "actions": {
+      "addManual": "+ Add item",
+      "buildMenu": "Build menu",
+      "addRecipe": "Add recipe",
+      "backToMenu": "← Back to menu",
+      "markPurchasedAria": "Mark {{name}} as purchased",
+      "unmarkPurchasedAria": "Remove \"Purchased\" mark for {{name}}",
+      "purchased": "Purchased",
+      "done": "Done",
+      "cancel": "Cancel",
+      "add": "Add"
+    }
+  },
+  "menu": {
+    "title": "Menu for period",
+    "loading": "Loading menu...",
+    "actions": {
+      "close": "Close",
+      "save": "Save",
+      "cancel": "Cancel",
+      "add": "Add",
+      "create": "Create",
+      "delete": "Delete",
+      "edit": "Edit",
+      "move": "Move",
+      "open": "Open",
+      "actions": "Actions",
+      "generateShoppingList": "Generate shopping list",
+      "clearPeriod": "Clear period"
+    },
+    "dialog": {
+      "addDish": "Add dish",
+      "editDish": "Edit dish",
+      "typeRecipe": "Recipe",
+      "typeText": "Text",
+      "chooseRecipe": "Choose recipe",
+      "chooseRecipePlaceholder": "Choose recipe...",
+      "servingsCount": "Servings count",
+      "howManyServings": "How many servings?",
+      "enterText": "Enter text...",
+      "includeInShopping": "Include in shopping list",
+      "ingredients": "Ingredients:",
+      "ingredientName": "Name",
+      "ingredientAmount": "Amount",
+      "otherUnit": "other",
+      "unitPlaceholder": "unit",
+      "removeIngredient": "Remove ingredient",
+      "addIngredient": "+ Add ingredient"
+    },
+    "activeProducts": {
+      "allTitle": "All active products",
+      "count": "Active: {{count}}",
+      "addPlaceholder": "Add product",
+      "searchPlaceholder": "Search by name and note",
+      "saved": "Saved",
+      "scopeLabel": "Applies",
+      "scopeInMenuOption": "In this menu",
+      "scopePersistentOption": "Until cancelled",
+      "scopeUntilDateOption": "Until date",
+      "dateLabel": "Date",
+      "noteLabel": "Note (up to {{max}} chars)",
+      "notePlaceholder": "For example: promo / use leftovers",
+      "priority": "Priority",
+      "notFound": "Nothing found for your query.",
+      "scopePersistent": "until cancelled",
+      "scopeUntilDate": "until date",
+      "scopeUntilDateValue": "until {{date}}",
+      "scopeInMenu": "in this menu"
+    },
+    "item": {
+      "cooked": "Cooked",
+      "noRecipe": "No recipe",
+      "hasIngredients": "Has ingredients"
+    },
+    "onboarding": {
+      "firstVisitAria": "First calendar visit",
+      "title": "Let's add first recipe",
+      "description": "To build a menu, add one recipe.",
+      "addFirstRecipe": "Add first recipe",
+      "tryWithout": "Try without recipes"
+    },
+    "notice": {
+      "dishAdded": "Dish added to menu.",
+      "ingredientsAdded": "Ingredients added to shopping list.",
+      "noIngredientsYet": "No ingredients for this dish in shopping list yet.",
+      "openShopping": "Open shopping list",
+      "continuePlanning": "Continue planning"
+    },
+    "guestReminder": {
+      "strong": "Register so your data is not lost.",
+      "normal": "Create an account to save recipes and menus.",
+      "createAccount": "Create account",
+      "later": "Later"
+    },
+    "quickAdd": {
+      "confirmAria": "Dish add confirmation",
+      "confirmText": "Add {{recipe}} to {{day}} ({{meal}})?",
+      "chooseAnotherDay": "Choose another day"
+    },
+    "period": {
+      "previousAria": "Previous period",
+      "nextAria": "Next period",
+      "daysCount": "{{count}} days"
+    },
+    "selector": {
+      "label": "Menu:",
+      "aria": "Active menu selection"
+    },
+    "mode": {
+      "label": "Mode:",
+      "aria": "Day display mode",
+      "list": "List",
+      "meals": "By meals"
+    },
+    "inlineHint": {
+      "textBefore": "Tip: press",
+      "textAfter": "on any day to add a dish to menu.",
+      "ok": "Got it"
+    },
+    "day": {
+      "fillAria": "Day fill {{percent}}%",
+      "dishesOfDay": "Day dishes",
+      "addDishToDay": "Add dish to day",
+      "addDishWithMeal": "Add dish ({{meal}})",
+      "addDish": "+ Add dish"
+    },
+    "settings": {
+      "title": "Menu settings",
+      "dayStructure": "Day structure",
+      "configureMeals": "Configure meals",
+      "mergeMenusForShopping": "Merge all menus into one shopping list",
+      "activeProducts": "Active products",
+      "manageMenus": "Manage menus",
+      "menuNameAria": "Menu name {{name}}",
+      "currentMenu": "Current menu",
+      "deleteMenu": "Delete menu",
+      "addMenu": "+ Add menu"
+    },
+    "mealsConfig": {
+      "title": "Configure meals",
+      "showMeal": "Show meal",
+      "newMealPlaceholder": "New meal",
+      "addMeal": "+ Add meal",
+      "useAsDefault": "Use as default"
+    },
+    "createMenu": {
+      "title": "New menu",
+      "namePlaceholder": "Menu name"
+    },
+    "deleteMenu": {
+      "title": "Delete menu",
+      "confirm": "Delete menu {{name}}?"
+    },
+    "moveDialog": {
+      "title": "Move dish",
+      "selectedItem": "Selected item:",
+      "dayLabel": "Day:",
+      "mealLabel": "Meal:",
+      "choose": "Choose..."
+    },
+    "ai": {
+      "noSuggestion": "AI could not suggest.",
+      "failedToGetSuggestion": "Failed to get AI suggestion."
+    },
+    "errors": {
+      "weeklyMenusTableMissing": "weekly_menus table not found in Supabase. Run SQL from supabase/schema.sql.",
+      "saveFailed": "Failed to save menu."
+    },
+    "confirm": {
+      "clearPeriod": "Are you sure you want to clear menu for this period?",
+      "clearCurrentMenu": "Are you sure you want to clear current menu?"
+    },
+    "fallback": {
+      "recipeTitle": "recipe"
+    },
+    "shopping": {
+      "allMenusPeriod": "All period menus"
+    }
+  },
+  "recipes": {
+    "title": "Recipes",
+    "loading": "Loading...",
+    "loadingList": "Loading recipes...",
+    "messages": {
+      "localMode": "Working in local mode. Your recipes are available on this device.",
+      "alreadyInMine": "Recipe is already in my recipes.",
+      "addedToMine": "Recipe added to my recipes.",
+      "allergyWarningMany": "This recipe contains products from “Allergies”: {{listed}}. Add manually?",
+      "allergyWarningOne": "This recipe contains a product from “Allergies”. Add manually?",
+      "supabaseTableMissingAlreadyLocal": "Supabase recipes table is not initialized. Recipe is already local.",
+      "supabaseTableMissingAddedLocal": "Supabase recipes table is not initialized. Recipe added locally.",
+      "copyFailed": "Failed to copy recipe.",
+      "clearAllConfirm": "Delete all your recipes? Local drafts will also be removed.",
+      "cleared": "Recipes cleared. You can upload new ones for testing.",
+      "clearFailed": "Failed to clear recipes.",
+      "deleteOneConfirm": "Delete recipe \"{{title}}\"?",
+      "deleted": "Recipe deleted.",
+      "deleteFailed": "Failed to delete recipe."
+    },
+    "account": {
+      "guestName": "Guest",
+      "tapToLogin": "Tap to sign in",
+      "avatarAlt": "Avatar",
+      "frameAlt": "Frame",
+      "accountLabel": "Account",
+      "authLabel": "Authorization"
+    },
+    "onboarding": {
+      "firstRecipeAria": "First recipe",
+      "title": "Choose a starter recipe",
+      "description": "To build a menu, add one recipe.",
+      "chooseReady": "Choose from starter recipes",
+      "addOwn": "Add your own recipe"
+    },
+    "subtitle": {
+      "public": "Starter examples: choose a recipe and copy it to your library.",
+      "mine": "Your recipes: store, edit and use for menu planning."
+    },
+    "tabs": {
+      "mine": "Mine",
+      "public": "Starter examples"
+    },
+    "sort": {
+      "newest": "Newest",
+      "oldest": "Oldest",
+      "titleAsc": "Title A-Z",
+      "titleDesc": "Title Z-A",
+      "oftenCooked": "Often cooked",
+      "rarelyCooked": "Rarely cooked"
+    },
+    "filters": {
+      "searchPlaceholder": "Search by title and ingredients",
+      "button": "Filters",
+      "withPhoto": "With photo",
+      "withoutPhoto": "Without photo",
+      "withNotes": "Has notes",
+      "activeProductsDisabled": "Add active products in Menu",
+      "activeProductsTooltip": "Show only recipes matching active products",
+      "onlyWithActiveProducts": "Only with active products",
+      "pantryEmpty": "Pantry is empty",
+      "onlyFromPantryTooltip": "Show only recipes that can be made from pantry",
+      "onlyFromPantry": "Only from pantry",
+      "resetAll": "Reset all",
+      "tags": "Tags",
+      "resetTags": "Reset tags"
+    },
+    "actions": {
+      "backToMenu": "← Back to menu",
+      "addRecipe": "+ Add recipe",
+      "clearMine": "Clear my recipes",
+      "goToMine": "Go to my recipes"
+    },
+    "guestReminder": {
+      "text": "You already added several recipes. Create an account to keep them safe.",
+      "createAccount": "Create account",
+      "later": "Later"
+    },
+    "success": {
+      "firstAddedAria": "First recipe added",
+      "title": "Great! First recipe added.",
+      "description": "Now let's use it in menu.",
+      "addToMenu": "Add to menu"
+    },
+    "empty": {
+      "title": "You don't have recipes yet",
+      "description": "That's normal for first start. Begin with your first recipe.",
+      "addFirst": "Add first recipe"
+    },
+    "emptyFiltered": {
+      "title": "Nothing found",
+      "description": "Try removing some filters or changing query."
+    },
+    "card": {
+      "sourcePublicAdded": "From examples • already in my recipes",
+      "sourcePublic": "From examples",
+      "sourceMine": "My recipe",
+      "matchTooltip": "Matches active products: {{names}}{{extra}}",
+      "dislikeTooltip": "Recipe contains “dislike” products: {{names}}{{extra}}",
+      "alreadyMine": "Already mine",
+      "adding": "Adding...",
+      "addToMine": "Add to mine",
+      "open": "Open",
+      "pantryCoverageTitle": "Pantry ingredients: {{matched}} of {{total}}",
+      "matches": "Matches: {{count}}",
+      "dislikeBadge": "⚪ dislike",
+      "dislikeHint": "Recipe contains a product from dislike list.",
+      "servings": "Servings: {{count}}"
+    },
+    "visibility": {
+      "publicTitle": "Public recipe: available for other users",
+      "linkTitle": "Recipe available only by direct link",
+      "invitedTitle": "Recipe available only for invited users"
+    },
+    "new": {
+      "title": "New recipe",
+      "localDraftMode": "Draft mode: recipe will be saved locally on this device.",
+      "ottoPrefix": "Otto",
+      "quickStart": "Quick start: title and ingredients are enough. You can add the rest later.",
+      "step1": {
+        "title": "Step 1. Basic"
+      },
+      "step2": {
+        "hide": "Hide additional",
+        "show": "Step 2. Additional (optional)"
+      },
+      "fields": {
+        "title": "Title",
+        "access": "Access",
+        "ingredients": "Ingredients",
+        "ingredientNamePlaceholder": "Name",
+        "ingredientAmountPlaceholder": "Qty",
+        "instructions": "Cooking steps",
+        "shortDescription": "Short description",
+        "servings": "Servings",
+        "source": "Source (optional)",
+        "sourceHint": "If recipe comes from a book or website, add source.",
+        "sourceWarning": "If source is not specified, publication responsibility is on you.",
+        "tags": "Tags (optional)",
+        "image": "Image",
+        "imagePreviewAlt": "Recipe preview",
+        "notes": "Private notes"
+      },
+      "access": {
+        "private": {
+          "label": "Private",
+          "description": "Only owner."
+        },
+        "public": {
+          "label": "Public",
+          "description": "Visible for everyone in library."
+        },
+        "link": {
+          "label": "By link",
+          "description": "Available by direct link."
+        },
+        "invited": {
+          "label": "Invited",
+          "description": "Only invited users."
+        },
+        "loginRequired": "Sign in to use Public, By link and Invited modes.",
+        "linkAvailableAfterSave": "Link will be available after saving recipe.",
+        "generateLink": "Generate link",
+        "token": "Token",
+        "manage": "Manage access",
+        "invitedPlaceholder": "user emails, one per line",
+        "invitedHelp": "Invites are sent by email. Access is granted after sign in."
+      },
+      "import": {
+        "show": "Import recipe (optional)",
+        "hide": "Hide import",
+        "byUrl": "Import by URL",
+        "byPhoto": "Import by photo",
+        "urlPlaceholder": "Paste recipe URL",
+        "importAction": "Import",
+        "importing": "Importing...",
+        "urlRequired": "Paste a recipe URL.",
+        "urlInvalid": "Enter a valid URL.",
+        "urlUnsupported": "This URL is not supported.",
+        "urlSuccess": "Imported. Review and save.",
+        "urlFailed": "Failed to import recipe by URL. Try another URL or fill manually.",
+        "photoRequired": "Select a recipe photo.",
+        "preparingPhoto": "Preparing photo...",
+        "photoLoaded": "Loaded photos: {{count}}. Tap \"Recognize\".",
+        "photoPrepareFailed": "Failed to prepare photo. Try another file.",
+        "cameraReadFailed": "Failed to get photo from camera.",
+        "cameraPhotoAdded": "Camera photo added. Tap \"Recognize\".",
+        "cameraPrepareFailed": "Failed to prepare camera photo.",
+        "waitPreparing": "Please wait, photos are still preparing.",
+        "photoAtLeastOne": "Upload at least one recipe photo first.",
+        "recognizing": "Recognizing...",
+        "recognizeAction": "Recognize",
+        "photoSuccess": "Recipe recognized, review and save.",
+        "photoRecognizeFailed": "Failed to recognize photo. Try another photo or fill manually.",
+        "photoUnavailable": "Photo import is temporarily unavailable. Try later or fill manually.",
+        "takePhoto": "Take from camera",
+        "clearPhoto": "Clear photos",
+        "photosCount": "Photos for recognition: {{count}}",
+        "removePhoto": "Remove photo",
+        "photoN": "Photo {{index}}",
+        "reviewAfterImport": "Check after import:"
+      },
+      "ai": {
+        "needIngredient": "Add at least one ingredient first.",
+        "hintsFound": "AI suggested name variants.",
+        "hintsNotFound": "No hints found.",
+        "hintsFailed": "Failed to get ingredient hints.",
+        "tagsFound": "AI suggested tags.",
+        "tagsNotFound": "AI found no obvious tags.",
+        "tagsFailed": "Failed to get tag hints.",
+        "servingsReady": "Servings hint is ready.",
+        "servingsFailed": "Failed to get servings hint.",
+        "imageReady": "Image generated.",
+        "imageMissing": "AI returned no image.",
+        "imageFailed": "Failed to generate image.",
+        "showTools": "Otto can help (optional)",
+        "hideTools": "Hide Otto hints",
+        "toolsHint": "These are helper hints. Recipe can be saved without them.",
+        "searching": "Searching...",
+        "suggestNames": "Suggest names",
+        "counting": "Calculating...",
+        "suggestServings": "Suggest servings",
+        "thinking": "Thinking...",
+        "suggestTags": "Suggest tags",
+        "generating": "Generating...",
+        "generatePhoto": "Generate photo",
+        "applyServings": "Apply servings: {{count}}",
+        "addSuggestedTags": "Add suggested tags"
+      },
+      "actions": {
+        "backToRecipes": "? Back to recipes",
+        "addIngredient": "+ Add ingredient",
+        "deleteIngredient": "Delete",
+        "deleteImage": "Delete image",
+        "saveRecipe": "Save recipe",
+        "saving": "Saving...",
+        "cancel": "Cancel"
+      },
+      "messages": {
+        "titleRequired": "Recipe title is required",
+        "saveFailed": "Failed to save recipe.",
+        "invitesPartial": "Some invites were not sent: {{emails}}",
+        "checkAmountAndUnit": "Check amount and unit after import."
+      }
+    }
+  },
+  "languages": {
+    "ru": "Русский",
+    "en": "English",
+    "es": "Español"
+  }
+}

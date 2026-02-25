@@ -4,14 +4,18 @@ import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { useRouter } from "next/navigation";
 import { appendProductSuggestions, loadProductSuggestions } from "../../lib/productSuggestions";
 import ProductAutocompleteInput from "../../components/ProductAutocompleteInput";
+import { useI18n } from "../../components/I18nProvider";
 import {
   createRecipe,
   getCurrentUserId,
   replaceRecipeAccessByEmail,
   sendRecipeAccessInvites,
+  upsertRecipeTranslation,
   upsertRecipeInLocalCache,
   type Ingredient,
+  type RecipeLanguage,
   type RecipeModel,
+  type RecipeTranslation,
   type RecipeVisibility,
 } from "../../lib/recipesSupabase";
 import { isSupabaseConfigured } from "../../lib/supabaseClient";
@@ -85,7 +89,7 @@ const hasImportedPhotoContent = (draft: ImportedRecipeDraft | null): boolean => 
   return (draft.ingredients || []).some((item) => item.name?.trim().length > 0);
 };
 
-const sanitizeImportIssue = (issue: string): string => {
+const sanitizeImportIssue = (issue: string, photoUnavailableFallback: string): string => {
   const value = issue.trim();
   if (!value) return "";
   const normalized = value.toLowerCase();
@@ -96,23 +100,39 @@ const sanitizeImportIssue = (issue: string): string => {
     normalized.includes("env") ||
     normalized.includes(".env")
   ) {
-    return "Импорт по фото временно недоступен. Попробуйте позже или заполните вручную.";
+    return photoUnavailableFallback;
   }
   return value;
 };
 
-const sanitizeImportIssues = (issues: string[]): string[] =>
-  Array.from(new Set(issues.map((issue) => sanitizeImportIssue(issue)).filter(Boolean)));
+const sanitizeImportIssues = (issues: string[], photoUnavailableFallback: string): string[] =>
+  Array.from(new Set(issues.map((issue) => sanitizeImportIssue(issue, photoUnavailableFallback)).filter(Boolean)));
 
 const ACCESS_OPTIONS: Array<{
   value: RecipeVisibility;
-  label: string;
-  description: string;
+  labelKey: string;
+  descriptionKey: string;
 }> = [
-  { value: "private", label: "Личный", description: "Только владелец." },
-  { value: "public", label: "Публичный", description: "Виден всем в библиотеке." },
-  { value: "link", label: "По ссылке", description: "Доступ по прямой ссылке." },
-  { value: "invited", label: "По приглашению", description: "Только приглашенным пользователям." },
+  {
+    value: "private",
+    labelKey: "recipes.new.access.private.label",
+    descriptionKey: "recipes.new.access.private.description",
+  },
+  {
+    value: "public",
+    labelKey: "recipes.new.access.public.label",
+    descriptionKey: "recipes.new.access.public.description",
+  },
+  {
+    value: "link",
+    labelKey: "recipes.new.access.link.label",
+    descriptionKey: "recipes.new.access.link.description",
+  },
+  {
+    value: "invited",
+    labelKey: "recipes.new.access.invited.label",
+    descriptionKey: "recipes.new.access.invited.description",
+  },
 ];
 
 const generateShareToken = (): string => crypto.randomUUID().replace(/-/g, "");
@@ -128,12 +148,16 @@ const parseInvitedEmails = (raw: string): string[] => {
   return Array.from(unique);
 };
 
+const normalizeRecipeLanguage = (value: unknown): RecipeLanguage =>
+  value === "ru" || value === "en" || value === "es" ? value : "ru";
+
 interface NewRecipeFormProps {
   initialFirstCreate?: boolean;
 }
 
 export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps) {
   const router = useRouter();
+  const { t, locale } = useI18n();
 
   const [title, setTitle] = useState("");
   const [shortDescription, setShortDescription] = useState("");
@@ -227,7 +251,7 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
     setReviewHints({});
   };
 
-  const updateIngredient = (index: number, field: keyof Ingredient, value: string | number) => {
+  const updateIngredient = (index: number, field: "name" | "amount" | "unit", value: string | number) => {
     setIngredients((prev) => {
       const updated = [...prev];
       updated[index] = { ...updated[index], [field]: value };
@@ -258,7 +282,7 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
       .filter((item) => item.name.length > 0);
 
     if (prepared.length === 0) {
-      setAiMessage("Сначала добавьте хотя бы один ингредиент.");
+      setAiMessage(t("recipes.new.ai.needIngredient"));
       return;
     }
 
@@ -279,9 +303,13 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
       }
 
       setIngredientHints(map);
-      setAiMessage(Object.keys(map).length > 0 ? "ИИ предложил варианты названий." : "Подсказки не найдены.");
+      setAiMessage(
+        Object.keys(map).length > 0
+          ? t("recipes.new.ai.hintsFound")
+          : t("recipes.new.ai.hintsNotFound")
+      );
     } catch (error) {
-      const text = error instanceof Error ? error.message : "Не удалось получить подсказки ингредиентов.";
+      const text = error instanceof Error ? error.message : t("recipes.new.ai.hintsFailed");
       setAiMessage(text);
     } finally {
       setAiAction(null);
@@ -301,9 +329,11 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
       const allowed = new Set(RECIPE_TAGS as readonly string[]);
       const next = (data.suggestedTags || []).filter((tag) => allowed.has(tag));
       setSuggestedTags(next);
-      setAiMessage(data.message || (next.length > 0 ? "ИИ предложил теги." : "ИИ не нашел явных тегов."));
+      setAiMessage(
+        data.message || (next.length > 0 ? t("recipes.new.ai.tagsFound") : t("recipes.new.ai.tagsNotFound"))
+      );
     } catch (error) {
-      const text = error instanceof Error ? error.message : "Не удалось получить подсказки тегов.";
+      const text = error instanceof Error ? error.message : t("recipes.new.ai.tagsFailed");
       setAiMessage(text);
     } finally {
       setAiAction(null);
@@ -320,9 +350,9 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
           .map((item) => ({ name: item.name.trim(), amount: Number(item.amount || 0), unit: item.unit || UNITS[0] })),
       });
       setSuggestedServings(data.suggestedServings && data.suggestedServings > 0 ? data.suggestedServings : null);
-      setAiMessage(data.message || "Подсказка по порциям готова.");
+      setAiMessage(data.message || t("recipes.new.ai.servingsReady"));
     } catch (error) {
-      const text = error instanceof Error ? error.message : "Не удалось получить подсказку по порциям.";
+      const text = error instanceof Error ? error.message : t("recipes.new.ai.servingsFailed");
       setAiMessage(text);
     } finally {
       setAiAction(null);
@@ -345,12 +375,12 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
           ? `${data.imageUrl}&${cacheBust}`
           : `${data.imageUrl}?${cacheBust}`;
         setImage(freshUrl);
-        setAiMessage(data.message || "Фото сгенерировано.");
+        setAiMessage(data.message || t("recipes.new.ai.imageReady"));
       } else {
-        setAiMessage("ИИ не вернул изображение.");
+        setAiMessage(t("recipes.new.ai.imageMissing"));
       }
     } catch (error) {
-      const text = error instanceof Error ? error.message : "Не удалось сгенерировать фото.";
+      const text = error instanceof Error ? error.message : t("recipes.new.ai.imageFailed");
       setAiMessage(text);
     } finally {
       setAiAction(null);
@@ -371,7 +401,7 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
     const importedIngredients = (draft.ingredients || [])
       .map((item) => ({
         name: item.name?.trim() || "",
-        amount: item.unit === "по вкусу" ? 0 : Math.max(0, Number(item.amount || 0)),
+        amount: item.unit === UNITS[UNITS.length - 1] ? 0 : Math.max(0, Number(item.amount || 0)),
         unit: item.unit || UNITS[0],
       }))
       .filter((item) => item.name.length > 0);
@@ -425,19 +455,19 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
     const normalizedUrl = normalizeImportUrl(importUrl);
     if (!importUrl.trim()) {
       setImportStatus("error");
-      setImportStatusMessage("Вставьте ссылку на рецепт.");
+      setImportStatusMessage(t("recipes.new.import.urlRequired"));
       setImportIssues([]);
       return;
     }
     if (!normalizedUrl) {
       setImportStatus("error");
-      setImportStatusMessage("Введите корректную ссылку.");
+      setImportStatusMessage(t("recipes.new.import.urlInvalid"));
       setImportIssues([]);
       return;
     }
     if (!isSupportedImportUrl(normalizedUrl)) {
       setImportStatus("error");
-      setImportStatusMessage("Эта ссылка не поддерживается.");
+      setImportStatusMessage(t("recipes.new.import.urlUnsupported"));
       setImportIssues([]);
       return;
     }
@@ -445,7 +475,7 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
     try {
       setAiAction("import_url");
       setImportStatus("loading");
-      setImportStatusMessage("Импортирую...");
+      setImportStatusMessage(t("recipes.new.import.importing"));
       setImportIssues([]);
       const data = await importRecipeByUrl({
         url: normalizedUrl,
@@ -453,24 +483,26 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
       });
       if (requestId !== importRequestIdRef.current) return;
       applyImportedDraft(data.recipe);
-      setImportIssues(sanitizeImportIssues(Array.isArray(data.issues) ? data.issues : []));
+      setImportIssues(
+        sanitizeImportIssues(Array.isArray(data.issues) ? data.issues : [], t("recipes.new.import.photoUnavailable"))
+      );
       setAiMessage(data.message || "");
       const backendMessage = String(data.message || "").trim();
       if (hasImportedContent(data.recipe)) {
         setImportStatus("success");
-        setImportStatusMessage("Импортировано. Проверьте и сохраните.");
+        setImportStatusMessage(t("recipes.new.import.urlSuccess"));
         if (backendMessage) setImportStatusMessage(backendMessage);
         scrollToStepOne();
       } else {
         setImportStatus("error");
-        setImportStatusMessage("Не удалось импортировать рецепт по ссылке. Попробуйте другую ссылку или заполните вручную.");
+        setImportStatusMessage(t("recipes.new.import.urlFailed"));
         if (backendMessage) setImportStatusMessage(backendMessage);
       }
     } catch (error) {
       if (requestId !== importRequestIdRef.current) return;
       console.error("[recipes/new] import by URL failed", error);
       setImportStatus("error");
-      setImportStatusMessage("Не удалось импортировать рецепт по ссылке. Попробуйте другую ссылку или заполните вручную.");
+      setImportStatusMessage(t("recipes.new.import.urlFailed"));
     } finally {
       if (requestId === importRequestIdRef.current) {
         setAiAction(null);
@@ -484,7 +516,7 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
     const imageFiles = files.filter((file) => file.type.startsWith("image/")).slice(0, MAX_IMPORT_PHOTOS);
     if (imageFiles.length === 0) {
       setImportStatus("error");
-      setImportStatusMessage("Выберите фото рецепта.");
+      setImportStatusMessage(t("recipes.new.import.photoRequired"));
       return;
     }
 
@@ -492,7 +524,7 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
     importPhotosTaskIdRef.current = taskId;
     setIsPreparingImportPhotos(true);
     setImportStatus("idle");
-    setImportStatusMessage("Подготавливаю фото...");
+    setImportStatusMessage(t("recipes.new.import.preparingPhoto"));
     setImportIssues([]);
     Promise.all(imageFiles.map((file) => optimizeImageFile(file))).then((images) => {
       if (taskId !== importPhotosTaskIdRef.current) return;
@@ -500,12 +532,12 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
       setImportPhotoNames(imageFiles.map((file) => file.name));
       setIsPreparingImportPhotos(false);
       setImportStatus("idle");
-      setImportStatusMessage(`Загружено фото: ${imageFiles.length}. Нажмите «Распознать».`);
+      setImportStatusMessage(t("recipes.new.import.photoLoaded", { count: imageFiles.length }));
     }).catch(() => {
       if (taskId !== importPhotosTaskIdRef.current) return;
       setIsPreparingImportPhotos(false);
       setImportStatus("error");
-      setImportStatusMessage("Не удалось подготовить фото. Попробуйте другой файл.");
+      setImportStatusMessage(t("recipes.new.import.photoPrepareFailed"));
     });
   };
 
@@ -515,7 +547,7 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
     const imageFiles = files.filter((file) => file.type.startsWith("image/"));
     if (imageFiles.length === 0) {
       setImportStatus("error");
-      setImportStatusMessage("Не удалось получить фото с камеры.");
+      setImportStatusMessage(t("recipes.new.import.cameraReadFailed"));
       return;
     }
 
@@ -523,7 +555,7 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
     importPhotosTaskIdRef.current = taskId;
     setIsPreparingImportPhotos(true);
     setImportStatus("idle");
-    setImportStatusMessage("Подготавливаю фото...");
+    setImportStatusMessage(t("recipes.new.import.preparingPhoto"));
     setImportIssues([]);
     Promise.all(imageFiles.map((file) => optimizeImageFile(file))).then((images) => {
       if (taskId !== importPhotosTaskIdRef.current) return;
@@ -531,12 +563,12 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
       setImportPhotoNames((prev) => [...prev, ...imageFiles.map((file) => file.name)].slice(0, MAX_IMPORT_PHOTOS));
       setIsPreparingImportPhotos(false);
       setImportStatus("idle");
-      setImportStatusMessage("Фото с камеры добавлено. Нажмите «Распознать».");
+      setImportStatusMessage(t("recipes.new.import.cameraPhotoAdded"));
     }).catch(() => {
       if (taskId !== importPhotosTaskIdRef.current) return;
       setIsPreparingImportPhotos(false);
       setImportStatus("error");
-      setImportStatusMessage("Не удалось подготовить фото с камеры.");
+      setImportStatusMessage(t("recipes.new.import.cameraPrepareFailed"));
     });
   };
 
@@ -545,13 +577,13 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
     importRequestIdRef.current = requestId;
     if (isPreparingImportPhotos) {
       setImportStatus("error");
-      setImportStatusMessage("Подождите, фото еще подготавливаются.");
+      setImportStatusMessage(t("recipes.new.import.waitPreparing"));
       setImportIssues([]);
       return;
     }
     if (importPhotoDataUrls.length === 0) {
       setImportStatus("error");
-      setImportStatusMessage("Сначала загрузите хотя бы одно фото рецепта.");
+      setImportStatusMessage(t("recipes.new.import.photoAtLeastOne"));
       setImportIssues([]);
       return;
     }
@@ -559,7 +591,7 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
     try {
       setAiAction("import_photo");
       setImportStatus("loading");
-      setImportStatusMessage("Распознаю...");
+      setImportStatusMessage(t("recipes.new.import.recognizing"));
       setImportIssues([]);
       const data = await importRecipeByPhoto({
         imageDataUrls: importPhotoDataUrls,
@@ -567,24 +599,26 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
       });
       if (requestId !== importRequestIdRef.current) return;
       applyImportedDraft(data.recipe);
-      setImportIssues(sanitizeImportIssues(Array.isArray(data.issues) ? data.issues : []));
+      setImportIssues(
+        sanitizeImportIssues(Array.isArray(data.issues) ? data.issues : [], t("recipes.new.import.photoUnavailable"))
+      );
       setAiMessage(data.message || "");
       const backendMessage = String(data.message || "").trim();
       if (hasImportedPhotoContent(data.recipe)) {
         setImportStatus("success");
-        setImportStatusMessage("Рецепт распознан, проверьте и сохраните.");
+        setImportStatusMessage(t("recipes.new.import.photoSuccess"));
         if (backendMessage) setImportStatusMessage(backendMessage);
         scrollToStepOne();
       } else {
         setImportStatus("error");
-        setImportStatusMessage("Не удалось распознать фото. Попробуйте другое фото или заполните вручную.");
+        setImportStatusMessage(t("recipes.new.import.photoRecognizeFailed"));
         if (backendMessage) setImportStatusMessage(backendMessage);
       }
     } catch (error) {
       if (requestId !== importRequestIdRef.current) return;
       console.error("[recipes/new] import by photo failed", error);
       setImportStatus("error");
-      setImportStatusMessage("Не удалось распознать фото. Попробуйте другое фото или заполните вручную.");
+      setImportStatusMessage(t("recipes.new.import.photoRecognizeFailed"));
     } finally {
       if (requestId === importRequestIdRef.current) {
         setAiAction(null);
@@ -599,7 +633,7 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
 
   const saveRecipe = async () => {
     if (!title.trim()) {
-      alert("Название рецепта обязательно");
+      alert(t("recipes.new.messages.titleRequired"));
       return;
     }
 
@@ -613,10 +647,27 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
     const normalizedIngredients = ingredients
       .filter((item) => item.name.trim())
       .map((item) => ({
+        ingredientId: item.ingredientId,
         name: item.name.trim(),
-        amount: item.unit === "по вкусу" ? 0 : Math.max(0, item.amount || 0),
+        amount: item.unit === UNITS[UNITS.length - 1] ? 0 : Math.max(0, item.amount || 0),
         unit: item.unit || UNITS[0],
+        note: item.note,
+        optional: Boolean(item.optional),
       }));
+
+    const baseLanguage = normalizeRecipeLanguage(locale);
+    const baseTranslation: RecipeTranslation = {
+      language: baseLanguage,
+      title: title.trim(),
+      shortDescription: shortDescription.trim() || undefined,
+      description: normalizedLink || undefined,
+      instructions: instructions.trim() || undefined,
+      updatedAt: new Date().toISOString(),
+      isAutoGenerated: false,
+    };
+    const translations: Partial<Record<RecipeLanguage, RecipeTranslation>> = {
+      [baseLanguage]: baseTranslation,
+    };
 
     const names = normalizedIngredients.map((item) => item.name);
     if (names.length > 0) {
@@ -646,6 +697,8 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
           visibility: "private",
           categories: normalizedTags,
           tags: normalizedTags,
+          baseLanguage,
+          translations,
         };
 
         upsertRecipeInLocalCache(localRecipe);
@@ -678,6 +731,8 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
         shareToken: normalizedShareToken || undefined,
         categories: normalizedTags,
         tags: normalizedTags,
+        baseLanguage,
+        translations,
       });
 
       if (normalizedVisibility === "invited") {
@@ -686,15 +741,28 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
           const inviteResult = await sendRecipeAccessInvites(created.id, invitedEmails);
           if (inviteResult.failed.length > 0) {
             const failedEmails = inviteResult.failed.map((item) => item.email).join(", ");
-            alert(`Часть приглашений не отправлена: ${failedEmails}`);
+            alert(t("recipes.new.messages.invitesPartial", { emails: failedEmails }));
           }
         }
       }
 
-      const finalizedRecipe: RecipeModel =
-        normalizedVisibility === "link" && normalizedShareToken
+      let savedBaseTranslation = baseTranslation;
+      try {
+        savedBaseTranslation = await upsertRecipeTranslation(currentUserId, created.id, baseTranslation);
+      } catch {
+        // Translation table can be absent on old schema. Keep recipe creation successful.
+      }
+
+      const finalizedRecipe: RecipeModel = {
+        ...(normalizedVisibility === "link" && normalizedShareToken
           ? { ...created, shareToken: normalizedShareToken }
-          : created;
+          : created),
+        baseLanguage,
+        translations: {
+          ...(created.translations || {}),
+          [baseLanguage]: savedBaseTranslation,
+        },
+      };
       upsertRecipeInLocalCache(finalizedRecipe);
       if (shouldShowFirstRecipeOverlay && typeof window !== "undefined") {
         localStorage.setItem(FIRST_RECIPE_ADDED_KEY, finalizedRecipe.id);
@@ -704,7 +772,7 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
         router.push(`/recipes/${finalizedRecipe.id}`);
       }
     } catch (error) {
-      const text = error instanceof Error ? error.message : "Не удалось сохранить рецепт.";
+      const text = error instanceof Error ? error.message : t("recipes.new.messages.saveFailed");
       alert(text);
     } finally {
       setIsSaving(false);
@@ -715,33 +783,33 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
     <div style={{ padding: "20px", maxWidth: "860px", margin: "0 auto" }}>
       <div style={{ marginBottom: "20px" }}>
         <button className="btn" onClick={() => router.push("/recipes")}>
-          ← Назад к рецептам
+          {t("recipes.new.actions.backToRecipes")}
         </button>
       </div>
 
       <h1 className="h1" style={{ marginBottom: "20px" }}>
-        Новый рецепт
+        {t("recipes.new.title")}
       </h1>
 
       {!currentUserId && (
         <p className="muted" style={{ marginBottom: "14px" }}>
-          Режим черновика: рецепт сохранится локально на этом устройстве.
+          {t("recipes.new.localDraftMode")}
         </p>
       )}
 
       {aiMessage && (
         <p className="muted" style={{ marginBottom: "14px" }}>
-          Отто: {aiMessage}
+          {t("recipes.new.ottoPrefix")}: {aiMessage}
         </p>
       )}
 
       <p className="muted" style={{ marginTop: "-4px", marginBottom: "14px" }}>
-        Быстрый старт: достаточно названия и ингредиентов. Остальное можно добавить позже.
+        {t("recipes.new.quickStart")}
       </p>
 
       <div className="card" style={{ marginBottom: "14px", padding: "12px", background: "var(--background-secondary)" }}>
         <button className="btn" type="button" onClick={() => setShowImportTools((prev) => !prev)}>
-          {showImportTools ? "Скрыть импорт" : "Импортировать рецепт (необязательно)"}
+          {showImportTools ? t("recipes.new.import.hide") : t("recipes.new.import.show")}
         </button>
 
         {showImportTools ? (
@@ -752,14 +820,14 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
                 onClick={() => setImportMode("url")}
                 type="button"
               >
-                Импорт по ссылке
+                {t("recipes.new.import.byUrl")}
               </button>
               <button
                 className={`btn ${importMode === "photo" ? "btn-primary" : ""}`}
                 onClick={() => setImportMode("photo")}
                 type="button"
               >
-                Импорт по фото
+                {t("recipes.new.import.byPhoto")}
               </button>
             </div>
 
@@ -770,10 +838,10 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
                   type="url"
                   value={importUrl}
                   onChange={(e) => setImportUrl(e.target.value)}
-                  placeholder="Вставьте ссылку на рецепт"
+                  placeholder={t("recipes.new.import.urlPlaceholder")}
                 />
                 <button className="btn btn-primary" onClick={handleImportByUrl} disabled={aiAction === "import_url"}>
-                  {aiAction === "import_url" ? "Импортирую..." : "Импортировать"}
+                  {aiAction === "import_url" ? t("recipes.new.import.importing") : t("recipes.new.import.importAction")}
                 </button>
               </div>
             ) : null}
@@ -798,7 +866,7 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
                 />
                 <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
                   <button className="btn" type="button" onClick={() => cameraInputRef.current?.click()}>
-                    Снять с камеры
+                    {t("recipes.new.import.takePhoto")}
                   </button>
                   {importPhotoDataUrls.length > 0 ? (
                     <button
@@ -806,14 +874,14 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
                       type="button"
                       onClick={clearImportPhotos}
                     >
-                      Очистить фото
+                      {t("recipes.new.import.clearPhoto")}
                     </button>
                   ) : null}
                 </div>
                 {importPhotoDataUrls.length > 0 ? (
                   <div style={{ display: "grid", gap: "6px" }}>
                     <p className="muted" style={{ margin: 0 }}>
-                      Фото для распознавания: {importPhotoDataUrls.length}
+                      {t("recipes.new.import.photosCount", { count: importPhotoDataUrls.length })}
                     </p>
                     <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
                       {importPhotoNames.map((name, index) => (
@@ -823,9 +891,9 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
                           className="btn"
                           onClick={() => removeImportPhotoAt(index)}
                           style={{ padding: "4px 8px", fontSize: "12px" }}
-                          title="Удалить фото"
+                          title={t("recipes.new.import.removePhoto")}
                         >
-                          {name || `Фото ${index + 1}`} ×
+                          {name || t("recipes.new.import.photoN", { index: index + 1 })} ×
                         </button>
                       ))}
                     </div>
@@ -836,7 +904,11 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
                   onClick={handleImportByPhoto}
                   disabled={aiAction === "import_photo" || isPreparingImportPhotos}
                 >
-                  {isPreparingImportPhotos ? "Подготавливаю фото..." : aiAction === "import_photo" ? "Распознаю..." : "Распознать"}
+                  {isPreparingImportPhotos
+                    ? t("recipes.new.import.preparingPhoto")
+                    : aiAction === "import_photo"
+                      ? t("recipes.new.import.recognizing")
+                      : t("recipes.new.import.recognizeAction")}
                 </button>
               </div>
             ) : null}
@@ -860,7 +932,7 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
 
             {importIssues.length > 0 ? (
               <div style={{ marginTop: "8px" }}>
-                <p className="muted" style={{ marginBottom: "6px" }}>Проверьте после импорта:</p>
+                <p className="muted" style={{ marginBottom: "6px" }}>{t("recipes.new.import.reviewAfterImport")}</p>
                 <ul style={{ margin: 0, paddingLeft: "20px" }}>
                   {importIssues.map((issue, index) => (
                     <li key={`${issue}-${index}`} className="muted">
@@ -875,14 +947,18 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
       </div>
 
       <div ref={stepOneRef} className="card" style={{ marginBottom: "14px", padding: "14px" }}>
-        <h3 style={{ margin: "0 0 10px 0" }}>Шаг 1. Основное</h3>
+        <h3 style={{ margin: "0 0 10px 0" }}>{t("recipes.new.step1.title")}</h3>
         <div style={{ marginBottom: "16px" }}>
-          <label style={{ display: "block", marginBottom: "8px", fontWeight: "bold", fontSize: "18px" }}>Название</label>
+          <label style={{ display: "block", marginBottom: "8px", fontWeight: "bold", fontSize: "18px" }}>
+            {t("recipes.new.fields.title")}
+          </label>
           <input className="input" type="text" value={title} onChange={(e) => setTitle(e.target.value)} />
         </div>
 
         <div style={{ marginBottom: "16px" }}>
-          <label style={{ display: "block", marginBottom: "8px", fontWeight: "bold" }}>Доступ</label>
+          <label style={{ display: "block", marginBottom: "8px", fontWeight: "bold" }}>
+            {t("recipes.new.fields.access")}
+          </label>
           <div style={{ display: "grid", gap: "8px" }}>
             {ACCESS_OPTIONS.map((option) => {
               const disabled = !canChangeVisibility && option.value !== "private";
@@ -903,22 +979,22 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
                     gap: "2px",
                   }}
                 >
-                  <span>{option.label}</span>
-                  <span style={{ fontSize: "12px", opacity: 0.85 }}>{option.description}</span>
+                  <span>{t(option.labelKey)}</span>
+                  <span style={{ fontSize: "12px", opacity: 0.85 }}>{t(option.descriptionKey)}</span>
                 </button>
               );
             })}
           </div>
           {!canChangeVisibility ? (
             <p className="muted" style={{ margin: "8px 0 0 0" }}>
-              Для режимов Публичный, По ссылке и По приглашению войдите в аккаунт.
+              {t("recipes.new.access.loginRequired")}
             </p>
           ) : null}
 
           {visibility === "link" ? (
             <div style={{ marginTop: "10px", display: "grid", gap: "8px" }}>
               <p className="muted" style={{ margin: 0 }}>
-                Ссылка будет доступна после сохранения рецепта.
+                {t("recipes.new.access.linkAvailableAfterSave")}
               </p>
               <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
                 <button
@@ -926,11 +1002,11 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
                   className="btn"
                   onClick={() => setShareToken(generateShareToken())}
                 >
-                  Сгенерировать ссылку
+                  {t("recipes.new.access.generateLink")}
                 </button>
                 {shareToken ? (
                   <span className="muted" style={{ alignSelf: "center", fontSize: "12px" }}>
-                    Токен: {shareToken.slice(0, 12)}...
+                    {t("recipes.new.access.token")}: {shareToken.slice(0, 12)}...
                   </span>
                 ) : null}
               </div>
@@ -944,7 +1020,7 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
                 className="btn"
                 onClick={() => setShowInvitedAccessEditor((prev) => !prev)}
               >
-                Управлять доступом
+                {t("recipes.new.access.manage")}
               </button>
               {showInvitedAccessEditor ? (
                 <div style={{ display: "grid", gap: "6px" }}>
@@ -953,11 +1029,11 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
                     rows={4}
                     value={invitedEmailsDraft}
                     onChange={(e) => setInvitedEmailsDraft(e.target.value)}
-                    placeholder="email пользователей, по одному в строке"
+                    placeholder={t("recipes.new.access.invitedPlaceholder")}
                     style={{ minHeight: "88px", resize: "vertical" }}
                   />
                   <p className="muted" style={{ margin: 0 }}>
-                    Приглашения отправляются на email, доступ выдается после входа в аккаунт.
+                    {t("recipes.new.access.invitedHelp")}
                   </p>
                 </div>
               ) : null}
@@ -967,7 +1043,7 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
 
         <div style={{ marginBottom: "16px" }}>
           <div style={{ display: "flex", gap: "10px", alignItems: "center", marginBottom: "8px", flexWrap: "wrap" }}>
-            <label style={{ display: "block", fontWeight: "bold" }}>Ингредиенты</label>
+            <label style={{ display: "block", fontWeight: "bold" }}>{t("recipes.new.fields.ingredients")}</label>
           </div>
         {ingredients.map((ingredient, index) => (
           <div key={index} style={{ marginBottom: "10px" }}>
@@ -977,7 +1053,7 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
                   value={ingredient.name}
                   onChange={(nextValue) => updateIngredient(index, "name", nextValue)}
                   suggestions={productSuggestions}
-                  placeholder="Название"
+                  placeholder={t("recipes.new.fields.ingredientNamePlaceholder")}
                 />
               </div>
               <div className="recipe-new-ingredient-row__meta">
@@ -993,7 +1069,7 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
                 }
                 step="0.1"
                 min="0"
-                placeholder="Кол-во"
+                placeholder={t("recipes.new.fields.ingredientAmountPlaceholder")}
                 className="input"
                 style={{ width: "100%" }}
               />
@@ -1010,13 +1086,13 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
                 ))}
               </select>
               <button className="btn btn-danger recipe-new-ingredient-row__delete" onClick={() => removeIngredient(index)}>
-                Удалить
+                {t("recipes.new.actions.deleteIngredient")}
               </button>
               </div>
             </div>
             {reviewHints[index] ? (
               <p className="muted" style={{ marginTop: "6px", marginBottom: "0" }}>
-                Проверьте количество и единицу после импорта.
+                {t("recipes.new.messages.checkAmountAndUnit")}
               </p>
             ) : null}
             {ingredientHints[index]?.length ? (
@@ -1042,12 +1118,14 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
           </div>
         ))}
           <button className="btn btn-add" onClick={addIngredient}>
-            + Добавить ингредиент
+            {t("recipes.new.actions.addIngredient")}
           </button>
         </div>
 
         <div style={{ marginBottom: "0" }}>
-          <label style={{ display: "block", marginBottom: "8px", fontWeight: "bold" }}>Способ приготовления</label>
+          <label style={{ display: "block", marginBottom: "8px", fontWeight: "bold" }}>
+            {t("recipes.new.fields.instructions")}
+          </label>
           <textarea
             value={instructions}
             onChange={(e) => setInstructions(e.target.value)}
@@ -1060,29 +1138,29 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
 
       <div className="card" style={{ marginBottom: "14px", padding: "12px", background: "var(--background-secondary)" }}>
         <button className="btn" type="button" onClick={() => setShowAiTools((prev) => !prev)}>
-          {showAiTools ? "Скрыть подсказки Отто" : "Отто поможет (необязательно)"}
+          {showAiTools ? t("recipes.new.ai.hideTools") : t("recipes.new.ai.showTools")}
         </button>
         {showAiTools ? (
           <div style={{ marginTop: "10px" }}>
             <p className="muted" style={{ marginTop: 0, marginBottom: "8px" }}>
-              Это вспомогательные подсказки. Рецепт можно сохранить и без них.
+              {t("recipes.new.ai.toolsHint")}
             </p>
             <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
               <button className="btn" onClick={requestIngredientHints} disabled={aiAction === "ingredients" || !hasCoreInput}>
-                {aiAction === "ingredients" ? "Ищу..." : "Подсказать названия"}
+                {aiAction === "ingredients" ? t("recipes.new.ai.searching") : t("recipes.new.ai.suggestNames")}
               </button>
               <button className="btn" onClick={requestServingsHint} disabled={aiAction === "servings" || !hasCoreInput}>
-                {aiAction === "servings" ? "Считаю..." : "Подсказать порции"}
+                {aiAction === "servings" ? t("recipes.new.ai.counting") : t("recipes.new.ai.suggestServings")}
               </button>
               <button className="btn" onClick={requestTagHints} disabled={aiAction === "tags" || !hasCoreInput}>
-                {aiAction === "tags" ? "Думаю..." : "Предложить теги"}
+                {aiAction === "tags" ? t("recipes.new.ai.thinking") : t("recipes.new.ai.suggestTags")}
               </button>
               <button className="btn" onClick={requestRecipeImage} disabled={aiAction === "image" || !hasCoreInput}>
-                {aiAction === "image" ? "Генерация..." : "Сгенерировать фото"}
+                {aiAction === "image" ? t("recipes.new.ai.generating") : t("recipes.new.ai.generatePhoto")}
               </button>
               {suggestedServings ? (
                 <button className="btn btn-primary" onClick={() => setServings(suggestedServings)}>
-                  Применить порции: {suggestedServings}
+                  {t("recipes.new.ai.applyServings", { count: suggestedServings })}
                 </button>
               ) : null}
               {suggestedTags.length > 0 ? (
@@ -1090,7 +1168,7 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
                   className="btn btn-primary"
                   onClick={() => setSelectedTags((prev) => Array.from(new Set([...prev, ...suggestedTags])))}
                 >
-                  Добавить предложенные теги
+                  {t("recipes.new.ai.addSuggestedTags")}
                 </button>
               ) : null}
             </div>
@@ -1100,13 +1178,15 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
 
       <div className="card" style={{ marginBottom: "20px", padding: "12px", background: "var(--background-secondary)" }}>
         <button className="btn" type="button" onClick={() => setShowAdvancedFields((prev) => !prev)}>
-          {showAdvancedFields ? "Скрыть дополнительное" : "Шаг 2. Дополнительно (необязательно)"}
+          {showAdvancedFields ? t("recipes.new.step2.hide") : t("recipes.new.step2.show")}
         </button>
 
         {showAdvancedFields ? (
           <div style={{ marginTop: "12px" }}>
             <div style={{ marginBottom: "16px" }}>
-              <label style={{ display: "block", marginBottom: "8px", fontWeight: "bold" }}>Короткое описание</label>
+              <label style={{ display: "block", marginBottom: "8px", fontWeight: "bold" }}>
+                {t("recipes.new.fields.shortDescription")}
+              </label>
               <textarea
                 value={shortDescription}
                 onChange={(e) => setShortDescription(e.target.value)}
@@ -1118,7 +1198,7 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
 
             <div style={{ marginBottom: "16px", display: "flex", gap: "16px", flexWrap: "wrap" }}>
               <label style={{ display: "block", fontWeight: "bold" }}>
-                Порции
+                {t("recipes.new.fields.servings")}
                 <input
                   type="number"
                   min={1}
@@ -1133,7 +1213,7 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
 
             <div style={{ marginBottom: "16px" }}>
               <label style={{ display: "block", marginBottom: "8px", fontWeight: "bold" }}>
-                Источник (необязательно)
+                {t("recipes.new.fields.source")}
               </label>
               <input
                 className="input"
@@ -1143,17 +1223,19 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
                 placeholder="https://..."
               />
               <p className="muted" style={{ marginTop: "8px" }}>
-                Если рецепт взят из книги или сайта, укажите источник.
+                {t("recipes.new.fields.sourceHint")}
               </p>
               {visibility !== "private" ? (
                 <p className="muted" style={{ marginTop: "8px" }}>
-                  Если источник не указан, ответственность за публикацию остается на вас.
+                  {t("recipes.new.fields.sourceWarning")}
                 </p>
               ) : null}
             </div>
 
             <div style={{ marginBottom: "16px" }}>
-              <label style={{ display: "block", fontWeight: "bold", marginBottom: "8px" }}>Теги (необязательно)</label>
+              <label style={{ display: "block", fontWeight: "bold", marginBottom: "8px" }}>
+                {t("recipes.new.fields.tags")}
+              </label>
               {suggestedTags.length > 0 ? (
                 <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "10px" }}>
                   {suggestedTags.map((tag) => (
@@ -1201,15 +1283,19 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
             </div>
 
             <div style={{ marginBottom: "16px" }}>
-              <label style={{ display: "block", marginBottom: "8px", fontWeight: "bold" }}>Картинка</label>
+              <label style={{ display: "block", marginBottom: "8px", fontWeight: "bold" }}>
+                {t("recipes.new.fields.image")}
+              </label>
               {image ? (
                 <div>
                   <img
                     src={image}
-                    alt="Превью рецепта"
+                    alt={t("recipes.new.fields.imagePreviewAlt")}
                     style={{ maxWidth: "220px", maxHeight: "220px", borderRadius: "10px", display: "block", marginBottom: "10px" }}
                   />
-                  <button className="btn btn-danger" onClick={() => setImage("")}>Удалить картинку</button>
+                  <button className="btn btn-danger" onClick={() => setImage("")}>
+                    {t("recipes.new.actions.deleteImage")}
+                  </button>
                 </div>
               ) : (
                 <input type="file" accept="image/*" onChange={handleImageUpload} className="input" />
@@ -1217,7 +1303,9 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
             </div>
 
             <div style={{ marginBottom: "0" }}>
-              <label style={{ display: "block", marginBottom: "8px", fontWeight: "bold" }}>Личные заметки</label>
+              <label style={{ display: "block", marginBottom: "8px", fontWeight: "bold" }}>
+                {t("recipes.new.fields.notes")}
+              </label>
               <textarea
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
@@ -1236,9 +1324,9 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
           onClick={saveRecipe}
           disabled={isSaving || !hasTitle}
         >
-          {isSaving ? "Сохранение..." : "Сохранить рецепт"}
+          {isSaving ? t("recipes.new.actions.saving") : t("recipes.new.actions.saveRecipe")}
         </button>
-        <button className="btn" onClick={() => router.push("/recipes")}>Отмена</button>
+        <button className="btn" onClick={() => router.push("/recipes")}>{t("recipes.new.actions.cancel")}</button>
       </div>
     </div>
   );

@@ -492,3 +492,232 @@ using (
       and menu_row.owner_id = auth.uid()
   )
 );
+
+-- =========================================================
+-- Recipe i18n model (translation is NOT a new recipe)
+-- =========================================================
+
+alter table public.recipes add column if not exists base_language text not null default 'ru';
+
+do $$
+begin
+  if exists (
+    select 1
+    from pg_constraint
+    where conname = 'recipes_base_language_check'
+      and conrelid = 'public.recipes'::regclass
+  ) then
+    alter table public.recipes drop constraint recipes_base_language_check;
+  end if;
+  alter table public.recipes
+    add constraint recipes_base_language_check
+    check (base_language in ('ru', 'en', 'es'));
+end $$;
+
+create table if not exists public.ingredient_dictionary (
+  id text primary key,
+  category_id text not null default 'other',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.ingredient_translations (
+  ingredient_id text not null references public.ingredient_dictionary(id) on delete cascade,
+  language text not null check (language in ('ru', 'en', 'es')),
+  name text not null,
+  aliases text[] not null default '{}',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  primary key (ingredient_id, language)
+);
+
+create index if not exists ingredient_translations_name_idx
+  on public.ingredient_translations (language, name);
+
+create table if not exists public.recipe_translations (
+  recipe_id uuid not null references public.recipes(id) on delete cascade,
+  language text not null check (language in ('ru', 'en', 'es')),
+  title text not null,
+  short_description text null default '',
+  description text null default '',
+  instructions text null default '',
+  is_auto_generated boolean not null default false,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  primary key (recipe_id, language)
+);
+
+create index if not exists recipe_translations_language_idx
+  on public.recipe_translations(language);
+
+drop trigger if exists ingredient_dictionary_set_updated_at on public.ingredient_dictionary;
+create trigger ingredient_dictionary_set_updated_at
+before update on public.ingredient_dictionary
+for each row execute function public.set_updated_at();
+
+drop trigger if exists ingredient_translations_set_updated_at on public.ingredient_translations;
+create trigger ingredient_translations_set_updated_at
+before update on public.ingredient_translations
+for each row execute function public.set_updated_at();
+
+drop trigger if exists recipe_translations_set_updated_at on public.recipe_translations;
+create trigger recipe_translations_set_updated_at
+before update on public.recipe_translations
+for each row execute function public.set_updated_at();
+
+alter table public.ingredient_dictionary enable row level security;
+alter table public.ingredient_translations enable row level security;
+alter table public.recipe_translations enable row level security;
+
+drop policy if exists "ingredient_dictionary_select_all" on public.ingredient_dictionary;
+create policy "ingredient_dictionary_select_all"
+on public.ingredient_dictionary
+for select
+using (true);
+
+drop policy if exists "ingredient_translations_select_all" on public.ingredient_translations;
+create policy "ingredient_translations_select_all"
+on public.ingredient_translations
+for select
+using (true);
+
+drop policy if exists "recipe_translations_select_with_recipe_access" on public.recipe_translations;
+create policy "recipe_translations_select_with_recipe_access"
+on public.recipe_translations
+for select
+using (
+  exists (
+    select 1
+    from public.recipes r
+    where r.id = recipe_translations.recipe_id
+      and (
+        r.owner_id = auth.uid()
+        or r.visibility = 'public'
+        or (r.visibility = 'link' and r.share_token is not null and length(r.share_token) > 0)
+        or exists (
+          select 1
+          from public.recipe_access ra
+          where ra.recipe_id = r.id
+            and ra.user_id = auth.uid()
+        )
+      )
+  )
+);
+
+drop policy if exists "recipe_translations_insert_owner" on public.recipe_translations;
+create policy "recipe_translations_insert_owner"
+on public.recipe_translations
+for insert
+with check (
+  exists (
+    select 1
+    from public.recipes r
+    where r.id = recipe_translations.recipe_id
+      and r.owner_id = auth.uid()
+  )
+);
+
+drop policy if exists "recipe_translations_update_owner" on public.recipe_translations;
+create policy "recipe_translations_update_owner"
+on public.recipe_translations
+for update
+using (
+  exists (
+    select 1
+    from public.recipes r
+    where r.id = recipe_translations.recipe_id
+      and r.owner_id = auth.uid()
+  )
+)
+with check (
+  exists (
+    select 1
+    from public.recipes r
+    where r.id = recipe_translations.recipe_id
+      and r.owner_id = auth.uid()
+  )
+);
+
+drop policy if exists "recipe_translations_delete_owner" on public.recipe_translations;
+create policy "recipe_translations_delete_owner"
+on public.recipe_translations
+for delete
+using (
+  exists (
+    select 1
+    from public.recipes r
+    where r.id = recipe_translations.recipe_id
+      and r.owner_id = auth.uid()
+  )
+);
+
+-- Starter dictionary seed
+insert into public.ingredient_dictionary (id, category_id) values
+  ('milk', 'dairy'),
+  ('cottage_cheese', 'dairy'),
+  ('egg', 'protein'),
+  ('chicken_fillet', 'protein'),
+  ('salmon', 'protein'),
+  ('rice', 'grocery'),
+  ('oats', 'grocery'),
+  ('pasta', 'grocery'),
+  ('potato', 'vegetables'),
+  ('tomato', 'vegetables'),
+  ('cucumber', 'vegetables'),
+  ('onion', 'vegetables'),
+  ('garlic', 'vegetables'),
+  ('banana', 'fruits'),
+  ('apple', 'fruits')
+on conflict (id) do nothing;
+
+insert into public.ingredient_translations (ingredient_id, language, name, aliases) values
+  ('milk', 'ru', 'Молоко', '{молоко}'),
+  ('milk', 'en', 'Milk', '{milk}'),
+  ('milk', 'es', 'Leche', '{leche}'),
+  ('cottage_cheese', 'ru', 'Творог', '{творог}'),
+  ('cottage_cheese', 'en', 'Cottage cheese', '{cottage cheese}'),
+  ('cottage_cheese', 'es', 'Requeson', '{requeson}'),
+  ('egg', 'ru', 'Яйцо', '{яйцо,яйца}'),
+  ('egg', 'en', 'Egg', '{egg,eggs}'),
+  ('egg', 'es', 'Huevo', '{huevo,huevos}'),
+  ('chicken_fillet', 'ru', 'Куриное филе', '{курица,куриное филе}'),
+  ('chicken_fillet', 'en', 'Chicken fillet', '{chicken fillet,chicken breast}'),
+  ('chicken_fillet', 'es', 'Pechuga de pollo', '{pollo,pechuga de pollo}'),
+  ('salmon', 'ru', 'Лосось', '{лосось,филе лосося}'),
+  ('salmon', 'en', 'Salmon', '{salmon}'),
+  ('salmon', 'es', 'Salmon', '{salmon}'),
+  ('rice', 'ru', 'Рис', '{рис}'),
+  ('rice', 'en', 'Rice', '{rice}'),
+  ('rice', 'es', 'Arroz', '{arroz}'),
+  ('oats', 'ru', 'Овсяные хлопья', '{овсянка,овсяные хлопья}'),
+  ('oats', 'en', 'Oats', '{oats,oatmeal}'),
+  ('oats', 'es', 'Avena', '{avena}'),
+  ('pasta', 'ru', 'Паста', '{паста,макароны}'),
+  ('pasta', 'en', 'Pasta', '{pasta}'),
+  ('pasta', 'es', 'Pasta', '{pasta}'),
+  ('potato', 'ru', 'Картофель', '{картофель,картошка}'),
+  ('potato', 'en', 'Potato', '{potato,potatoes}'),
+  ('potato', 'es', 'Patata', '{patata,patatas}'),
+  ('tomato', 'ru', 'Помидор', '{помидор,томаты}'),
+  ('tomato', 'en', 'Tomato', '{tomato,tomatoes}'),
+  ('tomato', 'es', 'Tomate', '{tomate,tomates}'),
+  ('cucumber', 'ru', 'Огурец', '{огурец,огурцы}'),
+  ('cucumber', 'en', 'Cucumber', '{cucumber,cucumbers}'),
+  ('cucumber', 'es', 'Pepino', '{pepino,pepinos}'),
+  ('onion', 'ru', 'Лук', '{лук}'),
+  ('onion', 'en', 'Onion', '{onion,onions}'),
+  ('onion', 'es', 'Cebolla', '{cebolla,cebollas}'),
+  ('garlic', 'ru', 'Чеснок', '{чеснок}'),
+  ('garlic', 'en', 'Garlic', '{garlic}'),
+  ('garlic', 'es', 'Ajo', '{ajo}'),
+  ('banana', 'ru', 'Банан', '{банан,бананы}'),
+  ('banana', 'en', 'Banana', '{banana,bananas}'),
+  ('banana', 'es', 'Platano', '{platano,platanos}'),
+  ('apple', 'ru', 'Яблоко', '{яблоко,яблоки}'),
+  ('apple', 'en', 'Apple', '{apple,apples}'),
+  ('apple', 'es', 'Manzana', '{manzana,manzanas}')
+on conflict (ingredient_id, language) do update
+set
+  name = excluded.name,
+  aliases = excluded.aliases,
+  updated_at = now();

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { appendProductSuggestions, loadProductSuggestions } from "../lib/productSuggestions";
+import { useI18n } from "../components/I18nProvider";
 
 interface PantryItem {
   name: string;
@@ -27,15 +28,15 @@ const CATEGORY_DATALIST_ID = "pantry-category-options";
 const CATEGORY_FILTER_ALL = "__all__";
 const CATEGORY_FILTER_NONE = "__none__";
 const BASE_CATEGORIES = [
-  { name: "Овощи и фрукты", emoji: "🥦" },
-  { name: "Мясо и рыба", emoji: "🥩" },
-  { name: "Молочные продукты", emoji: "🧀" },
-  { name: "Выпечка и хлеб", emoji: "🥖" },
-  { name: "Бакалея", emoji: "🥫" },
-  { name: "Заморозка", emoji: "🧊" },
-  { name: "Напитки", emoji: "🧃" },
-  { name: "Снеки и сладости", emoji: "🍫" },
-  { name: "Специи и соусы", emoji: "🧂" },
+  { name: "Овощи и фрукты", emoji: "🥦", labelKey: "pantry.categories.vegetablesFruits" },
+  { name: "Мясо и рыба", emoji: "🥩", labelKey: "pantry.categories.meatFish" },
+  { name: "Молочные продукты", emoji: "🧀", labelKey: "pantry.categories.dairy" },
+  { name: "Выпечка и хлеб", emoji: "🥖", labelKey: "pantry.categories.breadBakery" },
+  { name: "Бакалея", emoji: "🥫", labelKey: "pantry.categories.grocery" },
+  { name: "Заморозка", emoji: "🧊", labelKey: "pantry.categories.frozen" },
+  { name: "Напитки", emoji: "🧃", labelKey: "pantry.categories.drinks" },
+  { name: "Снеки и сладости", emoji: "🍫", labelKey: "pantry.categories.snacksSweets" },
+  { name: "Специи и соусы", emoji: "🧂", labelKey: "pantry.categories.spicesSauces" },
 ] as const;
 
 const normalizeCategory = (value: string): string => value.trim().replace(/\s+/g, " ");
@@ -81,16 +82,29 @@ const getProductEmoji = (name: string, category: string): string => {
   return getCategoryEmoji(category);
 };
 
-const formatUpdatedLabel = (iso: string): string => {
+const formatUpdatedLabel = (
+  iso: string,
+  locale: string,
+  t: (key: string, params?: Record<string, string | number>) => string
+): string => {
   const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "неизвестно";
+  if (Number.isNaN(date.getTime())) return t("pantry.updated.unknown");
   const today = new Date();
   const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
   const targetStart = new Date(date.getFullYear(), date.getMonth(), date.getDate());
   const diffDays = Math.round((todayStart.getTime() - targetStart.getTime()) / 86400000);
-  if (diffDays === 0) return "сегодня";
-  if (diffDays === 1) return "вчера";
-  return targetStart.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric" });
+  if (diffDays === 0) return t("pantry.updated.today");
+  if (diffDays === 1) return t("pantry.updated.yesterday");
+  const localeMap: Record<string, string> = {
+    ru: "ru-RU",
+    en: "en-US",
+    es: "es-ES",
+  };
+  return targetStart.toLocaleDateString(localeMap[locale] || "en-US", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
 };
 
 const isUpdatedToday = (iso: string): boolean => {
@@ -104,16 +118,20 @@ const isUpdatedToday = (iso: string): boolean => {
   );
 };
 
-const getProductWord = (count: number): string => {
+const getProductWord = (
+  count: number,
+  t: (key: string, params?: Record<string, string | number>) => string
+): string => {
   const abs = Math.abs(count) % 100;
   const tail = abs % 10;
-  if (abs > 10 && abs < 20) return "продуктов";
-  if (tail === 1) return "продукт";
-  if (tail >= 2 && tail <= 4) return "продукта";
-  return "продуктов";
+  if (abs > 10 && abs < 20) return t("pantry.words.productsPlural");
+  if (tail === 1) return t("pantry.words.productOne");
+  if (tail >= 2 && tail <= 4) return t("pantry.words.productFew");
+  return t("pantry.words.productsPlural");
 };
 
 export default function PantryPage() {
+  const { locale, t } = useI18n();
   const [pantry, setPantry] = useState<PantryItem[]>(() => {
     if (typeof window === "undefined") return [];
     const storedPantry = localStorage.getItem(PANTRY_STORAGE_KEY);
@@ -147,11 +165,11 @@ export default function PantryPage() {
     delete newErrors[key];
 
     if (!item.name.trim()) {
-      newErrors[key] = "Название не может быть пустым";
+      newErrors[key] = t("pantry.validation.nameRequired");
     } else if (item.amount === "") {
-      newErrors[key] = "Введите количество";
+      newErrors[key] = t("pantry.validation.amountRequired");
     } else if (!Number.isFinite(item.amount) || item.amount <= 0) {
-      newErrors[key] = "Количество должно быть больше 0";
+      newErrors[key] = t("pantry.validation.amountPositive");
     }
 
     setErrors(newErrors);
@@ -241,9 +259,9 @@ export default function PantryPage() {
   const addStarterPantryItems = () => {
     if (editingId !== null) return;
     const starterItems: PantryItem[] = [
-      { name: "Молоко", amount: 1, unit: "л", category: "", updatedAt: nowIso() },
-      { name: "Яйца", amount: 10, unit: "шт", category: "", updatedAt: nowIso() },
-      { name: "Хлеб", amount: 1, unit: "шт", category: "", updatedAt: nowIso() },
+      { name: t("pantry.starter.milk"), amount: 1, unit: "л", category: "", updatedAt: nowIso() },
+      { name: t("pantry.starter.eggs"), amount: 10, unit: "шт", category: "", updatedAt: nowIso() },
+      { name: t("pantry.starter.bread"), amount: 1, unit: "шт", category: "", updatedAt: nowIso() },
     ];
     setPantry((prev) => [...prev, ...starterItems]);
     appendProductSuggestions(starterItems.map((item) => item.name));
@@ -273,13 +291,13 @@ export default function PantryPage() {
     (category) => !baseCategorySet.has(category.toLocaleLowerCase("ru-RU"))
   );
   const categoryChips: Array<{ value: string; label: string; emoji?: string }> = [
-    { value: CATEGORY_FILTER_ALL, label: "Все" },
+    { value: CATEGORY_FILTER_ALL, label: t("pantry.filters.all") },
     ...BASE_CATEGORIES.map((category) => ({
       value: category.name,
-      label: category.name,
+      label: t(category.labelKey),
       emoji: category.emoji,
     })),
-    { value: CATEGORY_FILTER_NONE, label: "Без категории", emoji: "🏷️" },
+    { value: CATEGORY_FILTER_NONE, label: t("pantry.filters.uncategorized"), emoji: "🏷️" },
     ...customCategoryChips.map((category) => ({
       value: category,
       label: category,
@@ -319,8 +337,14 @@ export default function PantryPage() {
 
   const pantryCountLabel =
     pantry.length < 5
-      ? `В кладовке ${pantry.length} ${getProductWord(pantry.length)}`
-      : `${pantry.length} ${getProductWord(pantry.length)} в наличии`;
+      ? t("pantry.count.inPantry", {
+          count: pantry.length,
+          word: getProductWord(pantry.length, t),
+        })
+      : t("pantry.count.available", {
+          count: pantry.length,
+          word: getProductWord(pantry.length, t),
+        });
 
   const renderEditorFields = (currentItem: PantryDraftItem, suggestionKey: string, errorKey: string) => (
     <>
@@ -338,7 +362,7 @@ export default function PantryPage() {
               setActiveSuggestionField((prev) => (prev === suggestionKey ? null : prev));
             }, 120);
           }}
-          placeholder="Название"
+          placeholder={t("pantry.form.namePlaceholder")}
           className="input"
           style={{ borderColor: errors[errorKey] ? "var(--state-warning)" : undefined }}
           autoFocus={editingId === suggestionKey}
@@ -392,7 +416,7 @@ export default function PantryPage() {
         type="text"
         value={currentItem.category}
         onChange={(e) => updateDraftItem("category", e.target.value)}
-        placeholder="Категория (например: Овощи)"
+        placeholder={t("pantry.form.categoryPlaceholder")}
         list={CATEGORY_DATALIST_ID}
         className="input"
       />
@@ -403,12 +427,12 @@ export default function PantryPage() {
     <section className="card pantry-page">
       <div style={{ marginBottom: "20px" }}>
         <Link href="/menu" className="btn" style={{ marginRight: "20px" }}>
-          ← Назад к меню
+          {t("pantry.actions.backToMenu")}
         </Link>
       </div>
 
       <h1 className="h1" style={{ marginBottom: "20px", color: "var(--text-primary)" }}>
-        Кладовка
+        {t("pantry.title")}
       </h1>
 
       <p className="pantry-count-label">
@@ -418,14 +442,14 @@ export default function PantryPage() {
 
       <div className="pantry-toolbar">
         <button onClick={addPantryItem} className="btn btn-add" disabled={editingId !== null}>
-          + Добавить продукт
+          {t("pantry.actions.addProduct")}
         </button>
         {pantry.length > 0 ? (
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Поиск по продуктам"
+            placeholder={t("pantry.form.searchPlaceholder")}
             className="input"
             style={{ maxWidth: "320px" }}
           />
@@ -436,9 +460,9 @@ export default function PantryPage() {
           onChange={(e) => setSortMode(e.target.value as SortMode)}
           style={{ maxWidth: "260px" }}
         >
-          <option value="updatedAt">Сортировка: по дате обновления</option>
-          <option value="name">Сортировка: по названию</option>
-          <option value="amount">Сортировка: по количеству</option>
+          <option value="updatedAt">{t("pantry.sort.updatedAt")}</option>
+          <option value="name">{t("pantry.sort.name")}</option>
+          <option value="amount">{t("pantry.sort.amount")}</option>
         </select>
       </div>
 
@@ -457,7 +481,7 @@ export default function PantryPage() {
           ))}
         </div>
       </div>
-      <div className="pantry-category-hint" aria-hidden="true">Листайте категории →</div>
+      <div className="pantry-category-hint" aria-hidden="true">{t("pantry.filters.scrollHint")}</div>
 
       {categoryOptions.length > 0 ? (
         <datalist id={CATEGORY_DATALIST_ID}>
@@ -469,21 +493,21 @@ export default function PantryPage() {
 
       {pantry.length === 0 && editingId !== "new" ? (
         <div className="empty-state">
-          <div className="empty-state__title">Кладовка пока пуста</div>
-          <div className="empty-state__description">Добавляйте продукты, которые есть дома.</div>
-          <div className="empty-state__description">Они будут учитываться в меню и списке покупок.</div>
+          <div className="empty-state__title">{t("pantry.empty.title")}</div>
+          <div className="empty-state__description">{t("pantry.empty.description1")}</div>
+          <div className="empty-state__description">{t("pantry.empty.description2")}</div>
           <div style={{ marginTop: "16px", display: "flex", gap: "10px", flexWrap: "wrap", justifyContent: "center" }}>
             <button onClick={addStarterPantryItems} className="btn btn-primary" disabled={editingId !== null}>
-              Добавить несколько продуктов
+              {t("pantry.actions.addStarter")}
             </button>
             <Link href="/shopping-list" className="btn">
-              Открыть покупки
+              {t("pantry.actions.openShopping")}
             </Link>
           </div>
         </div>
       ) : visibleItems.length === 0 && editingId !== "new" ? (
         <div className="empty-state">
-          <div className="empty-state__title">Ничего не найдено</div>
+          <div className="empty-state__title">{t("pantry.empty.notFound")}</div>
         </div>
       ) : (
         <div className="pantry-cards">
@@ -491,7 +515,7 @@ export default function PantryPage() {
             <article className="pantry-card pantry-card--new">
               <div className="pantry-card__title">
                 <span className="pantry-card__emoji">➕</span>
-                <span>Добавление продукта</span>
+                <span>{t("pantry.editor.addTitle")}</span>
               </div>
               {renderEditorFields(draftItem, "new", "new")}
               <div className="pantry-card__actions">
@@ -500,10 +524,10 @@ export default function PantryPage() {
                   className="btn btn-primary"
                   disabled={!draftItem.name.trim() || draftItem.amount === "" || draftItem.amount <= 0}
                 >
-                  Сохранить
+                  {t("pantry.actions.save")}
                 </button>
                 <button onClick={cancelEdit} className="btn">
-                  Отмена
+                  {t("pantry.actions.cancel")}
                 </button>
               </div>
             </article>
@@ -520,7 +544,7 @@ export default function PantryPage() {
                   <>
                     <div className="pantry-card__title">
                       <span className="pantry-card__emoji">{cardEmoji}</span>
-                      <span>Редактирование</span>
+                      <span>{t("pantry.editor.editTitle")}</span>
                     </div>
                     {renderEditorFields(currentItem, `edit-${index}`, `edit-${index}`)}
                     <div className="pantry-card__actions">
@@ -529,10 +553,10 @@ export default function PantryPage() {
                         className="btn btn-primary"
                         disabled={!currentItem.name.trim() || currentItem.amount === "" || currentItem.amount <= 0}
                       >
-                        Сохранить
+                        {t("pantry.actions.save")}
                       </button>
                       <button onClick={cancelEdit} className="btn">
-                        Отмена
+                        {t("pantry.actions.cancel")}
                       </button>
                     </div>
                   </>
@@ -551,22 +575,24 @@ export default function PantryPage() {
                           className={`pantry-card__updated-dot${isUpdatedToday(item.updatedAt) ? " pantry-card__updated-dot--today" : ""}`}
                           aria-hidden="true"
                         />
-                        <span>Обновлено {formatUpdatedLabel(item.updatedAt)}</span>
+                        <span>
+                          {t("pantry.updated.label")} {formatUpdatedLabel(item.updatedAt, locale, t)}
+                        </span>
                       </div>
                       <div className="pantry-card__actions pantry-card__actions--compact">
                         <button
                           onClick={() => startEdit(index)}
                           className="btn pantry-card__icon-btn"
-                          aria-label={`Редактировать ${item.name}`}
-                          title="Редактировать"
+                          aria-label={t("pantry.actions.editItemAria", { name: item.name })}
+                          title={t("pantry.actions.edit")}
                         >
                           ✏️
                         </button>
                         <button
                           onClick={() => removePantryItem(index)}
                           className="btn pantry-card__icon-btn pantry-card__icon-btn--danger"
-                          aria-label={`Удалить ${item.name}`}
-                          title="Удалить"
+                          aria-label={t("pantry.actions.deleteItemAria", { name: item.name })}
+                          title={t("pantry.actions.delete")}
                         >
                           🗑
                         </button>
@@ -582,7 +608,7 @@ export default function PantryPage() {
 
 
       <div style={{ marginTop: "30px", fontSize: "14px", color: "var(--text-secondary)" }}>
-        <p>Сохранено продуктов: {pantry.length}</p>
+        <p>{t("pantry.savedCount", { count: pantry.length })}</p>
       </div>
     </section>
   );
