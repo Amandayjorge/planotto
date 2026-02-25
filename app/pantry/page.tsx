@@ -24,6 +24,19 @@ type SortMode = "name" | "amount" | "updatedAt";
 const PANTRY_STORAGE_KEY = "pantry";
 const VALID_UNITS = ["г", "кг", "мл", "л", "шт", "ч.л.", "ст.л.", "по вкусу"];
 const CATEGORY_DATALIST_ID = "pantry-category-options";
+const CATEGORY_FILTER_ALL = "__all__";
+const CATEGORY_FILTER_NONE = "__none__";
+const BASE_CATEGORIES = [
+  { name: "Овощи и фрукты", emoji: "🥦" },
+  { name: "Мясо и рыба", emoji: "🥩" },
+  { name: "Молочные продукты", emoji: "🧀" },
+  { name: "Выпечка и хлеб", emoji: "🥖" },
+  { name: "Бакалея", emoji: "🥫" },
+  { name: "Заморозка", emoji: "🧊" },
+  { name: "Напитки", emoji: "🧃" },
+  { name: "Снеки и сладости", emoji: "🍫" },
+  { name: "Специи и соусы", emoji: "🧂" },
+] as const;
 
 const normalizeCategory = (value: string): string => value.trim().replace(/\s+/g, " ");
 const nowIso = (): string => new Date().toISOString();
@@ -42,6 +55,42 @@ const normalizePantryItem = (raw: unknown): PantryItem | null => {
     category: normalizeCategory(typeof row.category === "string" ? row.category : ""),
     updatedAt: typeof row.updatedAt === "string" && row.updatedAt.trim() ? row.updatedAt : nowIso(),
   };
+};
+
+const getCategoryEmoji = (category: string): string => {
+  const normalized = normalizeCategory(category);
+  const found = BASE_CATEGORIES.find((item) => item.name.toLocaleLowerCase("ru-RU") === normalized.toLocaleLowerCase("ru-RU"));
+  return found?.emoji || "📦";
+};
+
+const getProductEmoji = (name: string, category: string): string => {
+  const value = name.trim().toLocaleLowerCase("ru-RU");
+  if (!value) return getCategoryEmoji(category);
+  if (value.includes("молок")) return "🥛";
+  if (value.includes("кофе")) return "☕";
+  if (value.includes("чай")) return "🍵";
+  if (value.includes("хлеб") || value.includes("булк")) return "🍞";
+  if (value.includes("сыр")) return "🧀";
+  if (value.includes("йогурт") || value.includes("кефир")) return "🥛";
+  if (value.includes("яйц")) return "🥚";
+  if (value.includes("куриц") || value.includes("мяс")) return "🍗";
+  if (value.includes("рыб") || value.includes("лосос")) return "🐟";
+  if (value.includes("яблок") || value.includes("банан") || value.includes("фрукт")) return "🍎";
+  if (value.includes("помидор") || value.includes("огур") || value.includes("овощ")) return "🥬";
+  if (value.includes("вода") || value.includes("сок") || value.includes("напит")) return "🧃";
+  return getCategoryEmoji(category);
+};
+
+const formatUpdatedLabel = (iso: string): string => {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "неизвестно";
+  const today = new Date();
+  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const targetStart = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const diffDays = Math.round((todayStart.getTime() - targetStart.getTime()) / 86400000);
+  if (diffDays === 0) return "сегодня";
+  if (diffDays === 1) return "вчера";
+  return targetStart.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric" });
 };
 
 export default function PantryPage() {
@@ -64,7 +113,7 @@ export default function PantryPage() {
   const [draftItem, setDraftItem] = useState<PantryDraftItem | null>(null);
   const [activeSuggestionField, setActiveSuggestionField] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState<string>(CATEGORY_FILTER_ALL);
   const [sortMode, setSortMode] = useState<SortMode>("updatedAt");
   const [productSuggestions, setProductSuggestions] = useState<string[]>(() => loadProductSuggestions());
 
@@ -190,15 +239,46 @@ export default function PantryPage() {
   };
 
   const normalizedSearch = searchQuery.trim().toLowerCase();
-  const categoryOptions = Array.from(
+  const existingCategories = Array.from(
     new Set(pantry.map((item) => normalizeCategory(item.category)).filter((category) => category.length > 0))
   ).sort((a, b) => a.localeCompare(b, "ru-RU", { sensitivity: "base" }));
+  const categoryOptions = Array.from(
+    new Set([
+      ...BASE_CATEGORIES.map((item) => item.name),
+      ...existingCategories,
+    ])
+  );
+  const baseCategorySet = new Set(BASE_CATEGORIES.map((item) => item.name.toLocaleLowerCase("ru-RU")));
+  const customCategoryChips = existingCategories.filter(
+    (category) => !baseCategorySet.has(category.toLocaleLowerCase("ru-RU"))
+  );
+  const categoryChips: Array<{ value: string; label: string; emoji?: string }> = [
+    { value: CATEGORY_FILTER_ALL, label: "Все" },
+    ...BASE_CATEGORIES.map((category) => ({
+      value: category.name,
+      label: category.name,
+      emoji: category.emoji,
+    })),
+    { value: CATEGORY_FILTER_NONE, label: "Без категории", emoji: "🏷️" },
+    ...customCategoryChips.map((category) => ({
+      value: category,
+      label: category,
+      emoji: getCategoryEmoji(category),
+    })),
+  ];
 
   const visibleItems = pantry
     .map((item, index) => ({ item, index }))
     .filter(({ item }) => {
       if (normalizedSearch && !item.name.toLowerCase().includes(normalizedSearch)) return false;
-      if (categoryFilter && item.category !== categoryFilter) return false;
+      if (categoryFilter === CATEGORY_FILTER_NONE && normalizeCategory(item.category).length > 0) return false;
+      if (
+        categoryFilter !== CATEGORY_FILTER_ALL &&
+        categoryFilter !== CATEGORY_FILTER_NONE &&
+        item.category !== categoryFilter
+      ) {
+        return false;
+      }
       return true;
     })
     .sort((a, b) => {
@@ -217,6 +297,83 @@ export default function PantryPage() {
       return a.item.name.localeCompare(b.item.name, "ru-RU", { sensitivity: "base" });
     });
 
+  const renderEditorFields = (currentItem: PantryDraftItem, suggestionKey: string, errorKey: string) => (
+    <>
+      <div className="pantry-name-input-wrap">
+        <input
+          type="text"
+          value={currentItem.name}
+          onChange={(e) => {
+            updateDraftItem("name", e.target.value);
+            setActiveSuggestionField(suggestionKey);
+          }}
+          onFocus={() => setActiveSuggestionField(suggestionKey)}
+          onBlur={() => {
+            setTimeout(() => {
+              setActiveSuggestionField((prev) => (prev === suggestionKey ? null : prev));
+            }, 120);
+          }}
+          placeholder="Название"
+          className="input"
+          style={{ borderColor: errors[errorKey] ? "var(--state-warning)" : undefined }}
+          autoFocus={editingId === suggestionKey}
+          autoComplete="off"
+        />
+        {activeSuggestionField === suggestionKey && (
+          <div className="pantry-suggestions">
+            {getSuggestions(currentItem.name).map((name) => (
+              <button
+                key={name}
+                type="button"
+                className="pantry-suggestion"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => {
+                  updateDraftItem("name", name);
+                  setActiveSuggestionField(null);
+                }}
+              >
+                {name}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+      {errors[errorKey] ? (
+        <div style={{ color: "var(--state-warning)", fontSize: "12px", marginTop: "4px" }}>{errors[errorKey]}</div>
+      ) : null}
+      <div className="pantry-card__editor-grid">
+        <input
+          type="number"
+          value={currentItem.amount === "" ? "" : currentItem.amount}
+          onChange={(e) => updateDraftItem("amount", e.target.value)}
+          placeholder="0"
+          step="0.1"
+          min="0"
+          className="input"
+        />
+        <select
+          value={currentItem.unit}
+          onChange={(e) => updateDraftItem("unit", e.target.value)}
+          className="input"
+        >
+          {VALID_UNITS.map((unit) => (
+            <option key={unit} value={unit}>
+              {unit}
+            </option>
+          ))}
+        </select>
+      </div>
+      <input
+        type="text"
+        value={currentItem.category}
+        onChange={(e) => updateDraftItem("category", e.target.value)}
+        placeholder="Категория (например: Овощи)"
+        list={CATEGORY_DATALIST_ID}
+        className="input"
+      />
+    </>
+  );
+
   return (
     <section className="card">
       <div style={{ marginBottom: "20px" }}>
@@ -233,13 +390,11 @@ export default function PantryPage() {
         Используется при планировании меню и формировании списка покупок.
       </p>
 
-      <div style={{ marginBottom: "20px", display: "flex", gap: "12px", flexWrap: "wrap" }}>
-        <div>
-          <button onClick={addPantryItem} className="btn btn-add" disabled={editingId !== null}>
-            + Добавить продукт
-          </button>
-        </div>
-        {pantry.length > 0 && (
+      <div className="pantry-toolbar">
+        <button onClick={addPantryItem} className="btn btn-add" disabled={editingId !== null}>
+          + Добавить продукт
+        </button>
+        {pantry.length > 0 ? (
           <input
             type="text"
             value={searchQuery}
@@ -248,22 +403,7 @@ export default function PantryPage() {
             className="input"
             style={{ maxWidth: "320px" }}
           />
-        )}
-        {categoryOptions.length > 0 && (
-          <select
-            className="input"
-            value={categoryFilter}
-            onChange={(e) => setCategoryFilter(e.target.value)}
-            style={{ maxWidth: "240px" }}
-          >
-            <option value="">Все категории</option>
-            {categoryOptions.map((category) => (
-              <option key={category} value={category}>
-                {category}
-              </option>
-            ))}
-          </select>
-        )}
+        ) : null}
         <select
           className="input"
           value={sortMode}
@@ -274,6 +414,20 @@ export default function PantryPage() {
           <option value="name">Сортировка: по названию</option>
           <option value="amount">Сортировка: по количеству</option>
         </select>
+      </div>
+
+      <div className="pantry-category-chips">
+        {categoryChips.map((chip) => (
+          <button
+            key={chip.value}
+            type="button"
+            className={`pantry-chip${categoryFilter === chip.value ? " pantry-chip--active" : ""}`}
+            onClick={() => setCategoryFilter(chip.value)}
+          >
+            {chip.emoji ? `${chip.emoji} ` : ""}
+            {chip.label}
+          </button>
+        ))}
       </div>
 
       {categoryOptions.length > 0 ? (
@@ -303,264 +457,84 @@ export default function PantryPage() {
           <div className="empty-state__title">Ничего не найдено</div>
         </div>
       ) : (
-        <div className="pantry-table">
-          <div className="pantry-table__header">
-            <div className="pantry-table__cell">Продукт</div>
-            <div className="pantry-table__cell">Количество</div>
-            <div className="pantry-table__cell">Единица</div>
-            <div className="pantry-table__cell">Категория</div>
-            <div className="pantry-table__cell">Действия</div>
-          </div>
-
+        <div className="pantry-cards">
           {editingId === "new" && draftItem && (
-            <div
-              className={`pantry-table__row${activeSuggestionField === "new" ? " pantry-table__row--suggestions-open" : ""}`}
-              style={{ backgroundColor: "var(--background-secondary)" }}
-            >
-              <div className="pantry-table__cell">
-                <div className="pantry-name-input-wrap">
-                  <input
-                    type="text"
-                    value={draftItem.name}
-                    onChange={(e) => {
-                      updateDraftItem("name", e.target.value);
-                      setActiveSuggestionField("new");
-                    }}
-                    onFocus={() => setActiveSuggestionField("new")}
-                    onBlur={() => {
-                      setTimeout(() => {
-                        setActiveSuggestionField((prev) => (prev === "new" ? null : prev));
-                      }, 120);
-                    }}
-                    placeholder="Название"
-                    className="input"
-                    style={{ borderColor: errors.new ? "var(--state-warning)" : undefined }}
-                    autoFocus
-                    autoComplete="off"
-                  />
-                  {activeSuggestionField === "new" && (
-                    <div className="pantry-suggestions">
-                      {getSuggestions(draftItem.name).map((name) => (
-                        <button
-                          key={name}
-                          type="button"
-                          className="pantry-suggestion"
-                          onMouseDown={(e) => e.preventDefault()}
-                          onClick={() => {
-                            updateDraftItem("name", name);
-                            setActiveSuggestionField(null);
-                          }}
-                        >
-                          {name}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                {errors.new && (
-                  <div style={{ color: "var(--state-warning)", fontSize: "12px", marginTop: "4px" }}>{errors.new}</div>
-                )}
+            <article className="pantry-card pantry-card--editing">
+              <div className="pantry-card__title">
+                <span className="pantry-card__emoji">✨</span>
+                <span>Новый продукт</span>
               </div>
-              <div className="pantry-table__cell">
-                <input
-                  type="number"
-                  value={draftItem.amount === "" ? "" : draftItem.amount}
-                  onChange={(e) => updateDraftItem("amount", e.target.value)}
-                  onFocus={() => {
-                    if (draftItem.amount === 0) updateDraftItem("amount", "");
-                  }}
-                  placeholder="0"
-                  step="0.1"
-                  min="0"
-                  className="input"
-                  style={{ textAlign: "center" }}
-                />
-              </div>
-              <div className="pantry-table__cell">
-                <select
-                  value={draftItem.unit}
-                  onChange={(e) => updateDraftItem("unit", e.target.value)}
-                  className="input"
-                  style={{ textAlign: "center" }}
+              {renderEditorFields(draftItem, "new", "new")}
+              <div className="pantry-card__actions">
+                <button
+                  onClick={saveEdit}
+                  className="btn btn-primary"
+                  disabled={!draftItem.name.trim() || draftItem.amount === "" || draftItem.amount <= 0}
                 >
-                  {VALID_UNITS.map((unit) => (
-                    <option key={unit} value={unit}>
-                      {unit}
-                    </option>
-                  ))}
-                </select>
+                  Сохранить
+                </button>
+                <button onClick={cancelEdit} className="btn">
+                  Отмена
+                </button>
               </div>
-              <div className="pantry-table__cell">
-                <input
-                  type="text"
-                  value={draftItem.category}
-                  onChange={(e) => updateDraftItem("category", e.target.value)}
-                  placeholder="Например: Овощи"
-                  list={CATEGORY_DATALIST_ID}
-                  className="input"
-                />
-              </div>
-              <div className="pantry-table__cell actions">
-                <div className="pantry-actions">
-                  <button
-                    onClick={saveEdit}
-                    className="btn btn-primary"
-                    style={{ padding: "4px 12px", fontSize: "12px" }}
-                    disabled={!draftItem.name.trim() || draftItem.amount === "" || draftItem.amount <= 0}
-                  >
-                    Сохранить
-                  </button>
-                  <button onClick={cancelEdit} className="btn" style={{ padding: "4px 12px", fontSize: "12px" }}>
-                    Отмена
-                  </button>
-                </div>
-              </div>
-            </div>
+            </article>
           )}
 
           {visibleItems.map(({ item, index }) => {
             const isEditing = editingId === `edit-${index}`;
             const currentItem = isEditing && draftItem ? draftItem : item;
+            const cardEmoji = getProductEmoji(item.name, item.category);
 
             return (
-              <div
-                key={index}
-                className={`pantry-table__row${activeSuggestionField === `edit-${index}` ? " pantry-table__row--suggestions-open" : ""}`}
-              >
-                <div className="pantry-table__cell">
-                  {isEditing ? (
-                    <>
-                      <div className="pantry-name-input-wrap">
-                        <input
-                          type="text"
-                          value={currentItem.name}
-                          onChange={(e) => {
-                            updateDraftItem("name", e.target.value);
-                            setActiveSuggestionField(`edit-${index}`);
-                          }}
-                          onFocus={() => setActiveSuggestionField(`edit-${index}`)}
-                          onBlur={() => {
-                            setTimeout(() => {
-                              setActiveSuggestionField((prev) => (prev === `edit-${index}` ? null : prev));
-                            }, 120);
-                          }}
-                          placeholder="Название"
-                          className="input"
-                          style={{ borderColor: errors[`edit-${index}`] ? "var(--state-warning)" : undefined }}
-                          autoFocus
-                          autoComplete="off"
-                        />
-                        {activeSuggestionField === `edit-${index}` && (
-                          <div className="pantry-suggestions">
-                            {getSuggestions(currentItem.name).map((name) => (
-                              <button
-                                key={name}
-                                type="button"
-                                className="pantry-suggestion"
-                                onMouseDown={(e) => e.preventDefault()}
-                                onClick={() => {
-                                  updateDraftItem("name", name);
-                                  setActiveSuggestionField(null);
-                                }}
-                              >
-                                {name}
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                      {errors[`edit-${index}`] && (
-                        <div style={{ color: "var(--state-warning)", fontSize: "12px", marginTop: "4px" }}>
-                          {errors[`edit-${index}`]}
-                        </div>
-                      )}
-                    </>
-                  ) : (
-                    <span>{item.name}</span>
-                  )}
-                </div>
-                <div className="pantry-table__cell">
-                  {isEditing ? (
-                    <input
-                      type="number"
-                      value={currentItem.amount === "" ? "" : currentItem.amount}
-                      onChange={(e) => updateDraftItem("amount", e.target.value)}
-                      onFocus={() => {
-                        if (currentItem.amount === 0) updateDraftItem("amount", "");
-                      }}
-                      placeholder="0"
-                      step="0.1"
-                      min="0"
-                      className="input"
-                      style={{ textAlign: "center" }}
-                    />
-                  ) : (
-                    <span>{item.amount}</span>
-                  )}
-                </div>
-                <div className="pantry-table__cell">
-                  {isEditing ? (
-                    <select
-                      value={currentItem.unit}
-                      onChange={(e) => updateDraftItem("unit", e.target.value)}
-                      className="input"
-                      style={{ textAlign: "center" }}
-                    >
-                      {VALID_UNITS.map((unit) => (
-                        <option key={unit} value={unit}>
-                          {unit}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <span>{item.unit}</span>
-                  )}
-                </div>
-                <div className="pantry-table__cell">
-                  {isEditing ? (
-                    <input
-                      type="text"
-                      value={currentItem.category}
-                      onChange={(e) => updateDraftItem("category", e.target.value)}
-                      placeholder="Например: Овощи"
-                      list={CATEGORY_DATALIST_ID}
-                      className="input"
-                    />
-                  ) : (
-                    <span>{item.category || "—"}</span>
-                  )}
-                </div>
-                <div className="pantry-table__cell actions">
-                  {isEditing ? (
-                    <div className="pantry-actions">
+              <article key={index} className={`pantry-card${isEditing ? " pantry-card--editing" : ""}`}>
+                {isEditing ? (
+                  <>
+                    <div className="pantry-card__title">
+                      <span className="pantry-card__emoji">{cardEmoji}</span>
+                      <span>Редактирование</span>
+                    </div>
+                    {renderEditorFields(currentItem, `edit-${index}`, `edit-${index}`)}
+                    <div className="pantry-card__actions">
                       <button
                         onClick={saveEdit}
                         className="btn btn-primary"
-                        style={{ padding: "4px 12px", fontSize: "12px" }}
                         disabled={!currentItem.name.trim() || currentItem.amount === "" || currentItem.amount <= 0}
                       >
                         Сохранить
                       </button>
-                      <button onClick={cancelEdit} className="btn" style={{ padding: "4px 12px", fontSize: "12px" }}>
+                      <button onClick={cancelEdit} className="btn">
                         Отмена
                       </button>
                     </div>
-                  ) : (
-                    <div className="pantry-actions">
-                      <button onClick={() => startEdit(index)} className="btn" style={{ padding: "4px 12px", fontSize: "12px" }}>
+                  </>
+                ) : (
+                  <>
+                    <div className="pantry-card__header">
+                      <div className="pantry-card__title">
+                        <span className="pantry-card__emoji">{cardEmoji}</span>
+                        <span>{item.name}</span>
+                      </div>
+                      {item.category ? (
+                        <span className="pantry-card__category">
+                          {getCategoryEmoji(item.category)} {item.category}
+                        </span>
+                      ) : null}
+                    </div>
+                    <div className="pantry-card__amount">
+                      {item.amount} {item.unit}
+                    </div>
+                    <div className="pantry-card__updated">Обновлено {formatUpdatedLabel(item.updatedAt)}</div>
+                    <div className="pantry-card__actions">
+                      <button onClick={() => startEdit(index)} className="btn">
                         Редактировать
                       </button>
-                      <button
-                        onClick={() => removePantryItem(index)}
-                        className="btn btn-danger"
-                        style={{ padding: "4px 12px", fontSize: "12px" }}
-                      >
+                      <button onClick={() => removePantryItem(index)} className="btn btn-danger">
                         Удалить
                       </button>
                     </div>
-                  )}
-                </div>
-              </div>
+                  </>
+                )}
+              </article>
             );
           })}
         </div>

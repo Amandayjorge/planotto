@@ -581,6 +581,131 @@ body {
   text-align: center;
 }
 
+.pantry-toolbar {
+  margin-bottom: 12px;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.pantry-category-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.pantry-chip {
+  border: 1px solid rgba(149, 128, 92, 0.24);
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(255, 248, 236, 0.9), rgba(248, 238, 220, 0.9));
+  color: var(--text-secondary);
+  padding: 6px 12px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.pantry-chip:hover {
+  border-color: rgba(149, 128, 92, 0.38);
+}
+
+.pantry-chip--active {
+  background: linear-gradient(180deg, #9aae8f, #8ca081);
+  border-color: #8ca081;
+  color: #fff;
+}
+
+.pantry-cards {
+  display: grid;
+  gap: 12px;
+}
+
+.pantry-card {
+  position: relative;
+  overflow: visible;
+  border: 1px solid rgba(149, 128, 92, 0.18);
+  border-radius: 14px;
+  padding: 14px;
+  background:
+    radial-gradient(160% 140% at 0% 0%, rgba(255, 251, 243, 0.95) 0%, rgba(246, 235, 214, 0.95) 55%, rgba(240, 228, 205, 0.95) 100%),
+    repeating-linear-gradient(135deg, rgba(130, 102, 68, 0.03) 0 2px, rgba(255, 255, 255, 0) 2px 6px);
+  box-shadow: 0 8px 18px rgba(70, 54, 38, 0.08);
+}
+
+.pantry-card--editing {
+  border-color: rgba(143, 163, 138, 0.45);
+}
+
+.pantry-card__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.pantry-card__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 19px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.pantry-card__emoji {
+  font-size: 22px;
+  line-height: 1;
+}
+
+.pantry-card__category {
+  font-size: 12px;
+  color: var(--text-secondary);
+  border: 1px solid rgba(149, 128, 92, 0.2);
+  border-radius: 999px;
+  padding: 3px 8px;
+  background: rgba(255, 255, 255, 0.62);
+}
+
+.pantry-card__amount {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.pantry-card__updated {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.pantry-card__actions {
+  margin-top: 12px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.pantry-card__editor-grid {
+  margin-top: 8px;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 1fr 1fr;
+}
+
+@media (max-width: 640px) {
+  .pantry-card__header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .pantry-card__editor-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .btn-danger {
   background: var(--state-warning);
   color: var(--background-primary);
