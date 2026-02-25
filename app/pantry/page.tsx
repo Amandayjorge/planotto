@@ -66,7 +66,7 @@ const getCategoryEmoji = (category: string): string => {
 const getProductEmoji = (name: string, category: string): string => {
   const value = name.trim().toLocaleLowerCase("ru-RU");
   if (!value) return getCategoryEmoji(category);
-  if (value.includes("молок")) return "🥛";
+  if (value.includes("молок") || value.startsWith("мол")) return "🥛";
   if (value.includes("кофе")) return "☕";
   if (value.includes("чай")) return "🍵";
   if (value.includes("хлеб") || value.includes("булк")) return "🍞";
