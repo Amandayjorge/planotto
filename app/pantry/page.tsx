@@ -238,9 +238,6 @@ export default function PantryPage() {
           <button onClick={addPantryItem} className="btn btn-add" disabled={editingId !== null}>
             + Добавить продукт
           </button>
-          <div style={{ marginTop: "6px", fontSize: "12px", color: "var(--text-tertiary)" }}>
-            Продукты, остатки, заготовки, заморозка
-          </div>
         </div>
         {pantry.length > 0 && (
           <input
