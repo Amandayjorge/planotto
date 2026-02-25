@@ -470,10 +470,10 @@ export default function PantryPage() {
       ) : (
         <div className="pantry-cards">
           {editingId === "new" && draftItem && (
-            <article className="pantry-card pantry-card--editing">
+            <article className="pantry-card pantry-card--new">
               <div className="pantry-card__title">
-                <span className="pantry-card__emoji">✨</span>
-                <span>Новый продукт</span>
+                <span className="pantry-card__emoji">➕</span>
+                <span>Добавление продукта</span>
               </div>
               {renderEditorFields(draftItem, "new", "new")}
               <div className="pantry-card__actions">
