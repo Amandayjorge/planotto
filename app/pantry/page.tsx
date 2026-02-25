@@ -8,16 +8,41 @@ interface PantryItem {
   name: string;
   amount: number;
   unit: string;
+  category: string;
+  updatedAt: string;
 }
 
 interface PantryDraftItem {
   name: string;
   amount: number | "";
   unit: string;
+  category: string;
 }
+
+type SortMode = "name" | "amount" | "updatedAt";
 
 const PANTRY_STORAGE_KEY = "pantry";
 const VALID_UNITS = ["г", "кг", "мл", "л", "шт", "ч.л.", "ст.л.", "по вкусу"];
+const CATEGORY_DATALIST_ID = "pantry-category-options";
+
+const normalizeCategory = (value: string): string => value.trim().replace(/\s+/g, " ");
+const nowIso = (): string => new Date().toISOString();
+
+const normalizePantryItem = (raw: unknown): PantryItem | null => {
+  if (!raw || typeof raw !== "object") return null;
+  const row = raw as Partial<PantryItem>;
+  const name = typeof row.name === "string" ? row.name.trim() : "";
+  const amount = Number(row.amount);
+  const unit = typeof row.unit === "string" ? row.unit : "";
+  if (!name || !Number.isFinite(amount) || amount <= 0 || !unit) return null;
+  return {
+    name,
+    amount,
+    unit,
+    category: normalizeCategory(typeof row.category === "string" ? row.category : ""),
+    updatedAt: typeof row.updatedAt === "string" && row.updatedAt.trim() ? row.updatedAt : nowIso(),
+  };
+};
 
 export default function PantryPage() {
   const [pantry, setPantry] = useState<PantryItem[]>(() => {
@@ -26,7 +51,10 @@ export default function PantryPage() {
     if (!storedPantry) return [];
     try {
       const parsed = JSON.parse(storedPantry);
-      return Array.isArray(parsed) ? parsed : [];
+      if (!Array.isArray(parsed)) return [];
+      return parsed
+        .map((item) => normalizePantryItem(item))
+        .filter((item): item is PantryItem => Boolean(item));
     } catch {
       return [];
     }
@@ -36,6 +64,8 @@ export default function PantryPage() {
   const [draftItem, setDraftItem] = useState<PantryDraftItem | null>(null);
   const [activeSuggestionField, setActiveSuggestionField] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("");
+  const [sortMode, setSortMode] = useState<SortMode>("updatedAt");
   const [productSuggestions, setProductSuggestions] = useState<string[]>(() => loadProductSuggestions());
 
   useEffect(() => {
@@ -65,6 +95,7 @@ export default function PantryPage() {
       name: pantry[index].name,
       amount: pantry[index].amount > 0 ? pantry[index].amount : "",
       unit: pantry[index].unit,
+      category: pantry[index].category || "",
     });
   };
 
@@ -90,6 +121,8 @@ export default function PantryPage() {
       name: draftItem.name.trim(),
       amount: Number(draftItem.amount),
       unit: draftItem.unit,
+      category: normalizeCategory(draftItem.category),
+      updatedAt: nowIso(),
     };
 
     upsertSuggestions(payload.name);
@@ -105,7 +138,7 @@ export default function PantryPage() {
     setDraftItem(null);
   };
 
-  const updateDraftItem = (field: "name" | "amount" | "unit", value: string | number) => {
+  const updateDraftItem = (field: "name" | "amount" | "unit" | "category", value: string | number) => {
     if (!draftItem) return;
     const updated = { ...draftItem };
 
@@ -120,6 +153,7 @@ export default function PantryPage() {
       }
     }
     if (field === "unit") updated.unit = String(value);
+    if (field === "category") updated.category = String(value);
 
     setDraftItem(updated);
     validateItem(updated, editingId || undefined);
@@ -131,16 +165,16 @@ export default function PantryPage() {
 
   const addPantryItem = () => {
     setEditingId("new");
-    setDraftItem({ name: "", amount: "", unit: VALID_UNITS[0] });
+    setDraftItem({ name: "", amount: "", unit: VALID_UNITS[0], category: "" });
     setActiveSuggestionField("new");
   };
 
   const addStarterPantryItems = () => {
     if (editingId !== null) return;
     const starterItems: PantryItem[] = [
-      { name: "Молоко", amount: 1, unit: "л" },
-      { name: "Яйца", amount: 10, unit: "шт" },
-      { name: "Хлеб", amount: 1, unit: "шт" },
+      { name: "Молоко", amount: 1, unit: "л", category: "", updatedAt: nowIso() },
+      { name: "Яйца", amount: 10, unit: "шт", category: "", updatedAt: nowIso() },
+      { name: "Хлеб", amount: 1, unit: "шт", category: "", updatedAt: nowIso() },
     ];
     setPantry((prev) => [...prev, ...starterItems]);
     appendProductSuggestions(starterItems.map((item) => item.name));
@@ -156,9 +190,32 @@ export default function PantryPage() {
   };
 
   const normalizedSearch = searchQuery.trim().toLowerCase();
+  const categoryOptions = Array.from(
+    new Set(pantry.map((item) => normalizeCategory(item.category)).filter((category) => category.length > 0))
+  ).sort((a, b) => a.localeCompare(b, "ru-RU", { sensitivity: "base" }));
+
   const visibleItems = pantry
     .map((item, index) => ({ item, index }))
-    .filter(({ item }) => !normalizedSearch || item.name.toLowerCase().includes(normalizedSearch));
+    .filter(({ item }) => {
+      if (normalizedSearch && !item.name.toLowerCase().includes(normalizedSearch)) return false;
+      if (categoryFilter && item.category !== categoryFilter) return false;
+      return true;
+    })
+    .sort((a, b) => {
+      if (sortMode === "name") {
+        return a.item.name.localeCompare(b.item.name, "ru-RU", { sensitivity: "base" });
+      }
+      if (sortMode === "amount") {
+        if (b.item.amount !== a.item.amount) return b.item.amount - a.item.amount;
+        return a.item.name.localeCompare(b.item.name, "ru-RU", { sensitivity: "base" });
+      }
+      const aTime = Date.parse(a.item.updatedAt || "");
+      const bTime = Date.parse(b.item.updatedAt || "");
+      const safeATime = Number.isFinite(aTime) ? aTime : 0;
+      const safeBTime = Number.isFinite(bTime) ? bTime : 0;
+      if (safeBTime !== safeATime) return safeBTime - safeATime;
+      return a.item.name.localeCompare(b.item.name, "ru-RU", { sensitivity: "base" });
+    });
 
   return (
     <section className="card">
@@ -195,7 +252,40 @@ export default function PantryPage() {
             style={{ maxWidth: "320px" }}
           />
         )}
+        {categoryOptions.length > 0 && (
+          <select
+            className="input"
+            value={categoryFilter}
+            onChange={(e) => setCategoryFilter(e.target.value)}
+            style={{ maxWidth: "240px" }}
+          >
+            <option value="">Все категории</option>
+            {categoryOptions.map((category) => (
+              <option key={category} value={category}>
+                {category}
+              </option>
+            ))}
+          </select>
+        )}
+        <select
+          className="input"
+          value={sortMode}
+          onChange={(e) => setSortMode(e.target.value as SortMode)}
+          style={{ maxWidth: "260px" }}
+        >
+          <option value="updatedAt">Сортировка: по дате обновления</option>
+          <option value="name">Сортировка: по названию</option>
+          <option value="amount">Сортировка: по количеству</option>
+        </select>
       </div>
+
+      {categoryOptions.length > 0 ? (
+        <datalist id={CATEGORY_DATALIST_ID}>
+          {categoryOptions.map((category) => (
+            <option key={category} value={category} />
+          ))}
+        </datalist>
+      ) : null}
 
       {pantry.length === 0 && editingId !== "new" ? (
         <div className="empty-state">
@@ -221,6 +311,7 @@ export default function PantryPage() {
             <div className="pantry-table__cell">Продукт</div>
             <div className="pantry-table__cell">Количество</div>
             <div className="pantry-table__cell">Единица</div>
+            <div className="pantry-table__cell">Категория</div>
             <div className="pantry-table__cell">Действия</div>
           </div>
 
@@ -301,6 +392,16 @@ export default function PantryPage() {
                     </option>
                   ))}
                 </select>
+              </div>
+              <div className="pantry-table__cell">
+                <input
+                  type="text"
+                  value={draftItem.category}
+                  onChange={(e) => updateDraftItem("category", e.target.value)}
+                  placeholder="Например: Овощи"
+                  list={CATEGORY_DATALIST_ID}
+                  className="input"
+                />
               </div>
               <div className="pantry-table__cell actions">
                 <div className="pantry-actions">
@@ -416,6 +517,20 @@ export default function PantryPage() {
                     </select>
                   ) : (
                     <span>{item.unit}</span>
+                  )}
+                </div>
+                <div className="pantry-table__cell">
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      value={currentItem.category}
+                      onChange={(e) => updateDraftItem("category", e.target.value)}
+                      placeholder="Например: Овощи"
+                      list={CATEGORY_DATALIST_ID}
+                      className="input"
+                    />
+                  ) : (
+                    <span>{item.category || "—"}</span>
                   )}
                 </div>
                 <div className="pantry-table__cell actions">
