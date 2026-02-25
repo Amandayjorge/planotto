@@ -104,6 +104,15 @@ const isUpdatedToday = (iso: string): boolean => {
   );
 };
 
+const getProductWord = (count: number): string => {
+  const abs = Math.abs(count) % 100;
+  const tail = abs % 10;
+  if (abs > 10 && abs < 20) return "продуктов";
+  if (tail === 1) return "продукт";
+  if (tail >= 2 && tail <= 4) return "продукта";
+  return "продуктов";
+};
+
 export default function PantryPage() {
   const [pantry, setPantry] = useState<PantryItem[]>(() => {
     if (typeof window === "undefined") return [];
@@ -308,6 +317,11 @@ export default function PantryPage() {
       return a.item.name.localeCompare(b.item.name, "ru-RU", { sensitivity: "base" });
     });
 
+  const pantryCountLabel =
+    pantry.length < 5
+      ? `В кладовке ${pantry.length} ${getProductWord(pantry.length)}`
+      : `${pantry.length} ${getProductWord(pantry.length)} в наличии`;
+
   const renderEditorFields = (currentItem: PantryDraftItem, suggestionKey: string, errorKey: string) => (
     <>
       <div className="pantry-name-input-wrap">
@@ -397,8 +411,9 @@ export default function PantryPage() {
         Кладовка
       </h1>
 
-      <p style={{ marginBottom: "16px", color: "var(--text-secondary)" }}>
-        Используется при планировании меню и формировании списка покупок.
+      <p className="pantry-count-label">
+        <span aria-hidden="true">📦</span>
+        <span>{pantryCountLabel}</span>
       </p>
 
       <div className="pantry-toolbar">
@@ -520,34 +535,39 @@ export default function PantryPage() {
                   </>
                 ) : (
                   <>
-                    <div className="pantry-card__header">
-                      <div className="pantry-card__title">
-                        <span className="pantry-card__emoji">{cardEmoji}</span>
-                        <span>{item.name}</span>
-                      </div>
-                      {item.category ? (
-                        <span className="pantry-card__category">
-                          {getCategoryEmoji(item.category)} {item.category}
-                        </span>
-                      ) : null}
+                    <div className="pantry-card__title">
+                      <span className="pantry-card__emoji">{cardEmoji}</span>
+                      <span>{item.name}</span>
                     </div>
                     <div className="pantry-card__amount">
                       {item.amount} {item.unit}
                     </div>
-                    <div className="pantry-card__updated">
-                      <span
-                        className={`pantry-card__updated-dot${isUpdatedToday(item.updatedAt) ? " pantry-card__updated-dot--today" : ""}`}
-                        aria-hidden="true"
-                      />
-                      <span>Обновлено {formatUpdatedLabel(item.updatedAt)}</span>
-                    </div>
-                    <div className="pantry-card__actions">
-                      <button onClick={() => startEdit(index)} className="btn">
-                        Редактировать
-                      </button>
-                      <button onClick={() => removePantryItem(index)} className="btn pantry-card__delete-btn">
-                        🗑 Удалить
-                      </button>
+                    <div className="pantry-card__meta-row">
+                      <div className="pantry-card__updated">
+                        <span
+                          className={`pantry-card__updated-dot${isUpdatedToday(item.updatedAt) ? " pantry-card__updated-dot--today" : ""}`}
+                          aria-hidden="true"
+                        />
+                        <span>Обновлено {formatUpdatedLabel(item.updatedAt)}</span>
+                      </div>
+                      <div className="pantry-card__actions pantry-card__actions--compact">
+                        <button
+                          onClick={() => startEdit(index)}
+                          className="btn pantry-card__icon-btn"
+                          aria-label={`Редактировать ${item.name}`}
+                          title="Редактировать"
+                        >
+                          ✏️
+                        </button>
+                        <button
+                          onClick={() => removePantryItem(index)}
+                          className="btn pantry-card__icon-btn pantry-card__icon-btn--danger"
+                          aria-label={`Удалить ${item.name}`}
+                          title="Удалить"
+                        >
+                          🗑
+                        </button>
+                      </div>
                     </div>
                   </>
                 )}
