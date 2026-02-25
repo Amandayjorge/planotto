@@ -10,6 +10,12 @@ interface PantryItem {
   unit: string;
 }
 
+interface PantryDraftItem {
+  name: string;
+  amount: number | "";
+  unit: string;
+}
+
 const PANTRY_STORAGE_KEY = "pantry";
 const VALID_UNITS = ["г", "кг", "мл", "л", "шт", "ч.л.", "ст.л.", "по вкусу"];
 
@@ -27,7 +33,7 @@ export default function PantryPage() {
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [draftItem, setDraftItem] = useState<PantryItem | null>(null);
+  const [draftItem, setDraftItem] = useState<PantryDraftItem | null>(null);
   const [activeSuggestionField, setActiveSuggestionField] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [productSuggestions, setProductSuggestions] = useState<string[]>(() => loadProductSuggestions());
@@ -36,15 +42,17 @@ export default function PantryPage() {
     localStorage.setItem(PANTRY_STORAGE_KEY, JSON.stringify(pantry));
   }, [pantry]);
 
-  const validateItem = (item: PantryItem, index?: string): boolean => {
+  const validateItem = (item: PantryDraftItem, index?: string): boolean => {
     const newErrors = { ...errors };
     const key = index || "new";
     delete newErrors[key];
 
     if (!item.name.trim()) {
       newErrors[key] = "Название не может быть пустым";
-    } else if (item.amount < 0) {
-      newErrors[key] = "Количество не может быть отрицательным";
+    } else if (item.amount === "") {
+      newErrors[key] = "Введите количество";
+    } else if (!Number.isFinite(item.amount) || item.amount <= 0) {
+      newErrors[key] = "Количество должно быть больше 0";
     }
 
     setErrors(newErrors);
@@ -53,7 +61,11 @@ export default function PantryPage() {
 
   const startEdit = (index: number) => {
     setEditingId(`edit-${index}`);
-    setDraftItem({ ...pantry[index] });
+    setDraftItem({
+      name: pantry[index].name,
+      amount: pantry[index].amount > 0 ? pantry[index].amount : "",
+      unit: pantry[index].unit,
+    });
   };
 
   const cancelEdit = () => {
@@ -74,13 +86,19 @@ export default function PantryPage() {
     if (!draftItem || !editingId) return;
     if (!validateItem(draftItem, editingId)) return;
 
-    upsertSuggestions(draftItem.name);
+    const payload: PantryItem = {
+      name: draftItem.name.trim(),
+      amount: Number(draftItem.amount),
+      unit: draftItem.unit,
+    };
+
+    upsertSuggestions(payload.name);
 
     if (editingId === "new") {
-      setPantry((prev) => [...prev, draftItem]);
+      setPantry((prev) => [...prev, payload]);
     } else {
       const index = Number(editingId.replace("edit-", ""));
-      setPantry((prev) => prev.map((item, i) => (i === index ? draftItem : item)));
+      setPantry((prev) => prev.map((item, i) => (i === index ? payload : item)));
     }
 
     setEditingId(null);
@@ -92,7 +110,15 @@ export default function PantryPage() {
     const updated = { ...draftItem };
 
     if (field === "name") updated.name = String(value);
-    if (field === "amount") updated.amount = parseFloat(String(value)) || 0;
+    if (field === "amount") {
+      const raw = String(value).trim();
+      if (!raw) {
+        updated.amount = "";
+      } else {
+        const parsed = Number(raw);
+        updated.amount = Number.isFinite(parsed) ? parsed : "";
+      }
+    }
     if (field === "unit") updated.unit = String(value);
 
     setDraftItem(updated);
@@ -105,7 +131,7 @@ export default function PantryPage() {
 
   const addPantryItem = () => {
     setEditingId("new");
-    setDraftItem({ name: "", amount: 0, unit: VALID_UNITS[0] });
+    setDraftItem({ name: "", amount: "", unit: VALID_UNITS[0] });
     setActiveSuggestionField("new");
   };
 
@@ -250,8 +276,11 @@ export default function PantryPage() {
               <div className="pantry-table__cell">
                 <input
                   type="number"
-                  value={draftItem.amount}
+                  value={draftItem.amount === "" ? "" : draftItem.amount}
                   onChange={(e) => updateDraftItem("amount", e.target.value)}
+                  onFocus={() => {
+                    if (draftItem.amount === 0) updateDraftItem("amount", "");
+                  }}
                   placeholder="0"
                   step="0.1"
                   min="0"
@@ -279,7 +308,7 @@ export default function PantryPage() {
                     onClick={saveEdit}
                     className="btn btn-primary"
                     style={{ padding: "4px 12px", fontSize: "12px" }}
-                    disabled={!draftItem.name.trim()}
+                    disabled={!draftItem.name.trim() || draftItem.amount === "" || draftItem.amount <= 0}
                   >
                     Сохранить
                   </button>
@@ -356,8 +385,11 @@ export default function PantryPage() {
                   {isEditing ? (
                     <input
                       type="number"
-                      value={currentItem.amount}
+                      value={currentItem.amount === "" ? "" : currentItem.amount}
                       onChange={(e) => updateDraftItem("amount", e.target.value)}
+                      onFocus={() => {
+                        if (currentItem.amount === 0) updateDraftItem("amount", "");
+                      }}
                       placeholder="0"
                       step="0.1"
                       min="0"
@@ -393,7 +425,7 @@ export default function PantryPage() {
                         onClick={saveEdit}
                         className="btn btn-primary"
                         style={{ padding: "4px 12px", fontSize: "12px" }}
-                        disabled={!currentItem.name.trim()}
+                        disabled={!currentItem.name.trim() || currentItem.amount === "" || currentItem.amount <= 0}
                       >
                         Сохранить
                       </button>
