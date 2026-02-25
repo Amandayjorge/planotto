@@ -65,6 +65,29 @@ const createDefaultMealSlots = (): MealSlotSetting[] =>
 
 const normalizeMealSlotName = (value: string): string => value.trim().replace(/\s+/g, " ");
 const normalizeMenuProfileName = (value: string): string => value.trim().replace(/\s+/g, " ");
+const parseItemsList = (raw: string): string[] => {
+  const seen = new Set<string>();
+  const items: string[] = [];
+  for (const chunk of raw.split(/[,\n;]+/)) {
+    const value = chunk.trim();
+    if (!value) continue;
+    const key = value.toLocaleLowerCase("ru-RU");
+    if (seen.has(key)) continue;
+    seen.add(key);
+    items.push(value);
+  }
+  return items;
+};
+
+const resolveUserMetaValue = (
+  metadata: Record<string, unknown> | undefined,
+  key: string,
+  fallback = ""
+): string => {
+  const raw = metadata?.[key];
+  if (typeof raw === "string" && raw.trim()) return raw.trim();
+  return fallback;
+};
 
 const parseMealSlots = (raw: string | null): MealSlotSetting[] | null => {
   if (!raw) return null;
@@ -1687,7 +1710,35 @@ function MenuPageContent() {
         .filter((item) => item.prefer)
         .map((item) => item.name)
         .join(", ");
-      const composedConstraints = [prompt.trim(), prioritizedProducts ? `Активные продукты: ${prioritizedProducts}.` : ""]
+      let allergiesConstraint = "";
+      let dislikesConstraint = "";
+      if (isSupabaseConfigured()) {
+        try {
+          const supabase = getSupabaseClient();
+          const { data } = await supabase.auth.getUser();
+          const metadata = (data.user?.user_metadata || {}) as Record<string, unknown>;
+          const allergies = parseItemsList(resolveUserMetaValue(metadata, "allergies", ""));
+          const dislikes = parseItemsList(resolveUserMetaValue(metadata, "dislikes", ""));
+          if (allergies.length > 0) {
+            allergiesConstraint = `Аллергии и строгие ограничения: ${allergies.join(", ")}. Никогда не использовать эти продукты.`;
+          }
+          if (dislikes.length > 0) {
+            dislikesConstraint = `Не люблю продукты: ${dislikes.join(", ")}. Эти продукты предлагать реже.`;
+          }
+        } catch {
+          // ignore profile metadata read errors for AI hint flow
+        }
+      }
+      const pantryConstraint = pantry.length > 0
+        ? `Кладовка: использовать в приоритете продукты, которые уже есть дома.`
+        : "";
+      const composedConstraints = [
+        prompt.trim(),
+        prioritizedProducts ? `Активные продукты: ${prioritizedProducts}.` : "",
+        allergiesConstraint,
+        dislikesConstraint,
+        pantryConstraint,
+      ]
         .filter(Boolean)
         .join(" ");
 
@@ -1713,7 +1764,7 @@ function MenuPageContent() {
         })
       );
     }
-  }, [activeProducts, cellPeopleCount, periodDays, recipes]);
+  }, [activeProducts, cellPeopleCount, pantry.length, periodDays, recipes]);
 
   const ensureArray = (items: MenuItem | MenuItem[] | undefined): MenuItem[] => {
     if (!items) return [];

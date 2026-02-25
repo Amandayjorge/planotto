@@ -488,6 +488,10 @@ export default function AuthPage() {
             <div style={{ fontSize: "15px", fontWeight: 700, color: "var(--text-primary)" }}>
               Предпочтения <span style={{ fontWeight: 400, color: "var(--text-tertiary)" }}>(если реально работают)</span>
             </div>
+            <div style={{ fontSize: "12px", color: "var(--text-tertiary)", display: "grid", gap: "3px" }}>
+              <div>Аллергии и строгие ограничения: эти продукты никогда не используются в рекомендациях и автоподборе меню.</div>
+              <div>Не люблю продукты: эти продукты предлагаются реже и отмечаются в рекомендациях.</div>
+            </div>
             <label style={{ display: "grid", gap: "6px" }}>
               Тип питания
               <select className="input" value={profileDiet} onChange={(e) => setProfileDiet(e.target.value)}>

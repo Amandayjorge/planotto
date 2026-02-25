@@ -86,6 +86,27 @@ function normalizeMatchText(value: string): string {
     .trim();
 }
 
+function parseItemsList(raw: string): string[] {
+  const seen = new Set<string>();
+  const items: string[] = [];
+  for (const chunk of raw.split(/[,\n;]+/)) {
+    const value = chunk.trim();
+    if (!value) continue;
+    const key = value.toLocaleLowerCase("ru-RU");
+    if (seen.has(key)) continue;
+    seen.add(key);
+    items.push(value);
+  }
+  return items;
+}
+
+function resolveUserMetaValue(user: User | null | undefined, key: string, fallback = ""): string {
+  const metadata = (user?.user_metadata || {}) as Record<string, unknown>;
+  const raw = metadata[key];
+  if (typeof raw === "string" && raw.trim()) return raw.trim();
+  return fallback;
+}
+
 function isValidDateKey(raw: unknown): raw is string {
   return typeof raw === "string" && /^\d{4}-\d{2}-\d{2}$/.test(raw);
 }
@@ -348,6 +369,8 @@ function RecipesPageContent() {
   const [currentUserName, setCurrentUserName] = useState<string | null>(null);
   const [currentUserAvatar, setCurrentUserAvatar] = useState<string | null>(null);
   const [currentUserFrame, setCurrentUserFrame] = useState<string | null>(null);
+  const [profileAllergiesList, setProfileAllergiesList] = useState<string[]>([]);
+  const [profileDislikesList, setProfileDislikesList] = useState<string[]>([]);
   const [actionMessage, setActionMessage] = useState("");
   const [pendingCopyRecipeId, setPendingCopyRecipeId] = useState<string | null>(null);
   const [mineSyncVersion, setMineSyncVersion] = useState(0);
@@ -360,6 +383,7 @@ function RecipesPageContent() {
   const [activeProductNames, setActiveProductNames] = useState<string[]>([]);
   const [pantryProductNames, setPantryProductNames] = useState<string[]>([]);
   const [openActiveMatchesRecipeId, setOpenActiveMatchesRecipeId] = useState<string | null>(null);
+  const [openDislikeRecipeId, setOpenDislikeRecipeId] = useState<string | null>(null);
 
   const importedForUser = useRef<string | null>(null);
   const addedToastTimerRef = useRef<number | null>(null);
@@ -416,6 +440,8 @@ function RecipesPageContent() {
 
   useEffect(() => {
     if (!isSupabaseConfigured()) {
+      setProfileAllergiesList([]);
+      setProfileDislikesList([]);
       refreshRecipes(viewMode, null);
       return;
     }
@@ -428,6 +454,8 @@ function RecipesPageContent() {
       setCurrentUserName(resolveUserName(data.user));
       setCurrentUserAvatar(resolveUserAvatar(data.user));
       setCurrentUserFrame(resolveUserFrame(data.user));
+      setProfileAllergiesList(parseItemsList(resolveUserMetaValue(data.user, "allergies", "")));
+      setProfileDislikesList(parseItemsList(resolveUserMetaValue(data.user, "dislikes", "")));
     });
 
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -436,6 +464,8 @@ function RecipesPageContent() {
       setCurrentUserName(resolveUserName(session?.user));
       setCurrentUserAvatar(resolveUserAvatar(session?.user));
       setCurrentUserFrame(resolveUserFrame(session?.user));
+      setProfileAllergiesList(parseItemsList(resolveUserMetaValue(session?.user, "allergies", "")));
+      setProfileDislikesList(parseItemsList(resolveUserMetaValue(session?.user, "dislikes", "")));
       importedForUser.current = null;
     });
 
@@ -657,6 +687,45 @@ function RecipesPageContent() {
     return map;
   }, [activeProductNames, recipes]);
 
+  const recipePreferenceMatchMap = useMemo(() => {
+    const allergyNames = profileAllergiesList.filter((name) => normalizeMatchText(name).length > 0);
+    const dislikeNames = profileDislikesList.filter((name) => normalizeMatchText(name).length > 0);
+    const map = new Map<
+      string,
+      {
+        allergyCount: number;
+        dislikeCount: number;
+        allergyMatches: string[];
+        dislikeMatches: string[];
+        topDislikes: string[];
+        extraDislikes: number;
+      }
+    >();
+
+    recipes.forEach((recipe) => {
+      const ingredientNames = (recipe.ingredients || [])
+        .map((ingredient) => normalizeMatchText(ingredient.name || ""))
+        .filter(Boolean);
+      const allergyMatches = allergyNames.filter((productName) =>
+        recipeHasProductMatch(ingredientNames, productName)
+      );
+      const dislikeMatches = dislikeNames.filter((productName) =>
+        recipeHasProductMatch(ingredientNames, productName)
+      );
+      const topDislikes = dislikeMatches.slice(0, 2);
+      map.set(recipe.id, {
+        allergyCount: allergyMatches.length,
+        dislikeCount: dislikeMatches.length,
+        allergyMatches,
+        dislikeMatches,
+        topDislikes,
+        extraDislikes: Math.max(0, dislikeMatches.length - topDislikes.length),
+      });
+    });
+
+    return map;
+  }, [profileAllergiesList, profileDislikesList, recipes]);
+
   const recipePantryCoverageMap = useMemo(() => {
     const pantryNames = pantryProductNames.filter((name) => normalizeMatchText(name).length > 0);
     const map = new Map<string, { totalIngredients: number; matchedIngredients: number; isFullyCovered: boolean }>();
@@ -705,6 +774,7 @@ function RecipesPageContent() {
       if (onlyWithNotes && !item.notes?.trim()) return false;
       if (onlyWithActiveProducts && (recipeActiveMatchMap.get(item.id)?.matchCount || 0) === 0) return false;
       if (onlyFromPantry && !recipePantryCoverageMap.get(item.id)?.isFullyCovered) return false;
+      if (viewMode === "public" && (recipePreferenceMatchMap.get(item.id)?.allergyCount || 0) > 0) return false;
       if (!query) return true;
 
       const title = (item.title || "").toLowerCase();
@@ -751,12 +821,14 @@ function RecipesPageContent() {
       const matchedIngredients = coverage?.matchedIngredients || 0;
       const coverageRatio =
         totalIngredients > 0 ? matchedIngredients / totalIngredients : 0;
+      const dislikeCount = recipePreferenceMatchMap.get(item.id)?.dislikeCount || 0;
 
       return {
         item,
         index,
         matchCount: recipeActiveMatchMap.get(item.id)?.matchCount || 0,
         coverageRatio,
+        dislikeCount,
       };
     });
     const matched = decorated
@@ -764,12 +836,13 @@ function RecipesPageContent() {
       .sort(
         (a, b) =>
           b.matchCount - a.matchCount ||
+          a.dislikeCount - b.dislikeCount ||
           b.coverageRatio - a.coverageRatio ||
           a.index - b.index
       );
     const rest = decorated
       .filter((row) => row.matchCount === 0)
-      .sort((a, b) => b.coverageRatio - a.coverageRatio || a.index - b.index);
+      .sort((a, b) => a.dislikeCount - b.dislikeCount || b.coverageRatio - a.coverageRatio || a.index - b.index);
 
     return [...matched, ...rest].map((row) => row.item);
   }, [
@@ -779,11 +852,13 @@ function RecipesPageContent() {
     onlyWithPhoto,
     onlyWithoutPhoto,
     recipeActiveMatchMap,
+    recipePreferenceMatchMap,
     recipePantryCoverageMap,
     recipes,
     searchQuery,
     selectedTags,
     sortBy,
+    viewMode,
   ]);
 
   const existingMineTitleSet = useMemo(() => {
@@ -932,6 +1007,15 @@ function RecipesPageContent() {
   const handleCopyToMine = async (recipeId: string) => {
     const source = recipes.find((item) => item.id === recipeId);
     if (!source) return;
+    const allergyMeta = recipePreferenceMatchMap.get(recipeId);
+    if ((allergyMeta?.allergyCount || 0) > 0) {
+      const listed = (allergyMeta?.allergyMatches || []).slice(0, 3).join(", ");
+      const warning = listed
+        ? `В рецепте есть продукты из «Аллергии»: ${listed}. Добавить вручную?`
+        : "В рецепте есть продукт из «Аллергии». Добавить вручную?";
+      const confirmed = confirm(warning);
+      if (!confirmed) return;
+    }
     setPendingCopyRecipeId(recipeId);
     const showOverlayForThisCopy = shouldShowFirstRecipeOverlay();
     const sourceTitleKey = normalizeRecipeTitle(source.title || "");
@@ -1557,6 +1641,14 @@ function RecipesPageContent() {
                 : "Из примеров"
               : "Мой рецепт";
             const matchMeta = recipeActiveMatchMap.get(recipe.id) || { matchCount: 0, topMatches: [], extraMatches: 0 };
+            const preferenceMeta = recipePreferenceMatchMap.get(recipe.id) || {
+              allergyCount: 0,
+              dislikeCount: 0,
+              allergyMatches: [],
+              dislikeMatches: [],
+              topDislikes: [],
+              extraDislikes: 0,
+            };
             const pantryMeta = recipePantryCoverageMap.get(recipe.id) || {
               totalIngredients: 0,
               matchedIngredients: 0,
@@ -1570,6 +1662,12 @@ function RecipesPageContent() {
               matchMeta.matchCount > 0
                 ? `Совпадает с активными: ${matchMeta.topMatches.join(", ")}${
                   matchMeta.extraMatches > 0 ? ` (+${matchMeta.extraMatches})` : ""
+                }`
+                : "";
+            const dislikeTooltip =
+              preferenceMeta.dislikeCount > 0
+                ? `В рецепте есть из «не люблю»: ${preferenceMeta.topDislikes.join(", ")}${
+                  preferenceMeta.extraDislikes > 0 ? ` (+${preferenceMeta.extraDislikes})` : ""
                 }`
                 : "";
             const mainActionLabel = isPublicSourceRecipe
@@ -1690,10 +1788,36 @@ function RecipesPageContent() {
                               Совпадений: {matchMeta.matchCount}
                             </button>
                           ) : null}
+                          {preferenceMeta.dislikeCount > 0 ? (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setOpenDislikeRecipeId((prev) => (prev === recipe.id ? null : recipe.id))
+                              }
+                              title={dislikeTooltip}
+                              style={{
+                                border: "1px solid color-mix(in srgb, var(--border-default) 82%, #8e8e8e 18%)",
+                                background: "color-mix(in srgb, var(--background-secondary) 88%, #8e8e8e 12%)",
+                                color: "var(--text-secondary)",
+                                borderRadius: "999px",
+                                fontSize: "11px",
+                                padding: "1px 7px",
+                                lineHeight: 1.4,
+                                cursor: "pointer",
+                              }}
+                            >
+                              ⚪ не люблю
+                            </button>
+                          ) : null}
                         </div>
                         {openActiveMatchesRecipeId === recipe.id && matchTooltip ? (
                           <div style={{ marginTop: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
                             {matchTooltip}
+                          </div>
+                        ) : null}
+                        {openDislikeRecipeId === recipe.id && dislikeTooltip ? (
+                          <div style={{ marginTop: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
+                            В рецепте есть продукт из списка «не люблю».
                           </div>
                         ) : null}
                       </div>
