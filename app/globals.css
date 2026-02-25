@@ -612,8 +612,9 @@ body {
 }
 
 .pantry-chip--active {
-  background: linear-gradient(180deg, #9aae8f, #8ca081);
-  border-color: #8ca081;
+  background: linear-gradient(180deg, #b3b17a, #9f9b62);
+  border-color: #979256;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28);
   color: #fff;
 }
 
