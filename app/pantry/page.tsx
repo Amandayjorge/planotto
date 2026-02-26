@@ -4,10 +4,25 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { appendProductSuggestions, loadProductSuggestions } from "../lib/productSuggestions";
 import { useI18n } from "../components/I18nProvider";
+import {
+  findIngredientIdByName,
+  getIngredientCategoryIdByIngredientId,
+  type IngredientCategoryId,
+} from "../lib/ingredientDictionary";
+import {
+  DEFAULT_UNIT_ID,
+  getUnitLabel,
+  getUnitLabelById,
+  getUnitOptions,
+  normalizeUnitId,
+  type UnitId,
+} from "../lib/ingredientUnits";
 
 interface PantryItem {
   name: string;
   amount: number;
+  unitId?: UnitId;
+  unit_id?: UnitId;
   unit: string;
   category: string;
   updatedAt: string;
@@ -16,31 +31,69 @@ interface PantryItem {
 interface PantryDraftItem {
   name: string;
   amount: number | "";
+  unitId: UnitId;
   unit: string;
   category: string;
 }
 
 type SortMode = "name" | "amount" | "updatedAt";
+type BaseCategoryId =
+  | "vegetablesFruits"
+  | "meatFish"
+  | "dairy"
+  | "breadBakery"
+  | "grocery"
+  | "frozen"
+  | "drinks"
+  | "snacksSweets"
+  | "spicesSauces";
+interface BaseCategory {
+  id: BaseCategoryId;
+  emoji: string;
+  labelKey: string;
+}
 
 const PANTRY_STORAGE_KEY = "pantry";
-const VALID_UNITS = ["г", "кг", "мл", "л", "шт", "ч.л.", "ст.л.", "по вкусу"];
 const CATEGORY_DATALIST_ID = "pantry-category-options";
 const CATEGORY_FILTER_ALL = "__all__";
 const CATEGORY_FILTER_NONE = "__none__";
-const BASE_CATEGORIES = [
-  { name: "Овощи и фрукты", emoji: "🥦", labelKey: "pantry.categories.vegetablesFruits" },
-  { name: "Мясо и рыба", emoji: "🥩", labelKey: "pantry.categories.meatFish" },
-  { name: "Молочные продукты", emoji: "🧀", labelKey: "pantry.categories.dairy" },
-  { name: "Выпечка и хлеб", emoji: "🥖", labelKey: "pantry.categories.breadBakery" },
-  { name: "Бакалея", emoji: "🥫", labelKey: "pantry.categories.grocery" },
-  { name: "Заморозка", emoji: "🧊", labelKey: "pantry.categories.frozen" },
-  { name: "Напитки", emoji: "🧃", labelKey: "pantry.categories.drinks" },
-  { name: "Снеки и сладости", emoji: "🍫", labelKey: "pantry.categories.snacksSweets" },
-  { name: "Специи и соусы", emoji: "🧂", labelKey: "pantry.categories.spicesSauces" },
-] as const;
+const BASE_CATEGORIES: readonly BaseCategory[] = [
+  { id: "vegetablesFruits", emoji: "🥦", labelKey: "pantry.categories.vegetablesFruits" },
+  { id: "meatFish", emoji: "🥩", labelKey: "pantry.categories.meatFish" },
+  { id: "dairy", emoji: "🧀", labelKey: "pantry.categories.dairy" },
+  { id: "breadBakery", emoji: "🥖", labelKey: "pantry.categories.breadBakery" },
+  { id: "grocery", emoji: "🥫", labelKey: "pantry.categories.grocery" },
+  { id: "frozen", emoji: "🧊", labelKey: "pantry.categories.frozen" },
+  { id: "drinks", emoji: "🧃", labelKey: "pantry.categories.drinks" },
+  { id: "snacksSweets", emoji: "🍫", labelKey: "pantry.categories.snacksSweets" },
+  { id: "spicesSauces", emoji: "🧂", labelKey: "pantry.categories.spicesSauces" },
+];
+const BASE_CATEGORY_ID_SET = new Set<string>(BASE_CATEGORIES.map((item) => item.id));
+const CATEGORY_EMOJI_BY_INGREDIENT_CATEGORY: Record<IngredientCategoryId, string> = {
+  vegetables: "🥬",
+  fruits: "🍎",
+  protein: "🍗",
+  dairy: "🧀",
+  grocery: "🥫",
+  bakery: "🥖",
+  drinks: "🧃",
+  other: "📦",
+};
 
 const normalizeCategory = (value: string): string => value.trim().replace(/\s+/g, " ");
 const nowIso = (): string => new Date().toISOString();
+const resolveIntlLocale = (locale: string): string => {
+  if (locale === "ru") return "ru-RU";
+  if (locale === "es") return "es-ES";
+  return "en-US";
+};
+const normalizeLookupText = (value: string): string =>
+  value
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{Diacritic}+/gu, "")
+    .replace(/\s+/g, " ");
 
 const normalizePantryItem = (raw: unknown): PantryItem | null => {
   if (!raw || typeof raw !== "object") return null;
@@ -48,38 +101,23 @@ const normalizePantryItem = (raw: unknown): PantryItem | null => {
   const name = typeof row.name === "string" ? row.name.trim() : "";
   const amount = Number(row.amount);
   const unit = typeof row.unit === "string" ? row.unit : "";
-  if (!name || !Number.isFinite(amount) || amount <= 0 || !unit) return null;
+  const unitId = normalizeUnitId(row.unitId || row.unit_id || unit || DEFAULT_UNIT_ID, DEFAULT_UNIT_ID);
+  if (!name || !Number.isFinite(amount) || amount <= 0) return null;
   return {
     name,
     amount,
-    unit,
+    unitId,
+    unit: unit || getUnitLabelById(unitId, "en"),
     category: normalizeCategory(typeof row.category === "string" ? row.category : ""),
     updatedAt: typeof row.updatedAt === "string" && row.updatedAt.trim() ? row.updatedAt : nowIso(),
   };
 };
 
-const getCategoryEmoji = (category: string): string => {
-  const normalized = normalizeCategory(category);
-  const found = BASE_CATEGORIES.find((item) => item.name.toLocaleLowerCase("ru-RU") === normalized.toLocaleLowerCase("ru-RU"));
-  return found?.emoji || "📦";
-};
-
-const getProductEmoji = (name: string, category: string): string => {
-  const value = name.trim().toLocaleLowerCase("ru-RU");
-  if (!value) return getCategoryEmoji(category);
-  if (value.includes("молок") || value.startsWith("мол")) return "🥛";
-  if (value.includes("кофе")) return "☕";
-  if (value.includes("чай")) return "🍵";
-  if (value.includes("хлеб") || value.includes("булк")) return "🍞";
-  if (value.includes("сыр")) return "🧀";
-  if (value.includes("йогурт") || value.includes("кефир")) return "🥛";
-  if (value.includes("яйц")) return "🥚";
-  if (value.includes("куриц") || value.includes("мяс")) return "🍗";
-  if (value.includes("рыб") || value.includes("лосос")) return "🐟";
-  if (value.includes("яблок") || value.includes("банан") || value.includes("фрукт")) return "🍎";
-  if (value.includes("помидор") || value.includes("огур") || value.includes("овощ")) return "🥬";
-  if (value.includes("вода") || value.includes("сок") || value.includes("напит")) return "🧃";
-  return getCategoryEmoji(category);
+const getProductEmoji = (name: string, locale: "ru" | "en" | "es"): string => {
+  const ingredientId = findIngredientIdByName(name, locale);
+  if (!ingredientId) return "📦";
+  const categoryId = getIngredientCategoryIdByIngredientId(ingredientId);
+  return CATEGORY_EMOJI_BY_INGREDIENT_CATEGORY[categoryId] || "📦";
 };
 
 const formatUpdatedLabel = (
@@ -95,12 +133,7 @@ const formatUpdatedLabel = (
   const diffDays = Math.round((todayStart.getTime() - targetStart.getTime()) / 86400000);
   if (diffDays === 0) return t("pantry.updated.today");
   if (diffDays === 1) return t("pantry.updated.yesterday");
-  const localeMap: Record<string, string> = {
-    ru: "ru-RU",
-    en: "en-US",
-    es: "es-ES",
-  };
-  return targetStart.toLocaleDateString(localeMap[locale] || "en-US", {
+  return targetStart.toLocaleDateString(resolveIntlLocale(locale), {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
@@ -132,6 +165,8 @@ const getProductWord = (
 
 export default function PantryPage() {
   const { locale, t } = useI18n();
+  const activeLocale = resolveIntlLocale(locale);
+  const unitOptions = getUnitOptions(locale);
   const [pantry, setPantry] = useState<PantryItem[]>(() => {
     if (typeof window === "undefined") return [];
     const storedPantry = localStorage.getItem(PANTRY_STORAGE_KEY);
@@ -177,11 +212,16 @@ export default function PantryPage() {
   };
 
   const startEdit = (index: number) => {
+    const unitId = normalizeUnitId(
+      pantry[index].unitId || pantry[index].unit_id || pantry[index].unit || DEFAULT_UNIT_ID,
+      DEFAULT_UNIT_ID
+    );
     setEditingId(`edit-${index}`);
     setDraftItem({
       name: pantry[index].name,
       amount: pantry[index].amount > 0 ? pantry[index].amount : "",
-      unit: pantry[index].unit,
+      unitId,
+      unit: getUnitLabelById(unitId, locale),
       category: pantry[index].category || "",
     });
   };
@@ -207,7 +247,8 @@ export default function PantryPage() {
     const payload: PantryItem = {
       name: draftItem.name.trim(),
       amount: Number(draftItem.amount),
-      unit: draftItem.unit,
+      unitId: draftItem.unitId,
+      unit: getUnitLabelById(draftItem.unitId, locale),
       category: normalizeCategory(draftItem.category),
       updatedAt: nowIso(),
     };
@@ -239,7 +280,11 @@ export default function PantryPage() {
         updated.amount = Number.isFinite(parsed) ? parsed : "";
       }
     }
-    if (field === "unit") updated.unit = String(value);
+    if (field === "unit") {
+      const nextUnitId = normalizeUnitId(value, DEFAULT_UNIT_ID);
+      updated.unitId = nextUnitId;
+      updated.unit = getUnitLabelById(nextUnitId, locale);
+    }
     if (field === "category") updated.category = String(value);
 
     setDraftItem(updated);
@@ -252,16 +297,43 @@ export default function PantryPage() {
 
   const addPantryItem = () => {
     setEditingId("new");
-    setDraftItem({ name: "", amount: "", unit: VALID_UNITS[0], category: "" });
+    setDraftItem({
+      name: "",
+      amount: "",
+      unitId: DEFAULT_UNIT_ID,
+      unit: getUnitLabelById(DEFAULT_UNIT_ID, locale),
+      category: "",
+    });
     setActiveSuggestionField("new");
   };
 
   const addStarterPantryItems = () => {
     if (editingId !== null) return;
     const starterItems: PantryItem[] = [
-      { name: t("pantry.starter.milk"), amount: 1, unit: "л", category: "", updatedAt: nowIso() },
-      { name: t("pantry.starter.eggs"), amount: 10, unit: "шт", category: "", updatedAt: nowIso() },
-      { name: t("pantry.starter.bread"), amount: 1, unit: "шт", category: "", updatedAt: nowIso() },
+      {
+        name: t("pantry.starter.milk"),
+        amount: 1,
+        unitId: "l",
+        unit: getUnitLabelById("l", locale),
+        category: "",
+        updatedAt: nowIso(),
+      },
+      {
+        name: t("pantry.starter.eggs"),
+        amount: 10,
+        unitId: "pcs",
+        unit: getUnitLabelById("pcs", locale),
+        category: "",
+        updatedAt: nowIso(),
+      },
+      {
+        name: t("pantry.starter.bread"),
+        amount: 1,
+        unitId: "pcs",
+        unit: getUnitLabelById("pcs", locale),
+        category: "",
+        updatedAt: nowIso(),
+      },
     ];
     setPantry((prev) => [...prev, ...starterItems]);
     appendProductSuggestions(starterItems.map((item) => item.name));
@@ -276,63 +348,73 @@ export default function PantryPage() {
       .slice(0, 6);
   };
 
-  const normalizedSearch = searchQuery.trim().toLowerCase();
+  const normalizedSearch = normalizeLookupText(searchQuery);
+  const baseCategoryEntries = BASE_CATEGORIES.map((item) => ({
+    ...item,
+    label: t(item.labelKey),
+  }));
+  const baseCategoryLabelMap = new Map<string, string>(
+    baseCategoryEntries.map((item) => [item.id, item.label])
+  );
+  const baseCategoryLabelSet = new Set(
+    baseCategoryEntries.map((item) => normalizeLookupText(item.label))
+  );
   const existingCategories = Array.from(
     new Set(pantry.map((item) => normalizeCategory(item.category)).filter((category) => category.length > 0))
-  ).sort((a, b) => a.localeCompare(b, "ru-RU", { sensitivity: "base" }));
+  ).sort((a, b) => a.localeCompare(b, activeLocale, { sensitivity: "base" }));
   const categoryOptions = Array.from(
     new Set([
-      ...BASE_CATEGORIES.map((item) => item.name),
+      ...baseCategoryEntries.map((item) => item.label),
       ...existingCategories,
     ])
   );
-  const baseCategorySet = new Set(BASE_CATEGORIES.map((item) => item.name.toLocaleLowerCase("ru-RU")));
   const customCategoryChips = existingCategories.filter(
-    (category) => !baseCategorySet.has(category.toLocaleLowerCase("ru-RU"))
+    (category) => !baseCategoryLabelSet.has(normalizeLookupText(category))
   );
   const categoryChips: Array<{ value: string; label: string; emoji?: string }> = [
     { value: CATEGORY_FILTER_ALL, label: t("pantry.filters.all") },
-    ...BASE_CATEGORIES.map((category) => ({
-      value: category.name,
-      label: t(category.labelKey),
+    ...baseCategoryEntries.map((category) => ({
+      value: category.id,
+      label: category.label,
       emoji: category.emoji,
     })),
     { value: CATEGORY_FILTER_NONE, label: t("pantry.filters.uncategorized"), emoji: "🏷️" },
     ...customCategoryChips.map((category) => ({
       value: category,
       label: category,
-      emoji: getCategoryEmoji(category),
+      emoji: "🏷️",
     })),
   ];
 
   const visibleItems = pantry
     .map((item, index) => ({ item, index }))
     .filter(({ item }) => {
-      if (normalizedSearch && !item.name.toLowerCase().includes(normalizedSearch)) return false;
+      if (normalizedSearch && !normalizeLookupText(item.name).includes(normalizedSearch)) return false;
       if (categoryFilter === CATEGORY_FILTER_NONE && normalizeCategory(item.category).length > 0) return false;
-      if (
-        categoryFilter !== CATEGORY_FILTER_ALL &&
-        categoryFilter !== CATEGORY_FILTER_NONE &&
-        item.category !== categoryFilter
-      ) {
-        return false;
+      if (categoryFilter !== CATEGORY_FILTER_ALL && categoryFilter !== CATEGORY_FILTER_NONE) {
+        if (BASE_CATEGORY_ID_SET.has(categoryFilter)) {
+          const label = baseCategoryLabelMap.get(categoryFilter) || "";
+          if (normalizeLookupText(item.category) !== normalizeLookupText(label)) return false;
+        } else if (item.category !== categoryFilter) {
+          return false;
+        }
       }
       return true;
     })
     .sort((a, b) => {
       if (sortMode === "name") {
-        return a.item.name.localeCompare(b.item.name, "ru-RU", { sensitivity: "base" });
+        return a.item.name.localeCompare(b.item.name, activeLocale, { sensitivity: "base" });
       }
       if (sortMode === "amount") {
         if (b.item.amount !== a.item.amount) return b.item.amount - a.item.amount;
-        return a.item.name.localeCompare(b.item.name, "ru-RU", { sensitivity: "base" });
+        return a.item.name.localeCompare(b.item.name, activeLocale, { sensitivity: "base" });
       }
       const aTime = Date.parse(a.item.updatedAt || "");
       const bTime = Date.parse(b.item.updatedAt || "");
       const safeATime = Number.isFinite(aTime) ? aTime : 0;
       const safeBTime = Number.isFinite(bTime) ? bTime : 0;
       if (safeBTime !== safeATime) return safeBTime - safeATime;
-      return a.item.name.localeCompare(b.item.name, "ru-RU", { sensitivity: "base" });
+      return a.item.name.localeCompare(b.item.name, activeLocale, { sensitivity: "base" });
     });
 
   const pantryCountLabel =
@@ -401,13 +483,13 @@ export default function PantryPage() {
           className="input"
         />
         <select
-          value={currentItem.unit}
+          value={currentItem.unitId}
           onChange={(e) => updateDraftItem("unit", e.target.value)}
           className="input"
         >
-          {VALID_UNITS.map((unit) => (
-            <option key={unit} value={unit}>
-              {unit}
+          {unitOptions.map((unit) => (
+            <option key={unit.id} value={unit.id}>
+              {unit.label}
             </option>
           ))}
         </select>
@@ -535,8 +617,20 @@ export default function PantryPage() {
 
           {visibleItems.map(({ item, index }) => {
             const isEditing = editingId === `edit-${index}`;
-            const currentItem = isEditing && draftItem ? draftItem : item;
-            const cardEmoji = getProductEmoji(item.name, item.category);
+            const fallbackUnitId = normalizeUnitId(
+              item.unitId || item.unit_id || item.unit || DEFAULT_UNIT_ID,
+              DEFAULT_UNIT_ID
+            );
+            const currentItem: PantryDraftItem = isEditing && draftItem
+              ? draftItem
+              : {
+                  name: item.name,
+                  amount: item.amount,
+                  unitId: fallbackUnitId,
+                  unit: getUnitLabelById(fallbackUnitId, locale),
+                  category: item.category || "",
+                };
+            const cardEmoji = getProductEmoji(item.name, locale);
 
             return (
               <article key={index} className={`pantry-card${isEditing ? " pantry-card--editing" : ""}`}>
@@ -567,7 +661,7 @@ export default function PantryPage() {
                       <span>{item.name}</span>
                     </div>
                     <div className="pantry-card__amount">
-                      {item.amount} {item.unit}
+                      {item.amount} {getUnitLabel(item.unitId || item.unit, locale, item.unit)}
                     </div>
                     <div className="pantry-card__meta-row">
                       <div className="pantry-card__updated">

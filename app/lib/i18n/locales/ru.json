@@ -399,6 +399,11 @@
       "addDishWithMeal": "Добавить блюдо ({{meal}})",
       "addDish": "+ Добавить блюдо"
     },
+    "meals": {
+      "breakfast": "Завтрак",
+      "lunch": "Обед",
+      "dinner": "Ужин"
+    },
     "settings": {
       "title": "Настройки меню",
       "dayStructure": "Структура дня",
@@ -435,7 +440,13 @@
     },
     "ai": {
       "noSuggestion": "ИИ не смог предложить.",
-      "failedToGetSuggestion": "Не удалось получить предложение ИИ."
+      "failedToGetSuggestion": "Не удалось получить предложение ИИ.",
+      "constraints": {
+        "allergies": "Аллергии и строгие ограничения: {{items}}. Никогда не использовать эти продукты.",
+        "dislikes": "Не люблю продукты: {{items}}. Эти продукты предлагать реже.",
+        "pantryPriority": "Кладовка: использовать в приоритете продукты, которые уже есть дома.",
+        "activeProducts": "Активные продукты: {{items}}."
+      }
     },
     "errors": {
       "weeklyMenusTableMissing": "Не найдена таблица weekly_menus в Supabase. Выполните SQL из supabase/schema.sql.",
@@ -446,7 +457,8 @@
       "clearCurrentMenu": "Вы уверены, что хотите очистить текущее меню?"
     },
     "fallback": {
-      "recipeTitle": "рецепт"
+      "recipeTitle": "рецепт",
+      "defaultMenuName": "Основное"
     },
     "shopping": {
       "allMenusPeriod": "Все меню периода"
@@ -696,6 +708,62 @@
         "invitesPartial": "????? ??????????? ?? ??????????: {{emails}}",
         "checkAmountAndUnit": "????????? ?????????? ? ??????? ????? ???????."
       }
+    },
+    "detail": {
+      "messages": {
+        "editOwnerOnly": "Только владелец рецепта может редактировать рецепт.",
+        "invitesPartial": "Некоторые приглашения не отправлены: {{emails}}",
+        "invitesSentCount": "Приглашения отправлены: {{count}}",
+        "invitesUpdated": "Список приглашенных обновлен.",
+        "deleteOwnerOnly": "Только владелец рецепта может удалить рецепт."
+      },
+      "hidden": {
+        "title": "Рецепт временно скрыт",
+        "description": "Рецепт скрыт до завершения проверки. Если подтвердится нарушение, рецепт будет удален."
+      },
+      "actions": {
+        "toRecipes": "К списку рецептов",
+        "backToRecipes": "Назад к рецептам",
+        "edit": "Редактировать",
+        "delete": "Удалить",
+        "report": "Пожаловаться"
+      },
+      "notFound": "Рецепт не найден",
+      "translation": {
+        "languageLabel": "Язык рецепта:",
+        "versionAvailable": "Версия доступна",
+        "versionMissing": "Перевода пока нет",
+        "creating": "Создаем перевод...",
+        "createButton": "Создать перевод ({{lang}})",
+        "exists": "Перевод уже существует.",
+        "noTitle": "Нельзя создать перевод без названия.",
+        "draftCreated": "Черновик перевода создан.",
+        "createdReview": "Перевод создан. Проверьте текст.",
+        "aiUnavailable": "ИИ недоступен. Черновик создан на основе исходного текста.",
+        "createFailed": "Не удалось создать перевод."
+      },
+      "report": {
+        "reason": "Причина",
+        "commentPlaceholder": "Комментарий (необязательно)",
+        "submit": "Отправить жалобу",
+        "reasons": {
+          "copyright": "Нарушение авторских прав",
+          "foreignWithoutSource": "Чужой рецепт без указания источника",
+          "other": "Другое"
+        }
+      },
+      "share": {
+        "generateAndSave": "Сначала сгенерируйте токен и сохраните рецепт.",
+        "copied": "Ссылка скопирована.",
+        "copyFailed": "Не удалось скопировать ссылку. Скопируйте ее из адресной строки браузера.",
+        "copyLink": "Скопировать ссылку"
+      },
+      "access": {
+        "ownerOnly": "Только владелец рецепта может менять режим доступа."
+      },
+      "visibilityLabel": "Видимость",
+      "sourceOpen": "Открыть источник",
+      "taste": "по вкусу"
     }
   },
   "languages": {

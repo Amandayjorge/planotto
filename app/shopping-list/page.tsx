@@ -3,9 +3,25 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { appendProductSuggestions } from "../lib/productSuggestions";
+import {
+  findIngredientIdByName,
+  getIngredientCategoryIdByIngredientId,
+  getIngredientNameById,
+  type IngredientCategoryId,
+} from "../lib/ingredientDictionary";
+import {
+  getUnitLabel,
+  isTasteLikeUnit,
+  tryNormalizeUnitId,
+  type UnitId,
+} from "../lib/ingredientUnits";
 import { useI18n } from "../components/I18nProvider";
 
 interface Ingredient {
+  ingredientId?: string;
+  ingredient_id?: string;
+  unitId?: UnitId;
+  unit_id?: UnitId;
   name: string;
   amount: number;
   unit: string;
@@ -46,7 +62,9 @@ interface GroupedIngredient {
   name: string;
   totalAmount: number;
   unit: string;
-  category: StoreCategory;
+  unitId?: UnitId;
+  category: StoreCategoryId;
+  ingredientId?: string;
   id?: string;
   isManual?: boolean;
 }
@@ -64,18 +82,18 @@ interface PantryItem {
   amount: number;
 }
 
-type StoreCategory = "Овощи" | "Мясо" | "Молочное" | "Бакалея" | "Прочее";
+type StoreCategoryId = "vegetables" | "meat" | "dairy" | "grocery" | "other";
 
-const STORE_CATEGORY_ORDER: StoreCategory[] = ["Овощи", "Мясо", "Молочное", "Бакалея", "Прочее"];
-const PRIMARY_STORE_CATEGORIES: StoreCategory[] = STORE_CATEGORY_ORDER.filter(
-  (category) => category !== "Прочее"
+const STORE_CATEGORY_ORDER: StoreCategoryId[] = ["vegetables", "meat", "dairy", "grocery", "other"];
+const PRIMARY_STORE_CATEGORIES: StoreCategoryId[] = STORE_CATEGORY_ORDER.filter(
+  (category) => category !== "other"
 );
 
-const STORE_CATEGORY_KEYWORDS: Record<StoreCategory, string[]> = {
-  Овощи: ["овощ", "картофел", "морков", "огур", "помид", "капуст", "перец", "баклаж", "бакл", "редис", "лук", "чеснок", "зелень", "свекл", "тыкв", "шпинат"],
-  Мясо: ["мяс", "куриц", "индейк", "цыплен", "фарш", "бекон", "колбас", "ветчин", "сосис", "стейк", "говяд", "свинин", "телятина"],
-  Молочное: ["молок", "сыр", "творог", "кефир", "йогурт", "масло", "сливк", "сметан", "ряжен", "кумыс", "морожен"],
-  Бакалея: [
+const STORE_CATEGORY_KEYWORDS: Record<StoreCategoryId, string[]> = {
+  vegetables: ["овощ", "картофел", "морков", "огур", "помид", "капуст", "перец", "баклаж", "редис", "лук", "чеснок", "зелень", "свекл", "тыкв", "шпинат", "vegetable", "tomat", "onion", "garlic", "pepper", "verdur", "tomate", "cebolla", "ajo", "pimient"],
+  meat: ["мяс", "куриц", "индейк", "цыплен", "фарш", "бекон", "колбас", "ветчин", "сосис", "стейк", "говяд", "свинин", "телятина", "beef", "chicken", "turkey", "ham", "sausage", "carne", "pollo", "ternera", "jamon"],
+  dairy: ["молок", "сыр", "творог", "кефир", "йогурт", "масло", "сливк", "сметан", "ряжен", "кумыс", "морожен", "milk", "cheese", "cream", "yogurt", "butter", "leche", "queso", "nata", "yogur", "mantequilla", "lacte"],
+  grocery: [
     "мук",
     "рис",
     "макар",
@@ -100,20 +118,54 @@ const STORE_CATEGORY_KEYWORDS: Record<StoreCategory, string[]> = {
     "пряник",
     "сухоф",
     "масло",
-    "мускат"
+    "мускат",
+    "flour",
+    "rice",
+    "pasta",
+    "oat",
+    "salt",
+    "sugar",
+    "harina",
+    "arroz",
+    "pasta",
+    "sal",
+    "azucar"
   ],
-  Прочее: [],
+  other: [],
 };
 
-const categorizeIngredient = (value: string): StoreCategory => {
-  const normalized = normalizeString(value).toLowerCase();
+const mapIngredientCategoryToStoreCategory = (categoryId: IngredientCategoryId): StoreCategoryId => {
+  if (categoryId === "vegetables" || categoryId === "fruits") return "vegetables";
+  if (categoryId === "protein") return "meat";
+  if (categoryId === "dairy") return "dairy";
+  if (categoryId === "grocery" || categoryId === "bakery") return "grocery";
+  return "other";
+};
+
+const resolveIngredientId = (
+  ingredient: Pick<Ingredient, "ingredientId" | "ingredient_id" | "name">
+): string | null => {
+  const legacy = ingredient.ingredient_id;
+  const direct = String(ingredient.ingredientId || legacy || "").trim();
+  if (direct) return direct;
+  const byName = findIngredientIdByName(ingredient.name || "");
+  return byName || null;
+};
+
+const categorizeIngredient = (ingredient: Ingredient): StoreCategoryId => {
+  const resolvedId = resolveIngredientId(ingredient);
+  if (resolvedId) {
+    return mapIngredientCategoryToStoreCategory(getIngredientCategoryIdByIngredientId(resolvedId));
+  }
+
+  const normalized = normalizeString(ingredient.name).toLowerCase();
   for (const category of PRIMARY_STORE_CATEGORIES) {
     const keywords = STORE_CATEGORY_KEYWORDS[category] || [];
     if (keywords.some((keyword) => normalized.includes(keyword))) {
       return category;
     }
   }
-  return "Прочее";
+  return "other";
 };
 
 const MENU_STORAGE_KEY = "weeklyMenu";
@@ -152,8 +204,14 @@ const formatDate = (date: Date): string => {
   return date.toISOString().split("T")[0]; // YYYY-MM-DD
 };
 
-const formatDisplayDate = (date: Date): string => {
-  return date.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" });
+const resolveIntlLocale = (locale: string): string => {
+  if (locale === "ru") return "ru-RU";
+  if (locale === "es") return "es-ES";
+  return "en-US";
+};
+
+const formatDisplayDate = (date: Date, locale = "en"): string => {
+  return date.toLocaleDateString(resolveIntlLocale(locale), { day: "2-digit", month: "2-digit" });
 };
 
 interface MenuPeriodOption {
@@ -188,8 +246,14 @@ const normalizeString = (str: string): string => {
   return str.trim().toLowerCase().replace(/\s+/g, " ");
 };
 
-const normalizeKey = (name: string, unit: string): string => {
-  return `${normalizeString(name)}|${normalizeString(unit)}`;
+const getUnitStorageKey = (unit: string, unitId?: UnitId): string => {
+  const normalizedId = tryNormalizeUnitId(unitId || unit);
+  if (normalizedId) return `id:${normalizedId}`;
+  return `txt:${normalizeString(unit)}`;
+};
+
+const normalizeKey = (name: string, unit: string, unitId?: UnitId): string => {
+  return `${normalizeString(name)}|${getUnitStorageKey(unit, unitId)}`;
 };
 
 const normalizeMenuDataRecord = (value: unknown): Record<string, MenuItem[]> => {
@@ -461,6 +525,7 @@ const formatAmount = (value: number, locale: string): string => {
 
 export default function ShoppingListPage() {
   const { locale, t } = useI18n();
+  const activeLocale = resolveIntlLocale(locale);
   const [shoppingSelectedMenuId] = useState<string>(() => {
     if (typeof window === "undefined") return "";
     return window.sessionStorage.getItem(SHOPPING_SELECTED_MENU_ID_KEY) || "";
@@ -588,9 +653,11 @@ export default function ShoppingListPage() {
         selectedDates.length > 0 ? selectedDates : periodDaysForList;
       const activeDaySet = new Set(effectiveDays);
       const isCountableIngredient = (ing: Ingredient): boolean => {
-        const unit = String(ing.unit || "").trim().toLowerCase();
+        const rawUnit = String(ing.unit || "").trim();
+        const unitToken = ing.unitId || ing.unit_id || rawUnit;
         if (!ing.name || !ing.name.trim()) return false;
-        if (!unit || unit === "по вкусу" || unit === "немного") return false;
+        if (!rawUnit && !ing.unitId && !ing.unit_id) return false;
+        if (isTasteLikeUnit(unitToken)) return false;
         return Number.isFinite(ing.amount) && ing.amount > 0;
       };
 
@@ -697,6 +764,8 @@ export default function ShoppingListPage() {
                 menuItem.ingredients.forEach((ing) => {
                   if (isCountableIngredient(ing)) {
                     allIngredients.push({
+                      ingredientId: ing.ingredientId,
+                      unitId: ing.unitId,
                       name: ing.name,
                       unit: ing.unit,
                       amount: ing.amount,
@@ -714,6 +783,8 @@ export default function ShoppingListPage() {
                 recipe.ingredients.forEach((ing) => {
                   if (isCountableIngredient(ing)) {
                     allIngredients.push({
+                      ingredientId: ing.ingredientId,
+                      unitId: ing.unitId,
                       name: ing.name,
                       unit: ing.unit,
                       amount: ing.amount * scale,
@@ -727,6 +798,8 @@ export default function ShoppingListPage() {
               menuItem.ingredients.forEach((ing) => {
                 if (isCountableIngredient(ing)) {
                   allIngredients.push({
+                    ingredientId: ing.ingredientId,
+                    unitId: ing.unitId,
                     name: ing.name,
                     unit: ing.unit,
                     amount: ing.amount,
@@ -741,36 +814,54 @@ export default function ShoppingListPage() {
       // group
       const ingredientGroups: Record<
         string,
-        { totalAmount: number; unit: string }
+        { totalAmount: number; unit: string; unitId?: UnitId; name: string; ingredientId?: string }
       > = {};
 
       allIngredients.forEach((ing) => {
-        const key = normalizeKey(ing.name, ing.unit);
+        const resolvedId = resolveIngredientId(ing);
+        const resolvedUnitId = tryNormalizeUnitId(ing.unitId || ing.unit_id || ing.unit || "");
+        const unitKey = resolvedUnitId ? `id:${resolvedUnitId}` : `txt:${normalizeString(ing.unit)}`;
+        const key = resolvedId
+          ? `id:${resolvedId}|${unitKey}`
+          : normalizeKey(ing.name, ing.unit, resolvedUnitId || undefined);
         if (!ingredientGroups[key]) {
-          ingredientGroups[key] = { totalAmount: 0, unit: ing.unit };
+          ingredientGroups[key] = {
+            totalAmount: 0,
+            unit: ing.unit,
+            unitId: resolvedUnitId || undefined,
+            name: resolvedId ? getIngredientNameById(resolvedId, locale, ing.name) : ing.name,
+            ingredientId: resolvedId || undefined,
+          };
         }
         ingredientGroups[key].totalAmount += ing.amount;
       });
 
       const groupedList: GroupedIngredient[] = Object.entries(ingredientGroups)
-        .map(([key, data]) => {
-          const [name] = key.split("|");
-          const normalizedName = name;
+        .map(([, data]) => {
+          const normalizedName = data.name.trim();
           return {
             name: normalizedName.charAt(0).toUpperCase() + normalizedName.slice(1),
             totalAmount: data.totalAmount,
             unit: data.unit,
-            category: categorizeIngredient(normalizedName),
+            unitId: data.unitId,
+            ingredientId: data.ingredientId,
+            category: categorizeIngredient({
+              ingredientId: data.ingredientId,
+              unitId: data.unitId,
+              name: data.name,
+              amount: data.totalAmount,
+              unit: data.unit,
+            }),
           };
         })
-        .sort((a, b) => a.name.localeCompare(b.name));
+        .sort((a, b) => a.name.localeCompare(b.name, activeLocale, { sensitivity: "base" }));
 
       return groupedList;
     } catch (error) {
       console.error("Failed to generate shopping list:", error);
       return [];
     }
-  }, [rangeWeeks, selectedDates, shoppingSelectedMenuId, shoppingSettings.includeCookedDishes, shoppingSettings.mergeMenus]);
+  }, [activeLocale, locale, rangeWeeks, selectedDates, shoppingSelectedMenuId, shoppingSettings.includeCookedDishes, shoppingSettings.mergeMenus]);
 
   // сохраняем pantryItems
   useEffect(() => {
@@ -778,23 +869,26 @@ export default function ShoppingListPage() {
     localStorage.setItem(PANTRY_STORAGE_KEY, JSON.stringify(pantryItems));
   }, [pantryItems]);
 
-  const getRemainingAmount = (name: string, unit: string, requiredAmount: number) => {
+  const getRemainingAmount = (name: string, unit: string, requiredAmount: number, unitId?: UnitId) => {
     const normalizedIngredientName = name.toLowerCase().trim();
+    const normalizedUnitKey = getUnitStorageKey(unit, unitId);
     const pantryItem = pantryItems.find(item => 
       item.name.toLowerCase().trim() === normalizedIngredientName && 
-      item.unit === unit
+      getUnitStorageKey(item.unit) === normalizedUnitKey
     );
     const haveAmount = pantryItem?.amount || 0;
     return Math.max(0, requiredAmount - haveAmount);
   };
 
-  const isPurchased = (name: string, unit: string) => {
-    const key = normalizeKey(name, unit);
-    return purchasedItems[key] || false;
+  const isPurchased = (name: string, unit: string, unitId?: UnitId) => {
+    const key = normalizeKey(name, unit, unitId);
+    if (purchasedItems[key]) return true;
+    const legacyKey = `${normalizeString(name)}|${normalizeString(unit)}`;
+    return purchasedItems[legacyKey] || false;
   };
 
-  const togglePurchasedItem = (name: string, unit: string) => {
-    const key = normalizeKey(name, unit);
+  const togglePurchasedItem = (name: string, unit: string, unitId?: UnitId) => {
+    const key = normalizeKey(name, unit, unitId);
     const wasPurchased = purchasedItems[key] || false;
     const isNowPurchased = !wasPurchased;
     
@@ -804,7 +898,7 @@ export default function ShoppingListPage() {
     if (isNowPurchased) {
       // Find the ingredient amount from the shopping list
       const item = shoppingList.find(item => 
-        normalizeKey(item.name, item.unit) === key
+        normalizeKey(item.name, item.unit, item.unitId) === key
       );
       
       if (item) {
@@ -812,9 +906,10 @@ export default function ShoppingListPage() {
 
         setPantryItems(prev => {
           const normalizedIngredientName = item.name.toLowerCase().trim();
+          const normalizedUnitKey = getUnitStorageKey(item.unit, item.unitId);
           const existingIndex = prev.findIndex(pantryItem => 
             pantryItem.name.toLowerCase().trim() === normalizedIngredientName && 
-            pantryItem.unit === item.unit
+            getUnitStorageKey(pantryItem.unit) === normalizedUnitKey
           );
 
           if (existingIndex >= 0) {
@@ -861,20 +956,20 @@ export default function ShoppingListPage() {
     name: manual.name,
     totalAmount: manual.amount,
     unit: manual.unit,
-    category: "Прочее",
+    category: "other",
     id: manual.id,
     isManual: true,
   }));
 
   const filterUnpurchased = (items: GroupedIngredient[]) =>
     items.filter((item) => {
-      const remaining = getRemainingAmount(item.name, item.unit, item.totalAmount);
-      if (isPurchased(item.name, item.unit)) return false;
+      const remaining = getRemainingAmount(item.name, item.unit, item.totalAmount, item.unitId);
+      if (isPurchased(item.name, item.unit, item.unitId)) return false;
       return remaining > 0;
     });
 
   const filterPurchased = (items: GroupedIngredient[]) =>
-    items.filter((item) => isPurchased(item.name, item.unit));
+    items.filter((item) => isPurchased(item.name, item.unit, item.unitId));
 
   const filteredMenuUnpurchased = filterUnpurchased(shoppingList);
   const filteredMenuPurchased = filterPurchased(shoppingList);
@@ -898,11 +993,11 @@ export default function ShoppingListPage() {
   const flatVisibleItems = [...combinedUnpurchasedList, ...combinedPurchasedList];
 
   const manualSectionLabel = t("shopping.manualSection");
-  const getCategoryLabel = (category: StoreCategory): string => {
-    if (category === "Овощи") return t("shopping.categories.vegetables");
-    if (category === "Мясо") return t("shopping.categories.meat");
-    if (category === "Молочное") return t("shopping.categories.dairy");
-    if (category === "Бакалея") return t("shopping.categories.grocery");
+  const getCategoryLabel = (category: StoreCategoryId): string => {
+    if (category === "vegetables") return t("shopping.categories.vegetables");
+    if (category === "meat") return t("shopping.categories.meat");
+    if (category === "dairy") return t("shopping.categories.dairy");
+    if (category === "grocery") return t("shopping.categories.grocery");
     return t("shopping.categories.other");
   };
   const toggleSectionCollapse = (section: string) => {
@@ -914,13 +1009,14 @@ export default function ShoppingListPage() {
   const isSectionCollapsed = (section: string) => collapsedSections.includes(section);
 
   const renderShoppingItem = (item: GroupedIngredient) => {
-    const remainingAmount = getRemainingAmount(item.name, item.unit, item.totalAmount);
+    const remainingAmount = getRemainingAmount(item.name, item.unit, item.totalAmount, item.unitId);
     const haveEnough = remainingAmount <= 0;
-    const purchased = isPurchased(item.name, item.unit);
+    const purchased = isPurchased(item.name, item.unit, item.unitId);
+    const localizedUnit = getUnitLabel(item.unitId || item.unit, locale, item.unit);
 
     return (
       <div
-        key={item.id ?? `${item.name}-${item.unit}`}
+        key={item.id ?? `${item.name}-${item.unitId || item.unit}`}
         className={`shopping-list_item ${haveEnough ? "shopping-list_item--have" : ""} ${
           purchased ? "shopping-list__item--purchased" : ""
         }`}
@@ -934,7 +1030,7 @@ export default function ShoppingListPage() {
                 haveEnough ? "shopping-list__buy--enough" : ""
               }`}
             >
-              {t("shopping.buyAmount", { amount: formatAmount(remainingAmount, locale) })} {item.unit}
+              {t("shopping.buyAmount", { amount: formatAmount(remainingAmount, locale) })} {localizedUnit}
             </span>
           </div>
         </div>
@@ -945,7 +1041,7 @@ export default function ShoppingListPage() {
             className={`shopping-list__purchased-btn ${
               purchased ? "shopping-list__purchased-btn--active" : ""
             }`}
-            onClick={() => togglePurchasedItem(item.name, item.unit)}
+            onClick={() => togglePurchasedItem(item.name, item.unit, item.unitId)}
             aria-pressed={purchased}
             aria-label={
               purchased

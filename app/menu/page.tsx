@@ -23,6 +23,14 @@ import {
   upsertMineWeekMenu,
 } from "../lib/weeklyMenusSupabase";
 import { useI18n } from "../components/I18nProvider";
+import {
+  DEFAULT_UNIT_ID,
+  getUnitLabelById,
+  isTasteLikeUnit,
+  normalizeUnitId,
+  tryNormalizeUnitId,
+  type UnitId,
+} from "../lib/ingredientUnits";
 
 const MENU_STORAGE_KEY = "weeklyMenu";
 const RECIPES_STORAGE_KEY = "recipes";
@@ -41,12 +49,15 @@ const GUEST_REMINDER_RECIPES_THRESHOLD = 3;
 const ACTIVE_PRODUCTS_CLOUD_META_KEY = "planotto_active_products_v1";
 const ACTIVE_PRODUCT_NOTE_MAX_LENGTH = 40;
 const MENU_STORAGE_VERSION = 2;
-const DEFAULT_MENU_NAME = "Основное";
+const DEFAULT_MENU_NAME_FALLBACK = "Main";
 const MENU_SHOPPING_MERGE_KEY_PREFIX = "menuShoppingMerge";
 const DAY_STRUCTURE_MODE_KEY = "menuDayStructureMode";
 const MEAL_STRUCTURE_SETTINGS_KEY = "menuMealStructureSettings";
 const MEAL_STRUCTURE_DEFAULT_SETTINGS_KEY = "menuMealStructureDefaults";
-const DEFAULT_DAY_MEALS = ["Завтрак", "Обед", "Ужин"] as const;
+const DEFAULT_DAY_MEAL_KEYS = ["breakfast", "lunch", "dinner"] as const;
+type MealType = (typeof DEFAULT_DAY_MEAL_KEYS)[number];
+const MEAL_TYPE_INDEX: Record<MealType, number> = { breakfast: 0, lunch: 1, dinner: 2 };
+const RECIPE_CATEGORY_FILTER_ALL = "__all__";
 type DayStructureMode = "list" | "meals";
 
 interface MealSlotSetting {
@@ -56,8 +67,8 @@ interface MealSlotSetting {
   order: number;
 }
 
-const createDefaultMealSlots = (): MealSlotSetting[] =>
-  DEFAULT_DAY_MEALS.map((name, index) => ({
+const createDefaultMealSlots = (defaultMealLabels: readonly string[]): MealSlotSetting[] =>
+  defaultMealLabels.map((name, index) => ({
     id: `default-${index}`,
     name,
     visible: true,
@@ -72,7 +83,10 @@ const parseItemsList = (raw: string): string[] => {
   for (const chunk of raw.split(/[,\n;]+/)) {
     const value = chunk.trim();
     if (!value) continue;
-    const key = value.toLocaleLowerCase("ru-RU");
+    const key = value
+      .toLocaleLowerCase()
+      .normalize("NFD")
+      .replace(/\p{Diacritic}+/gu, "");
     if (seen.has(key)) continue;
     seen.add(key);
     items.push(value);
@@ -111,8 +125,8 @@ const parseMealSlots = (raw: string | null): MealSlotSetting[] | null => {
   }
 };
 
-const loadDefaultMealSlotsFromStorage = (): MealSlotSetting[] => {
-  if (typeof window === "undefined") return createDefaultMealSlots();
+const loadDefaultMealSlotsFromStorage = (defaultMealLabels: readonly string[]): MealSlotSetting[] => {
+  if (typeof window === "undefined") return createDefaultMealSlots(defaultMealLabels);
   const defaults = parseMealSlots(window.localStorage.getItem(MEAL_STRUCTURE_DEFAULT_SETTINGS_KEY));
   if (defaults) return defaults;
 
@@ -120,14 +134,17 @@ const loadDefaultMealSlotsFromStorage = (): MealSlotSetting[] => {
   const legacy = parseMealSlots(window.localStorage.getItem(MEAL_STRUCTURE_SETTINGS_KEY));
   if (legacy) return legacy;
 
-  return createDefaultMealSlots();
+  return createDefaultMealSlots(defaultMealLabels);
 };
 
-const loadMealSlotsFromStorage = (rangeKey: string): MealSlotSetting[] => {
-  if (typeof window === "undefined") return createDefaultMealSlots();
+const loadMealSlotsFromStorage = (
+  rangeKey: string,
+  defaultMealLabels: readonly string[]
+): MealSlotSetting[] => {
+  if (typeof window === "undefined") return createDefaultMealSlots(defaultMealLabels);
   const byRange = parseMealSlots(window.localStorage.getItem(`${MEAL_STRUCTURE_SETTINGS_KEY}:${rangeKey}`));
   if (byRange) return byRange;
-  return loadDefaultMealSlotsFromStorage();
+  return loadDefaultMealSlotsFromStorage(defaultMealLabels);
 };
 
 const splitCellKey = (cellKey: string): { dayKey: string; mealLabel: string } | null => {
@@ -136,14 +153,16 @@ const splitCellKey = (cellKey: string): { dayKey: string; mealLabel: string } | 
   return { dayKey: match[1], mealLabel: match[2] };
 };
 
-const INGREDIENT_UNITS = ["г", "кг", "мл", "л", "шт", "ч.л.", "ст.л.", "по вкусу"];
-const DEFAULT_UNIT = "г";
+const INGREDIENT_UNIT_IDS: UnitId[] = ["g", "kg", "ml", "l", "pcs", "tsp", "tbsp", "to_taste"];
+const DEFAULT_UNIT = getUnitLabelById(DEFAULT_UNIT_ID, "en");
 
 interface Ingredient {
   id: string;
   name: string;
   amount: number;
   unit: string;
+  unitId?: UnitId;
+  unit_id?: UnitId;
 }
 
 interface PantryItem {
@@ -276,7 +295,7 @@ const normalizeCookedStatusMap = (value: unknown): Record<string, boolean> => {
 
 const createMenuProfileState = (name: string, id?: string): MenuProfileState => ({
   id: id || crypto.randomUUID(),
-  name: normalizeMenuProfileName(name) || DEFAULT_MENU_NAME,
+  name: normalizeMenuProfileName(name) || DEFAULT_MENU_NAME_FALLBACK,
   mealData: {},
   cellPeopleCount: {},
   cookedStatus: {},
@@ -371,9 +390,9 @@ const getRecipeFromLocalStorageById = (recipeId: string): Recipe | null => {
 };
 
 const isCountableIngredient = (ingredient: Ingredient): boolean => {
-  const unit = String(ingredient.unit || "").trim().toLocaleLowerCase("ru-RU");
+  const unit = String(ingredient.unit || "").trim();
   if (!ingredient.name.trim()) return false;
-  if (!unit || unit === "по вкусу" || unit === "немного") return false;
+  if (!unit || isTasteLikeUnit(ingredient.unitId || ingredient.unit_id || unit)) return false;
   return Number.isFinite(ingredient.amount) && ingredient.amount > 0;
 };
 
@@ -436,8 +455,14 @@ const formatDate = (date: Date): string => {
   return date.toISOString().split("T")[0]; // YYYY-MM-DD
 };
 
-const formatDisplayDate = (date: Date): string => {
-  return date.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" });
+const resolveIntlLocale = (locale?: string): string => {
+  if (locale === "ru") return "ru-RU";
+  if (locale === "es") return "es-ES";
+  return "en-US";
+};
+
+const formatDisplayDate = (date: Date, locale?: string): string => {
+  return date.toLocaleDateString(resolveIntlLocale(locale), { day: "2-digit", month: "2-digit" });
 };
 
 const getRangeLengthDays = (startRaw: string, endRaw: string): number => {
@@ -458,50 +483,74 @@ const buildDayKeys = (startRaw: string, endRaw: string): string[] => {
   return list;
 };
 
-const getRangeDisplay = (startRaw: string, endRaw: string): string => {
+const getRangeDisplay = (startRaw: string, endRaw: string, locale?: string): string => {
   const start = parseDateSafe(startRaw);
   const end = parseDateSafe(endRaw);
   if (!start || !end) return "";
-  return `${formatDisplayDate(start)}-${formatDisplayDate(end)}`;
+  return `${formatDisplayDate(start, locale)}-${formatDisplayDate(end, locale)}`;
 };
 
-const getWeekdayLabel = (raw: string): string => {
+const getWeekdayLabel = (raw: string, locale?: string): string => {
   const date = parseDateSafe(raw);
   if (!date) return "";
-  const text = date.toLocaleDateString("ru-RU", { weekday: "short" }).replace(".", "");
+  const text = date.toLocaleDateString(resolveIntlLocale(locale), { weekday: "short" }).replace(".", "");
   return text.charAt(0).toUpperCase() + text.slice(1);
 };
 
-const getWeekdayLong = (raw: string): string => {
+const getWeekdayLong = (raw: string, locale?: string): string => {
   const date = parseDateSafe(raw);
   if (!date) return "";
-  return date.toLocaleDateString("ru-RU", { weekday: "long" });
+  return date.toLocaleDateString(resolveIntlLocale(locale), { weekday: "long" });
 };
 
-const normalizeMealLabel = (value: string): (typeof DEFAULT_DAY_MEALS)[number] | null => {
-  const normalized = value.trim().toLocaleLowerCase("ru-RU");
+const normalizeMatchText = (value: string): string =>
+  value
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{Diacritic}+/gu, "");
+
+const detectMealType = (value: string): MealType | null => {
+  const normalized = normalizeMatchText(value);
   if (!normalized) return null;
 
-  if (/(\u0437\u0430\u0432\u0442\u0440\u0430\u043a|\u0443\u0442\u0440|\u043a\u0430\u0448\u0430|\u043e\u043c\u043b\u0435\u0442|\u043e\u043b\u0430\u0434|\u0431\u043b\u0438\u043d)/u.test(normalized)) {
-    return DEFAULT_DAY_MEALS.find((meal) => meal.toLocaleLowerCase("ru-RU").includes("\u0437\u0430\u0432\u0442\u0440\u0430\u043a")) || null;
+  if (
+    /(\bbreakfast\b|desayuno|завтрак|утр|каша|омлет|олад|блин|oat|avena|tostad)/u.test(
+      normalized
+    )
+  ) {
+    return "breakfast";
   }
 
-  if (/(\u043e\u0431\u0435\u0434|\u0441\u0443\u043f)/u.test(normalized)) {
-    return DEFAULT_DAY_MEALS.find((meal) => meal.toLocaleLowerCase("ru-RU").includes("\u043e\u0431\u0435\u0434")) || null;
+  if (/(\blunch\b|almuerzo|comida|обед|суп|menu del dia)/u.test(normalized)) {
+    return "lunch";
   }
 
-  if (/(\u0443\u0436\u0438\u043d|\u0432\u0435\u0447\u0435\u0440)/u.test(normalized)) {
-    return DEFAULT_DAY_MEALS.find((meal) => meal.toLocaleLowerCase("ru-RU").includes("\u0443\u0436\u0438\u043d")) || null;
+  if (/(\bdinner\b|cena|supper|ужин|вечер)/u.test(normalized)) {
+    return "dinner";
   }
 
   return null;
 };
 
-const resolvePreferredMealForRecipe = (
+const selectMealLabelByType = (
+  mealType: MealType,
+  dayMeals: string[],
+  defaultDayMeals: readonly string[]
+): string => {
+  const candidates = dayMeals.length > 0 ? dayMeals : [...defaultDayMeals];
+  const direct = candidates.find((meal) => detectMealType(meal) === mealType);
+  if (direct) return direct;
+  const byIndex = candidates[MEAL_TYPE_INDEX[mealType]];
+  if (byIndex) return byIndex;
+  return candidates[candidates.length - 1] || defaultDayMeals[defaultDayMeals.length - 1] || "";
+};
+
+const resolvePreferredMealTypeForRecipe = (
   recipe: (Recipe & { tags?: string[] }) | undefined,
   mealFromQueryRaw: string
-): (typeof DEFAULT_DAY_MEALS)[number] => {
-  const fromQuery = normalizeMealLabel(mealFromQueryRaw);
+): MealType => {
+  const fromQuery = detectMealType(mealFromQueryRaw);
   if (fromQuery) return fromQuery;
 
   const text = [
@@ -511,12 +560,12 @@ const resolvePreferredMealForRecipe = (
     ...((recipe?.tags || []) as string[]),
   ]
     .join(" ")
-    .toLocaleLowerCase("ru-RU");
+    .toLowerCase();
 
-  const fromRecipe = normalizeMealLabel(text);
+  const fromRecipe = detectMealType(text);
   if (fromRecipe) return fromRecipe;
 
-  return DEFAULT_DAY_MEALS.find((meal) => meal.toLocaleLowerCase("ru-RU").includes("\u0443\u0436\u0438\u043d")) || DEFAULT_DAY_MEALS[0];
+  return "dinner";
 };
 
 /**
@@ -544,12 +593,14 @@ const AddEditDialog = memo(({
   onClose, 
   onConfirm 
 }: AddEditDialogProps) => {
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
+  const unitOptions = INGREDIENT_UNIT_IDS.map((id) => ({ id, label: getUnitLabelById(id, locale) }));
   const getDefaultIngredient = (): Ingredient => ({
     id: crypto.randomUUID(),
     name: "",
     amount: 0,
-    unit: DEFAULT_UNIT,
+    unitId: DEFAULT_UNIT_ID,
+    unit: getUnitLabelById(DEFAULT_UNIT_ID, locale),
   });
 
   const getEffectivePeopleCount = (cellKey: string) => {
@@ -635,8 +686,29 @@ const AddEditDialog = memo(({
     });
   };
 
+  const handleIngredientUnitChange = (index: number, unitId: UnitId) => {
+    setLocalIngredients((prev) => {
+      const updated = [...prev];
+      updated[index] = {
+        ...updated[index],
+        unitId,
+        unit: getUnitLabelById(unitId, locale),
+      };
+      return updated;
+    });
+  };
+
   const addIngredientField = () => {
-    setLocalIngredients((prev) => [...prev, { id: crypto.randomUUID(), name: "", amount: 0, unit: DEFAULT_UNIT }]);
+    setLocalIngredients((prev) => [
+      ...prev,
+      {
+        id: crypto.randomUUID(),
+        name: "",
+        amount: 0,
+        unitId: DEFAULT_UNIT_ID,
+        unit: getUnitLabelById(DEFAULT_UNIT_ID, locale),
+      },
+    ]);
   };
 
   const removeIngredientField = (index: number) => {
@@ -668,10 +740,12 @@ const AddEditDialog = memo(({
     const scale = peopleCount / baseServings;
     const scaledRecipeIngredients =
       selectedRecipe?.ingredients
-        ?.filter((ing) => ing.name.trim() && (ing.unit === "по вкусу" || ing.amount > 0))
+        ?.filter(
+          (ing) => ing.name.trim() && (isTasteLikeUnit(ing.unitId || ing.unit_id || ing.unit) || ing.amount > 0)
+        )
         .map((ing) => ({
           ...ing,
-          amount: ing.unit === "по вкусу" ? 0 : ing.amount * scale,
+          amount: isTasteLikeUnit(ing.unitId || ing.unit_id || ing.unit) ? 0 : ing.amount * scale,
         })) || [];
 
     // Build MenuItem object
@@ -690,7 +764,9 @@ const AddEditDialog = memo(({
           value: localText.trim(),
           includeInShopping: localIncludeInShopping,
           ingredients: localIncludeInShopping
-            ? localIngredients.filter((ing) => ing.name.trim() && (ing.unit === "по вкусу" || ing.amount > 0))
+            ? localIngredients.filter(
+                (ing) => ing.name.trim() && (isTasteLikeUnit(ing.unitId || ing.unit_id || ing.unit) || ing.amount > 0)
+              )
             : undefined,
           id: editingItem?.id || crypto.randomUUID()
         };
@@ -947,18 +1023,17 @@ const AddEditDialog = memo(({
                       step="0.1"
                     />
 
-                    {INGREDIENT_UNITS.includes(ingredient.unit) ? (
+                    {tryNormalizeUnitId(ingredient.unitId || ingredient.unit_id || ingredient.unit) ? (
                       <select
-                        value={ingredient.unit}
-                        onChange={(e) => handleIngredientChange(index, "unit", e.target.value)}
+                        value={normalizeUnitId(ingredient.unitId || ingredient.unit_id || ingredient.unit || DEFAULT_UNIT_ID, DEFAULT_UNIT_ID)}
+                        onChange={(e) => handleIngredientUnitChange(index, e.target.value as UnitId)}
                         className="menu-dialog__ingredient-unit"
                       >
-                        {INGREDIENT_UNITS.map((unit) => (
-                          <option key={unit} value={unit}>
-                            {unit}
+                        {unitOptions.map((unit) => (
+                          <option key={unit.id} value={unit.id}>
+                            {unit.label}
                           </option>
                         ))}
-                        <option value="другое">{t("menu.dialog.otherUnit")}</option>
                       </select>
                     ) : (
                       <input
@@ -1012,7 +1087,12 @@ const AddEditDialog = memo(({
 AddEditDialog.displayName = "AddEditDialog";
 
 function MenuPageContent() {
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
+  const defaultMenuName = t("menu.fallback.defaultMenuName");
+  const defaultDayMeals = useMemo(
+    () => [t("menu.meals.breakfast"), t("menu.meals.lunch"), t("menu.meals.dinner")],
+    [t]
+  );
   const initialRangeStart = formatDate(getMonday(new Date()));
   const initialRangeEnd = formatDate(addDays(getMonday(new Date()), 6));
   const initialMealRangeKey = `${initialRangeStart}__${initialRangeEnd}`;
@@ -1022,7 +1102,9 @@ function MenuPageContent() {
     const raw = window.localStorage.getItem(DAY_STRUCTURE_MODE_KEY);
     return raw === "meals" ? "meals" : "list";
   });
-  const [mealSlots, setMealSlots] = useState<MealSlotSetting[]>(() => loadMealSlotsFromStorage(initialMealRangeKey));
+  const [mealSlots, setMealSlots] = useState<MealSlotSetting[]>(() =>
+    loadMealSlotsFromStorage(initialMealRangeKey, defaultDayMeals)
+  );
   const [mealSlotsHydrated, setMealSlotsHydrated] = useState(false);
 
   const orderedMealSlots = useMemo(
@@ -1033,17 +1115,17 @@ function MenuPageContent() {
   const getDayMeals = useCallback(
     (_dayKey: string) => {
       const visible = orderedMealSlots.filter((slot) => slot.visible).map((slot) => slot.name);
-      return visible.length > 0 ? visible : [...DEFAULT_DAY_MEALS];
+      return visible.length > 0 ? visible : [...defaultDayMeals];
     },
-    [orderedMealSlots]
+    [defaultDayMeals, orderedMealSlots]
   );
 
   const getAllMealsForDay = useCallback(
     (_dayKey: string) => {
       const all = orderedMealSlots.map((slot) => slot.name);
-      return all.length > 0 ? all : [...DEFAULT_DAY_MEALS];
+      return all.length > 0 ? all : [...defaultDayMeals];
     },
-    [orderedMealSlots]
+    [defaultDayMeals, orderedMealSlots]
   );
 
   const [mealData, setMealData] = useState<Record<string, MenuItem[]>>({});
@@ -1077,12 +1159,12 @@ function MenuPageContent() {
   const [newItemRecipeId, setNewItemRecipeId] = useState("");
   const [newItemIncludeInShopping, setNewItemIncludeInShopping] = useState(true);
   const [newItemIngredients, setNewItemIngredients] = useState<Ingredient[]>([
-    { id: crypto.randomUUID(), name: "", amount: 0, unit: DEFAULT_UNIT },
+    { id: crypto.randomUUID(), name: "", amount: 0, unitId: DEFAULT_UNIT_ID, unit: DEFAULT_UNIT },
   ]);
   const [newItemPeopleCount, setNewItemPeopleCount] = useState(1);
   const [peopleInput, setPeopleInput] = useState("1");
 
-  const [recipeCategoryFilter, setRecipeCategoryFilter] = useState<string>("Все");
+  const [recipeCategoryFilter, setRecipeCategoryFilter] = useState<string>(RECIPE_CATEGORY_FILTER_ALL);
 
   const [openMoreMenu, setOpenMoreMenu] = useState<string | null>(null);
   const [menuAnchor, setMenuAnchor] = useState<{ cellKey: string; index: number; rect: DOMRect } | null>(null);
@@ -1112,9 +1194,9 @@ function MenuPageContent() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    setMealSlots(loadMealSlotsFromStorage(mealSlotsRangeKey));
+    setMealSlots(loadMealSlotsFromStorage(mealSlotsRangeKey, defaultDayMeals));
     setMealSlotsHydrated(true);
-  }, [mealSlotsRangeKey]);
+  }, [defaultDayMeals, mealSlotsRangeKey]);
 
   useEffect(() => {
     if (typeof window === "undefined" || !mealSlotsHydrated) return;
@@ -1166,36 +1248,37 @@ function MenuPageContent() {
           if (!date) return null;
           return {
             dateKey,
-            dayLabel: getWeekdayLabel(dateKey),
-            displayDate: formatDisplayDate(date),
+            dayLabel: getWeekdayLabel(dateKey, locale),
+            displayDate: formatDisplayDate(date, locale),
           };
         })
         .filter((entry): entry is { dateKey: string; dayLabel: string; displayDate: string } => Boolean(entry)),
-    [dayKeys]
+    [dayKeys, locale]
   );
+  const activeLocale = resolveIntlLocale(locale);
   const visibleActiveProductsCount = activeProducts.length;
   const shouldEnableActiveProductsSearch = activeProducts.length >= 8;
   const shouldShowActiveProductsSearch = shouldEnableActiveProductsSearch && expandedActiveProductNoteId === null;
   const normalizedActiveProductsSearch = shouldShowActiveProductsSearch
-    ? activeProductsSearch.trim().toLocaleLowerCase("ru-RU")
+    ? activeProductsSearch.trim().toLocaleLowerCase(activeLocale)
     : "";
   const filteredActiveProducts = useMemo(() => {
-    const ordered = [...activeProducts].sort((a, b) => a.name.localeCompare(b.name, "ru-RU"));
+    const ordered = [...activeProducts].sort((a, b) => a.name.localeCompare(b.name, activeLocale));
     if (!normalizedActiveProductsSearch) return ordered;
     return ordered.filter((item) => {
       const safeName = typeof item.name === "string" ? item.name : "";
       const safeNote = typeof item.note === "string" ? item.note : "";
-      const inName = safeName.toLocaleLowerCase("ru-RU").includes(normalizedActiveProductsSearch);
-      const inNote = safeNote.toLocaleLowerCase("ru-RU").includes(normalizedActiveProductsSearch);
+      const inName = safeName.toLocaleLowerCase(activeLocale).includes(normalizedActiveProductsSearch);
+      const inNote = safeNote.toLocaleLowerCase(activeLocale).includes(normalizedActiveProductsSearch);
       return inName || inNote;
     });
-  }, [activeProducts, normalizedActiveProductsSearch]);
+  }, [activeLocale, activeProducts, normalizedActiveProductsSearch]);
   const activeProductAutocompleteSuggestions = useMemo(() => {
     const unique = new Map<string, string>();
     const pushSuggestion = (rawName: string) => {
       const normalized = sanitizeProductSuggestion(rawName);
       if (!normalized) return;
-      const key = normalized.toLocaleLowerCase("ru-RU");
+      const key = normalized.toLocaleLowerCase(activeLocale);
       if (!unique.has(key)) {
         unique.set(key, normalized);
       }
@@ -1205,8 +1288,8 @@ function MenuPageContent() {
     pantry.forEach((item) => pushSuggestion(item.name));
     activeProducts.forEach((item) => pushSuggestion(item.name));
 
-    return Array.from(unique.values()).sort((a, b) => a.localeCompare(b, "ru-RU", { sensitivity: "base" }));
-  }, [activeProducts, pantry]);
+    return Array.from(unique.values()).sort((a, b) => a.localeCompare(b, activeLocale, { sensitivity: "base" }));
+  }, [activeLocale, activeProducts, pantry]);
 
   const menuStorageKey = `${MENU_STORAGE_KEY}:${rangeKey}`;
   const cellPeopleCountKey = `${CELL_PEOPLE_COUNT_KEY}:${rangeKey}`;
@@ -1274,9 +1357,9 @@ function MenuPageContent() {
     (dayKey: string) => {
       const meals = getAllMealsForDay(dayKey);
       if (meals.length > 0) return meals[meals.length - 1];
-      return DEFAULT_DAY_MEALS[DEFAULT_DAY_MEALS.length - 1];
+      return defaultDayMeals[defaultDayMeals.length - 1] || "";
     },
-    [getAllMealsForDay]
+    [defaultDayMeals, getAllMealsForDay]
   );
 
   const getDayListEntries = useCallback(
@@ -1302,7 +1385,7 @@ function MenuPageContent() {
     ) => {
       if (typeof window === "undefined") return;
       try {
-        const fallbackMenu = createMenuProfileState(DEFAULT_MENU_NAME, targetMenuId || undefined);
+        const fallbackMenu = createMenuProfileState(defaultMenuName, targetMenuId || undefined);
         const sourceMenus = menuProfiles.length > 0 ? menuProfiles : [fallbackMenu];
         const resolvedTargetId = targetMenuId || sourceMenus[0].id;
         const nextProfiles = sourceMenus.map((menu) => {
@@ -1340,6 +1423,7 @@ function MenuPageContent() {
       cellPeopleCountKey,
       cookedStatus,
       cookedStatusKey,
+      defaultMenuName,
       menuProfiles,
       persistMenuBundleSnapshot,
     ]
@@ -1360,10 +1444,10 @@ function MenuPageContent() {
     setNewItemText("");
     setNewItemRecipeId("");
     setNewItemIncludeInShopping(true);
-    setNewItemIngredients([{ id: crypto.randomUUID(), name: "", amount: 0, unit: DEFAULT_UNIT }]);
+    setNewItemIngredients([{ id: crypto.randomUUID(), name: "", amount: 0, unitId: DEFAULT_UNIT_ID, unit: DEFAULT_UNIT }]);
     setNewItemPeopleCount(1);
     setPeopleInput("1");
-    setRecipeCategoryFilter("Все");
+    setRecipeCategoryFilter(RECIPE_CATEGORY_FILTER_ALL);
   };
 
   const closeMoveDialog = () => {
@@ -1694,7 +1778,7 @@ function MenuPageContent() {
     if (product.scope === "persistent") return t("menu.activeProducts.scopePersistent");
     if (product.scope === "until_date" && product.untilDate) {
       const parsed = parseDateSafe(product.untilDate);
-      if (parsed) return t("menu.activeProducts.scopeUntilDateValue", { date: formatDisplayDate(parsed) });
+      if (parsed) return t("menu.activeProducts.scopeUntilDateValue", { date: formatDisplayDate(parsed, locale) });
       return t("menu.activeProducts.scopeUntilDate");
     }
     return t("menu.activeProducts.scopeInMenu");
@@ -1725,21 +1809,27 @@ function MenuPageContent() {
           const allergies = parseItemsList(resolveUserMetaValue(metadata, "allergies", ""));
           const dislikes = parseItemsList(resolveUserMetaValue(metadata, "dislikes", ""));
           if (allergies.length > 0) {
-            allergiesConstraint = `Аллергии и строгие ограничения: ${allergies.join(", ")}. Никогда не использовать эти продукты.`;
+            allergiesConstraint = t("menu.ai.constraints.allergies", {
+              items: allergies.join(", "),
+            });
           }
           if (dislikes.length > 0) {
-            dislikesConstraint = `Не люблю продукты: ${dislikes.join(", ")}. Эти продукты предлагать реже.`;
+            dislikesConstraint = t("menu.ai.constraints.dislikes", {
+              items: dislikes.join(", "),
+            });
           }
         } catch {
           // ignore profile metadata read errors for AI hint flow
         }
       }
       const pantryConstraint = pantry.length > 0
-        ? `Кладовка: использовать в приоритете продукты, которые уже есть дома.`
+        ? t("menu.ai.constraints.pantryPriority")
         : "";
       const composedConstraints = [
         prompt.trim(),
-        prioritizedProducts ? `Активные продукты: ${prioritizedProducts}.` : "",
+        prioritizedProducts
+          ? t("menu.ai.constraints.activeProducts", { items: prioritizedProducts })
+          : "",
         allergiesConstraint,
         dislikesConstraint,
         pantryConstraint,
@@ -2122,7 +2212,7 @@ function MenuPageContent() {
       storedMenu,
       legacyCounts,
       legacyCooked,
-      DEFAULT_MENU_NAME
+      defaultMenuName
     );
     const initialActiveId = parsedBundle.activeMenuId;
     const initialActiveMenu =
@@ -2145,9 +2235,9 @@ function MenuPageContent() {
     );
     if (labelsFromData.length > 0) {
       setMealSlots((prev) => {
-        const existing = new Set(prev.map((slot) => slot.name.toLocaleLowerCase("ru-RU")));
+        const existing = new Set(prev.map((slot) => slot.name.toLocaleLowerCase(activeLocale)));
         const missing = labelsFromData.filter(
-          (label) => !existing.has(label.toLocaleLowerCase("ru-RU"))
+          (label) => !existing.has(label.toLocaleLowerCase(activeLocale))
         );
         if (missing.length === 0) return prev;
         const nextBase = [...prev];
@@ -2184,7 +2274,7 @@ function MenuPageContent() {
     setPendingDeleteMenuId(null);
     setHasLoaded(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [buildNameDrafts, getMergeShoppingKey, rangeKey]);
+  }, [buildNameDrafts, defaultMenuName, getMergeShoppingKey, rangeKey]);
 
   useEffect(() => {
     if (!hasLoaded || !activeMenuId) return;
@@ -2354,11 +2444,13 @@ function MenuPageContent() {
         : dayKeys[0];
     if (!selectedDay) return;
 
-    const preferredMeal = resolvePreferredMealForRecipe(selectedRecipe, mealFromQuery);
+    const preferredMealType = resolvePreferredMealTypeForRecipe(selectedRecipe, mealFromQuery);
+    const dayMeals = getAllMealsForDay(selectedDay);
+    const preferredMeal = selectMealLabelByType(preferredMealType, dayMeals, defaultDayMeals);
     const targetCellKey = getCellKey(selectedDay, preferredMeal);
     const selectedDate = parseDateSafe(selectedDay);
-    const weekdayLabel = getWeekdayLong(selectedDay) || getWeekdayLabel(selectedDay);
-    const dayLabelWithDate = selectedDate ? `${weekdayLabel}, ${formatDisplayDate(selectedDate)}` : weekdayLabel;
+    const weekdayLabel = getWeekdayLong(selectedDay, locale) || getWeekdayLabel(selectedDay, locale);
+    const dayLabelWithDate = selectedDate ? `${weekdayLabel}, ${formatDisplayDate(selectedDate, locale)}` : weekdayLabel;
 
     closeAddEditDialog();
     setShowMenuAddedNotice(false);
@@ -2370,11 +2462,11 @@ function MenuPageContent() {
       recipeTitle: selectedTitle,
       cellKey: targetCellKey,
       dayLabel: dayLabelWithDate,
-      mealLabel: preferredMeal.toLocaleLowerCase("ru-RU"),
+      mealLabel: preferredMeal.toLocaleLowerCase(activeLocale),
     });
 
     router.replace("/menu");
-  }, [dayKeys, hasLoaded, recipes, router, searchParams, t]);
+  }, [activeLocale, dayKeys, defaultDayMeals, getAllMealsForDay, hasLoaded, locale, recipes, router, searchParams, t]);
 
   const handleSelectMenuProfile = (menuId: string) => {
     if (!menuId || menuId === activeMenuId) return;
@@ -2396,7 +2488,7 @@ function MenuPageContent() {
     if (normalized === target.name) return;
 
     const duplicate = menuProfiles.some(
-      (menu) => menu.id !== menuId && menu.name.toLocaleLowerCase("ru-RU") === normalized.toLocaleLowerCase("ru-RU")
+      (menu) => menu.id !== menuId && menu.name.toLocaleLowerCase(activeLocale) === normalized.toLocaleLowerCase(activeLocale)
     );
     if (duplicate) return;
 
@@ -2410,7 +2502,7 @@ function MenuPageContent() {
     const normalized = normalizeMenuProfileName(newMenuNameDraft);
     if (!normalized) return;
     const duplicate = menuProfiles.some(
-      (menu) => menu.name.toLocaleLowerCase("ru-RU") === normalized.toLocaleLowerCase("ru-RU")
+      (menu) => menu.name.toLocaleLowerCase(activeLocale) === normalized.toLocaleLowerCase(activeLocale)
     );
     if (duplicate) return;
 
@@ -2456,7 +2548,7 @@ function MenuPageContent() {
     if (!current || !normalized || normalized === current.name) return;
 
     const exists = mealSlots.some(
-      (slot) => slot.id !== slotId && slot.name.toLocaleLowerCase("ru-RU") === normalized.toLocaleLowerCase("ru-RU")
+      (slot) => slot.id !== slotId && slot.name.toLocaleLowerCase(activeLocale) === normalized.toLocaleLowerCase(activeLocale)
     );
     if (exists) return;
 
@@ -2483,7 +2575,7 @@ function MenuPageContent() {
     const normalized = normalizeMealSlotName(newMealSlotName);
     if (!normalized) return;
     const exists = mealSlots.some(
-      (slot) => slot.name.toLocaleLowerCase("ru-RU") === normalized.toLocaleLowerCase("ru-RU")
+      (slot) => slot.name.toLocaleLowerCase(activeLocale) === normalized.toLocaleLowerCase(activeLocale)
     );
     if (exists) return;
 
@@ -2557,13 +2649,13 @@ function MenuPageContent() {
     setNewItemText("");
     setNewItemRecipeId("");
     setNewItemIncludeInShopping(true);
-    setNewItemIngredients([{ id: crypto.randomUUID(), name: "", amount: 0, unit: DEFAULT_UNIT }]);
+    setNewItemIngredients([{ id: crypto.randomUUID(), name: "", amount: 0, unitId: DEFAULT_UNIT_ID, unit: DEFAULT_UNIT }]);
 
     const count = getEffectivePeopleCount(key);
     setNewItemPeopleCount(count);
     setPeopleInput(count.toString());
 
-    setRecipeCategoryFilter("Все");
+    setRecipeCategoryFilter(RECIPE_CATEGORY_FILTER_ALL);
   };
 
   const handleQuickRecipeAdd = () => {
@@ -2625,12 +2717,12 @@ function MenuPageContent() {
     setNewItemText(hasRecipeInLibrary ? "" : quickRecipeConfirm.recipeTitle);
     setNewItemRecipeId(hasRecipeInLibrary ? recipeId : "");
     setNewItemIncludeInShopping(true);
-    setNewItemIngredients([{ id: crypto.randomUUID(), name: "", amount: 0, unit: DEFAULT_UNIT }]);
+    setNewItemIngredients([{ id: crypto.randomUUID(), name: "", amount: 0, unitId: DEFAULT_UNIT_ID, unit: DEFAULT_UNIT }]);
 
     const count = getEffectivePeopleCount(targetCellKey);
     setNewItemPeopleCount(count);
     setPeopleInput(count.toString());
-    setRecipeCategoryFilter("Все");
+    setRecipeCategoryFilter(RECIPE_CATEGORY_FILTER_ALL);
   };
 
   const handleAddItemConfirm = () => {
@@ -2651,10 +2743,16 @@ function MenuPageContent() {
     const scale = clamped / baseServings;
     const scaledRecipeIngredients =
       selectedRecipe?.ingredients
-        ?.filter((ingredient) => ingredient.name.trim() && (ingredient.unit === "по вкусу" || ingredient.amount > 0))
+        ?.filter(
+          (ingredient) =>
+            ingredient.name.trim() &&
+            (isTasteLikeUnit(ingredient.unitId || ingredient.unit_id || ingredient.unit) || ingredient.amount > 0)
+        )
         .map((ingredient) => ({
           ...ingredient,
-          amount: ingredient.unit === "по вкусу" ? 0 : ingredient.amount * scale,
+          amount: isTasteLikeUnit(ingredient.unitId || ingredient.unit_id || ingredient.unit)
+            ? 0
+            : ingredient.amount * scale,
         })) || [];
 
     const newItem: MenuItem =
@@ -2672,7 +2770,9 @@ function MenuPageContent() {
             value: newItemText.trim(),
             includeInShopping: newItemIncludeInShopping,
             ingredients: newItemIncludeInShopping
-              ? newItemIngredients.filter((ing) => ing.name.trim() && (ing.unit === "по вкусу" || ing.amount > 0))
+              ? newItemIngredients.filter(
+                  (ing) => ing.name.trim() && (isTasteLikeUnit(ing.unitId || ing.unit_id || ing.unit) || ing.amount > 0)
+                )
               : [],
             cooked: false,
             id: crypto.randomUUID(),
@@ -2734,19 +2834,19 @@ function MenuPageContent() {
       setNewItemRecipeId(item.recipeId || "");
       setNewItemText("");
       setNewItemIncludeInShopping(item.includeInShopping ?? true);
-      setNewItemIngredients(item.ingredients || [{ id: crypto.randomUUID(), name: "", amount: 0, unit: DEFAULT_UNIT }]);
+      setNewItemIngredients(item.ingredients || [{ id: crypto.randomUUID(), name: "", amount: 0, unitId: DEFAULT_UNIT_ID, unit: DEFAULT_UNIT }]);
     } else {
       setNewItemType("text");
       setNewItemText(item.value || "");
       setNewItemRecipeId("");
       setNewItemIncludeInShopping(item.includeInShopping ?? true);
-      setNewItemIngredients(item.ingredients || [{ id: crypto.randomUUID(), name: "", amount: 0, unit: DEFAULT_UNIT }]);
+      setNewItemIngredients(item.ingredients || [{ id: crypto.randomUUID(), name: "", amount: 0, unitId: DEFAULT_UNIT_ID, unit: DEFAULT_UNIT }]);
     }
 
     const count = getEffectivePeopleCount(cellKey);
     setNewItemPeopleCount(count);
     setPeopleInput(count.toString());
-    setRecipeCategoryFilter("Все");
+    setRecipeCategoryFilter(RECIPE_CATEGORY_FILTER_ALL);
   };
 
   const handleIngredientChange = (index: number, field: keyof Ingredient, value: string | number) => {
@@ -2758,7 +2858,7 @@ function MenuPageContent() {
   };
 
   const addIngredientField = () => {
-    setNewItemIngredients((prev) => [...prev, { id: crypto.randomUUID(), name: "", amount: 0, unit: DEFAULT_UNIT }]);
+    setNewItemIngredients((prev) => [...prev, { id: crypto.randomUUID(), name: "", amount: 0, unitId: DEFAULT_UNIT_ID, unit: DEFAULT_UNIT }]);
   };
 
   const removeIngredientField = (index: number) => {
@@ -2997,7 +3097,7 @@ function MenuPageContent() {
               <label>{t("menu.moveDialog.mealLabel")}</label>
               <select value={moveTargetMeal} onChange={(e) => setMoveTargetMeal(e.target.value)} className="move-dialog-select">
                 <option value="">{t("menu.moveDialog.choose")}</option>
-                {(moveTargetDay ? getDayMeals(moveTargetDay) : [...DEFAULT_DAY_MEALS]).map((meal) => (
+                {(moveTargetDay ? getDayMeals(moveTargetDay) : [...defaultDayMeals]).map((meal) => (
                   <option key={meal} value={meal}>
                     {meal}
                   </option>
@@ -3511,7 +3611,7 @@ function MenuPageContent() {
             ‹
           </button>
           <div className="week-range-compact">
-            <span className="week-range">{getRangeDisplay(weekStart, periodEnd)}</span>
+            <span className="week-range">{getRangeDisplay(weekStart, periodEnd, locale)}</span>
             <span className="week-range-meta">{t("menu.period.daysCount", { count: periodDays })}</span>
           </div>
           <button

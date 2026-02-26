@@ -1,8 +1,22 @@
 export type IngredientLocale = "ru" | "en" | "es";
+export type IngredientCategoryId =
+  | "vegetables"
+  | "fruits"
+  | "protein"
+  | "dairy"
+  | "grocery"
+  | "bakery"
+  | "drinks"
+  | "other";
+
+export interface IngredientCategoryDictionaryEntry {
+  id: IngredientCategoryId;
+  names: Record<IngredientLocale, string>;
+}
 
 export interface IngredientDictionaryEntry {
   id: string;
-  categoryId: string;
+  categoryId: IngredientCategoryId;
   names: Record<IngredientLocale, string>;
   aliases?: Partial<Record<IngredientLocale, string[]>>;
 }
@@ -15,6 +29,17 @@ const normalizeIngredientText = (value: string): string =>
     .replace(/\p{Diacritic}+/gu, "")
     .replace(/[.,/()[\]{}%]/g, " ")
     .replace(/\s+/g, " ");
+
+const CATEGORY_ENTRIES: IngredientCategoryDictionaryEntry[] = [
+  { id: "vegetables", names: { ru: "Овощи", en: "Vegetables", es: "Verduras" } },
+  { id: "fruits", names: { ru: "Фрукты", en: "Fruits", es: "Frutas" } },
+  { id: "protein", names: { ru: "Белок", en: "Protein", es: "Proteína" } },
+  { id: "dairy", names: { ru: "Молочное", en: "Dairy", es: "Lácteos" } },
+  { id: "grocery", names: { ru: "Бакалея", en: "Grocery", es: "Despensa seca" } },
+  { id: "bakery", names: { ru: "Выпечка", en: "Bakery", es: "Panadería" } },
+  { id: "drinks", names: { ru: "Напитки", en: "Drinks", es: "Bebidas" } },
+  { id: "other", names: { ru: "Прочее", en: "Other", es: "Otros" } },
+];
 
 const ENTRIES: IngredientDictionaryEntry[] = [
   { id: "milk", categoryId: "dairy", names: { ru: "Молоко", en: "Milk", es: "Leche" } },
@@ -49,6 +74,9 @@ const ENTRIES: IngredientDictionaryEntry[] = [
   { id: "water", categoryId: "drinks", names: { ru: "Вода", en: "Water", es: "Agua" } },
 ];
 
+const categoryById = new Map<IngredientCategoryId, IngredientCategoryDictionaryEntry>(
+  CATEGORY_ENTRIES.map((item) => [item.id, item])
+);
 const byId = new Map<string, IngredientDictionaryEntry>(ENTRIES.map((item) => [item.id, item]));
 
 const indexByLocale: Record<IngredientLocale, Map<string, string>> = {
@@ -73,6 +101,7 @@ ENTRIES.forEach((entry) => {
 });
 
 export const listIngredientDictionary = (): IngredientDictionaryEntry[] => [...ENTRIES];
+export const listIngredientCategories = (): IngredientCategoryDictionaryEntry[] => [...CATEGORY_ENTRIES];
 
 export const getIngredientNameById = (
   ingredientId: string,
@@ -80,6 +109,25 @@ export const getIngredientNameById = (
   fallbackName = ""
 ): string => {
   const found = byId.get(String(ingredientId || "").trim());
+  if (!found) return fallbackName;
+  return found.names[locale] || found.names.ru || fallbackName;
+};
+
+export const getIngredientCategoryIdByIngredientId = (
+  ingredientId: string,
+  fallbackCategoryId: IngredientCategoryId = "other"
+): IngredientCategoryId => {
+  const found = byId.get(String(ingredientId || "").trim());
+  return found?.categoryId || fallbackCategoryId;
+};
+
+export const getIngredientCategoryNameById = (
+  categoryId: string,
+  locale: IngredientLocale,
+  fallbackName = ""
+): string => {
+  const normalizedId = String(categoryId || "").trim() as IngredientCategoryId;
+  const found = categoryById.get(normalizedId);
   if (!found) return fallbackName;
   return found.names[locale] || found.names.ru || fallbackName;
 };

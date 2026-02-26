@@ -2,6 +2,12 @@
 
 import { getSupabaseClient } from "./supabaseClient";
 import { findIngredientIdByName } from "./ingredientDictionary";
+import {
+  DEFAULT_UNIT_ID,
+  getUnitLabelById,
+  normalizeUnitId,
+  type UnitId,
+} from "./ingredientUnits";
 
 export const RECIPES_STORAGE_KEY = "recipes";
 const RECIPE_REPORTS_KEY = "recipeReports";
@@ -12,6 +18,7 @@ export type RecipeLanguage = "ru" | "en" | "es";
 
 export interface Ingredient {
   ingredientId?: string;
+  unitId?: UnitId;
   name: string;
   amount: number;
   unit: string;
@@ -118,17 +125,28 @@ interface PostgrestLikeError {
   message?: string;
 }
 
-type RecipeReportReason =
-  | "Нарушение авторских прав"
-  | "Чужой рецепт без указания источника"
-  | "Другое";
+export type RecipeReportReasonId =
+  | "copyright"
+  | "foreign_without_source"
+  | "other";
 
 interface RecipeReportRecord {
   recipeId: string;
-  reason: RecipeReportReason;
+  reason: RecipeReportReasonId;
   details: string;
   createdAt: string;
 }
+
+const normalizeRecipeReportReason = (value: unknown): RecipeReportReasonId => {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (normalized === "copyright" || normalized === "нарушение авторских прав") {
+    return "copyright";
+  }
+  if (normalized === "foreign_without_source" || normalized === "чужой рецепт без указания источника") {
+    return "foreign_without_source";
+  }
+  return "other";
+};
 
 const RECIPE_COLUMNS =
   "id,owner_id,title,short_description,description,instructions,ingredients,servings,image,categories,visibility,share_token,created_at,updated_at";
@@ -331,7 +349,7 @@ const readRecipeReports = (): RecipeReportRecord[] => {
       .filter((item) => typeof item.recipeId === "string" && item.recipeId.trim().length > 0)
       .map((item) => ({
         recipeId: String(item.recipeId),
-        reason: (item.reason as RecipeReportReason) || "Другое",
+        reason: normalizeRecipeReportReason(item.reason),
         details: String(item.details || ""),
         createdAt: String(item.createdAt || new Date().toISOString()),
       }));
@@ -355,7 +373,7 @@ export const isRecipeHiddenByReport = (recipeId: string): boolean =>
 
 export const reportRecipeForReview = (
   recipeId: string,
-  reason: RecipeReportReason,
+  reason: RecipeReportReasonId,
   details = ""
 ): void => {
   const current = readRecipeReports();
@@ -537,15 +555,19 @@ const normalizeIngredients = (value: unknown): Ingredient[] => {
     if (!name) return;
 
     const unit = String(raw.unit || "").trim();
+    const unitIdRaw = String(raw.unitId || raw.unit_id || "").trim();
     const amount = Number(raw.amount || 0);
     const ingredientIdRaw = String(raw.ingredientId || raw.ingredient_id || "").trim();
     const note = String(raw.note || "").trim();
     const optional = Boolean(raw.optional);
+    const normalizedUnitId = normalizeUnitId(unitIdRaw || unit || DEFAULT_UNIT_ID, DEFAULT_UNIT_ID);
+    const normalizedUnit = unit || getUnitLabelById(normalizedUnitId, "ru");
 
     normalized.push({
       ingredientId: ingredientIdRaw || findIngredientIdByName(name, "ru") || undefined,
+      unitId: normalizedUnitId,
       name,
-      unit: unit || "г",
+      unit: normalizedUnit,
       amount: Number.isFinite(amount) ? amount : 0,
       note: note || undefined,
       optional,
@@ -553,6 +575,54 @@ const normalizeIngredients = (value: unknown): Ingredient[] => {
   });
 
   return normalized;
+};
+
+const hasMissingStructuredIngredientFields = (value: unknown): boolean => {
+  if (!Array.isArray(value)) return false;
+
+  return value.some((item) => {
+    if (!item || typeof item !== "object") return false;
+    const raw = item as Record<string, unknown>;
+    const name = String(raw.name || "").trim();
+    if (!name) return false;
+
+    const ingredientIdRaw = String(raw.ingredientId || raw.ingredient_id || "").trim();
+    const unitIdRaw = String(raw.unitId || raw.unit_id || "").trim();
+    const unitRaw = String(raw.unit || "").trim();
+
+    if (!ingredientIdRaw && findIngredientIdByName(name, "ru")) return true;
+    if (!unitIdRaw) return true;
+
+    const normalizedUnitId = normalizeUnitId(unitIdRaw || unitRaw || DEFAULT_UNIT_ID, DEFAULT_UNIT_ID);
+    if (normalizedUnitId !== unitIdRaw) return true;
+
+    return false;
+  });
+};
+
+const persistBackfilledIngredientsIfNeeded = async (
+  ownerId: string,
+  rows: RecipeRow[]
+): Promise<void> => {
+  const candidates = rows
+    .filter((row) => hasMissingStructuredIngredientFields(row.ingredients))
+    .map((row) => ({
+      recipeId: row.id,
+      ingredients: normalizeIngredients(row.ingredients),
+    }));
+
+  if (candidates.length === 0) return;
+
+  const supabase = getSupabaseClient();
+  await Promise.allSettled(
+    candidates.map(({ recipeId, ingredients }) =>
+      supabase
+        .from("recipes")
+        .update({ ingredients })
+        .eq("id", recipeId)
+        .eq("owner_id", ownerId)
+    )
+  );
 };
 
 const normalizeStringArray = (value: unknown): string[] => {
@@ -642,11 +712,24 @@ const loadCloudFallbackRecipes = async (ownerId: string): Promise<RecipeModel[]>
   const metadata = (data.user.user_metadata || {}) as Record<string, unknown>;
   const rawList = metadata[RECIPES_CLOUD_FALLBACK_KEY];
   if (!Array.isArray(rawList)) return [];
-  return dedupeRecipesByTitle(
+  const needsBackfill = rawList.some((item) => {
+    if (!item || typeof item !== "object") return false;
+    const raw = item as Record<string, unknown>;
+    return hasMissingStructuredIngredientFields(raw.ingredients);
+  });
+  const mapped = dedupeRecipesByTitle(
     rawList
     .map((item) => mapCloudFallbackItemToRecipe(ownerId, item))
     .filter((item): item is RecipeModel => Boolean(item))
   );
+  if (needsBackfill) {
+    try {
+      await saveCloudFallbackRecipes(ownerId, mapped);
+    } catch {
+      // Keep read path non-blocking if metadata update fails.
+    }
+  }
+  return mapped;
 };
 
 const saveCloudFallbackRecipes = async (ownerId: string, recipes: RecipeModel[]): Promise<void> => {
@@ -828,13 +911,7 @@ export const loadLocalRecipes = (): RecipeModel[] => {
         ? row.ingredients.filter((entry) => entry && typeof entry === "object") as Array<Record<string, unknown>>
         : [];
       if (!needsIngredientBackfill) {
-        needsIngredientBackfill = rawIngredients.some((entry) => {
-          const hasId = String(entry.ingredientId || entry.ingredient_id || "").trim().length > 0;
-          if (hasId) return false;
-          const name = String(entry.name || "").trim();
-          if (!name) return false;
-          return Boolean(findIngredientIdByName(name, "ru"));
-        });
+        needsIngredientBackfill = hasMissingStructuredIngredientFields(rawIngredients);
       }
       return {
         id: String(row.id || crypto.randomUUID()),
@@ -901,6 +978,12 @@ export const listMyRecipes = async (ownerId: string): Promise<RecipeModel[]> => 
 
   const rows = (recipeRows || []) as RecipeRow[];
   if (rows.length === 0) return [];
+
+  try {
+    await persistBackfilledIngredientsIfNeeded(ownerId, rows);
+  } catch {
+    // Non-blocking migration: listing recipes should still work.
+  }
 
   const ids = rows.map((row) => row.id);
   const { data: noteRows, error: notesError } = await supabase
@@ -986,6 +1069,20 @@ export const getRecipeById = async (
   const row = data as RecipeRow;
   const rowVisibility = normalizeVisibility(row.visibility);
   const isOwner = Boolean(currentUserId && row.owner_id === currentUserId);
+
+  if (isOwner && currentUserId && hasMissingStructuredIngredientFields(row.ingredients)) {
+    const normalizedIngredients = normalizeIngredients(row.ingredients);
+    try {
+      await supabase
+        .from("recipes")
+        .update({ ingredients: normalizedIngredients })
+        .eq("id", recipeId)
+        .eq("owner_id", currentUserId);
+      row.ingredients = normalizedIngredients;
+    } catch {
+      // Do not break read path on best-effort backfill.
+    }
+  }
 
   if (rowVisibility === "link" && !isOwner) {
     if (!normalizedShareToken || row.share_token !== normalizedShareToken) {

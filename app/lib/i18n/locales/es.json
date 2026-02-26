@@ -399,6 +399,11 @@
       "addDishWithMeal": "Añadir plato ({{meal}})",
       "addDish": "+ Añadir plato"
     },
+    "meals": {
+      "breakfast": "Desayuno",
+      "lunch": "Comida",
+      "dinner": "Cena"
+    },
     "settings": {
       "title": "Ajustes del menú",
       "dayStructure": "Estructura del día",
@@ -435,7 +440,13 @@
     },
     "ai": {
       "noSuggestion": "La IA no pudo sugerir.",
-      "failedToGetSuggestion": "No se pudo obtener sugerencia de IA."
+      "failedToGetSuggestion": "No se pudo obtener sugerencia de IA.",
+      "constraints": {
+        "allergies": "Alergias y restricciones estrictas: {{items}}. Nunca usar estos productos.",
+        "dislikes": "Productos no preferidos: {{items}}. Sugerir estos productos con menor frecuencia.",
+        "pantryPriority": "Despensa: priorizar productos que ya hay en casa.",
+        "activeProducts": "Productos activos: {{items}}."
+      }
     },
     "errors": {
       "weeklyMenusTableMissing": "No se encontró la tabla weekly_menus en Supabase. Ejecuta SQL desde supabase/schema.sql.",
@@ -446,7 +457,8 @@
       "clearCurrentMenu": "¿Seguro que quieres limpiar el menú actual?"
     },
     "fallback": {
-      "recipeTitle": "receta"
+      "recipeTitle": "receta",
+      "defaultMenuName": "Principal"
     },
     "shopping": {
       "allMenusPeriod": "Todos los menús del período"
@@ -696,6 +708,62 @@
         "invitesPartial": "No se enviaron algunas invitaciones: {{emails}}",
         "checkAmountAndUnit": "Revise cantidad y unidad despues de importar."
       }
+    },
+    "detail": {
+      "messages": {
+        "editOwnerOnly": "Solo el propietario puede editar esta receta.",
+        "invitesPartial": "No se enviaron algunas invitaciones: {{emails}}",
+        "invitesSentCount": "Invitaciones enviadas: {{count}}",
+        "invitesUpdated": "La lista de invitados fue actualizada.",
+        "deleteOwnerOnly": "Solo el propietario puede eliminar esta receta."
+      },
+      "hidden": {
+        "title": "La receta está oculta temporalmente",
+        "description": "La receta permanecerá oculta hasta la revisión. Si se confirma una infracción, la receta será eliminada."
+      },
+      "actions": {
+        "toRecipes": "A la lista de recetas",
+        "backToRecipes": "Volver a recetas",
+        "edit": "Editar",
+        "delete": "Eliminar",
+        "report": "Reportar"
+      },
+      "notFound": "Receta no encontrada",
+      "translation": {
+        "languageLabel": "Idioma de la receta:",
+        "versionAvailable": "Versión disponible",
+        "versionMissing": "Aún no hay traducción",
+        "creating": "Creando traducción...",
+        "createButton": "Crear traducción ({{lang}})",
+        "exists": "La traducción ya existe.",
+        "noTitle": "No se puede crear una traducción sin título.",
+        "draftCreated": "Borrador de traducción creado.",
+        "createdReview": "Traducción creada. Revisa el texto.",
+        "aiUnavailable": "La IA no está disponible. Se creó un borrador desde el texto original.",
+        "createFailed": "No se pudo crear la traducción."
+      },
+      "report": {
+        "reason": "Motivo",
+        "commentPlaceholder": "Comentario (opcional)",
+        "submit": "Enviar reporte",
+        "reasons": {
+          "copyright": "Infracción de derechos de autor",
+          "foreignWithoutSource": "Receta ajena sin fuente",
+          "other": "Otro"
+        }
+      },
+      "share": {
+        "generateAndSave": "Primero genera un token y guarda la receta.",
+        "copied": "Enlace copiado.",
+        "copyFailed": "No se pudo copiar el enlace. Cópialo desde la barra del navegador.",
+        "copyLink": "Copiar enlace"
+      },
+      "access": {
+        "ownerOnly": "Solo el propietario puede cambiar el modo de acceso."
+      },
+      "visibilityLabel": "Visibilidad",
+      "sourceOpen": "Abrir fuente",
+      "taste": "al gusto"
     }
   },
   "languages": {

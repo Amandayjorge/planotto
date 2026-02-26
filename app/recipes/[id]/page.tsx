@@ -18,6 +18,7 @@ import {
   reportRecipeForReview,
   removeRecipeFromLocalCache,
   type Ingredient,
+  type RecipeReportReasonId,
   type RecipeLanguage,
   type RecipeModel,
   type RecipeTranslation,
@@ -27,7 +28,16 @@ import {
   upsertRecipeInLocalCache,
 } from "../../lib/recipesSupabase";
 import { useI18n } from "../../components/I18nProvider";
-import { getIngredientNameById } from "../../lib/ingredientDictionary";
+import { findIngredientIdByName, getIngredientNameById } from "../../lib/ingredientDictionary";
+import {
+  DEFAULT_UNIT_ID,
+  getUnitLabel,
+  getUnitLabelById,
+  getUnitOptions,
+  isTasteLikeUnit,
+  normalizeUnitId,
+  type UnitId,
+} from "../../lib/ingredientUnits";
 import { isSupabaseConfigured } from "../../lib/supabaseClient";
 import { RECIPE_TAGS } from "../../lib/recipeTags";
 import {
@@ -38,7 +48,6 @@ import {
   getTagHints,
 } from "../../lib/aiAssistantClient";
 
-const UNITS = ["г", "кг", "мл", "л", "шт", "ч.л.", "ст.л.", "по вкусу"];
 type IngredientHintsMap = Record<number, string[]>;
 const RECIPE_LANGUAGES: RecipeLanguage[] = ["ru", "en", "es"];
 const LANGUAGE_LABELS: Record<RecipeLanguage, string> = { ru: "RU", en: "EN", es: "ES" };
@@ -135,23 +144,54 @@ const normalizeRecipeLanguage = (value: unknown): RecipeLanguage =>
 
 const ACCESS_OPTIONS: Array<{
   value: RecipeVisibility;
-  label: string;
-  description: string;
+  labelKey: string;
+  descriptionKey: string;
 }> = [
-  { value: "private", label: "Личный", description: "Только владелец." },
-  { value: "public", label: "Публичный", description: "Виден всем в библиотеке." },
-  { value: "link", label: "По ссылке", description: "Доступ по прямой ссылке." },
-  { value: "invited", label: "По приглашению", description: "Только приглашенным пользователям." },
+  {
+    value: "private",
+    labelKey: "recipes.new.access.private.label",
+    descriptionKey: "recipes.new.access.private.description",
+  },
+  {
+    value: "public",
+    labelKey: "recipes.new.access.public.label",
+    descriptionKey: "recipes.new.access.public.description",
+  },
+  {
+    value: "link",
+    labelKey: "recipes.new.access.link.label",
+    descriptionKey: "recipes.new.access.link.description",
+  },
+  {
+    value: "invited",
+    labelKey: "recipes.new.access.invited.label",
+    descriptionKey: "recipes.new.access.invited.description",
+  },
 ];
 
-const VISIBILITY_LABELS: Record<RecipeVisibility, string> = {
-  private: "Личный",
-  public: "Публичный",
-  link: "По ссылке",
-  invited: "По приглашению",
+const VISIBILITY_LABEL_KEYS: Record<RecipeVisibility, string> = {
+  private: "recipes.new.access.private.label",
+  public: "recipes.new.access.public.label",
+  link: "recipes.new.access.link.label",
+  invited: "recipes.new.access.invited.label",
 };
 
 const generateShareToken = (): string => crypto.randomUUID().replace(/-/g, "");
+
+const REPORT_REASON_OPTIONS: Array<{ value: RecipeReportReasonId; labelKey: string }> = [
+  {
+    value: "copyright",
+    labelKey: "recipes.detail.report.reasons.copyright",
+  },
+  {
+    value: "foreign_without_source",
+    labelKey: "recipes.detail.report.reasons.foreignWithoutSource",
+  },
+  {
+    value: "other",
+    labelKey: "recipes.detail.report.reasons.other",
+  },
+];
 
 const parseInvitedEmails = (raw: string): string[] => {
   const unique = new Set<string>();
@@ -181,7 +221,8 @@ const resolveRecipeImage = (recipe: RecipeModel): string => {
 
 export default function RecipeDetailPage() {
   const router = useRouter();
-  const { locale } = useI18n();
+  const { locale, t } = useI18n();
+  const unitOptions = getUnitOptions(locale);
   const params = useParams();
   const searchParams = useSearchParams();
   const recipeId = String(params.id || "");
@@ -218,7 +259,7 @@ export default function RecipeDetailPage() {
   const [showAiTools, setShowAiTools] = useState(false);
   const [showAdvancedFields, setShowAdvancedFields] = useState(false);
   const [showReportForm, setShowReportForm] = useState(false);
-  const [reportReason, setReportReason] = useState("Нарушение авторских прав");
+  const [reportReason, setReportReason] = useState<RecipeReportReasonId>(REPORT_REASON_OPTIONS[0].value);
   const [reportDetails, setReportDetails] = useState("");
   const [isReportedHidden, setIsReportedHidden] = useState(false);
   const [contentLanguage, setContentLanguage] = useState<RecipeLanguage>("ru");
@@ -357,7 +398,15 @@ export default function RecipeDetailPage() {
   }, [recipeId, currentUserId, sharedTokenFromQuery, locale]);
 
   const addIngredient = () => {
-    setIngredients((prev) => [...prev, { name: "", amount: 0, unit: UNITS[0] }]);
+    setIngredients((prev) => [
+      ...prev,
+      {
+        name: "",
+        amount: 0,
+        unitId: DEFAULT_UNIT_ID,
+        unit: getUnitLabelById(DEFAULT_UNIT_ID, locale),
+      },
+    ]);
   };
 
   const removeIngredient = (index: number) => {
@@ -368,6 +417,18 @@ export default function RecipeDetailPage() {
     setIngredients((prev) => {
       const updated = [...prev];
       updated[index] = { ...updated[index], [field]: value };
+      return updated;
+    });
+  };
+
+  const updateIngredientUnit = (index: number, unitId: UnitId) => {
+    setIngredients((prev) => {
+      const updated = [...prev];
+      updated[index] = {
+        ...updated[index],
+        unitId,
+        unit: getUnitLabelById(unitId, locale),
+      };
       return updated;
     });
   };
@@ -386,7 +447,7 @@ export default function RecipeDetailPage() {
       .filter((item) => item.name.length > 0);
 
     if (prepared.length === 0) {
-      setAiMessage("Сначала добавьте хотя бы один ингредиент.");
+      setAiMessage(t("recipes.new.ai.needIngredient"));
       return;
     }
 
@@ -407,9 +468,13 @@ export default function RecipeDetailPage() {
       }
 
       setIngredientHints(map);
-      setAiMessage(Object.keys(map).length > 0 ? "ИИ предложил варианты названий." : "Подсказки не найдены.");
+      setAiMessage(
+        Object.keys(map).length > 0
+          ? t("recipes.new.ai.hintsFound")
+          : t("recipes.new.ai.hintsNotFound")
+      );
     } catch (error) {
-      const text = error instanceof Error ? error.message : "Не удалось получить подсказки ингредиентов.";
+      const text = error instanceof Error ? error.message : t("recipes.new.ai.hintsFailed");
       setAiMessage(text);
     } finally {
       setAiAction(null);
@@ -429,9 +494,11 @@ export default function RecipeDetailPage() {
       const allowed = new Set(RECIPE_TAGS as readonly string[]);
       const next = (data.suggestedTags || []).filter((tag) => allowed.has(tag));
       setSuggestedTags(next);
-      setAiMessage(data.message || (next.length > 0 ? "ИИ предложил теги." : "ИИ не нашел явных тегов."));
+      setAiMessage(
+        data.message || (next.length > 0 ? t("recipes.new.ai.tagsFound") : t("recipes.new.ai.tagsNotFound"))
+      );
     } catch (error) {
-      const text = error instanceof Error ? error.message : "Не удалось получить подсказки тегов.";
+      const text = error instanceof Error ? error.message : t("recipes.new.ai.tagsFailed");
       setAiMessage(text);
     } finally {
       setAiAction(null);
@@ -445,12 +512,19 @@ export default function RecipeDetailPage() {
         title: title.trim(),
         ingredients: ingredients
           .filter((item) => item.name.trim().length > 0)
-          .map((item) => ({ name: item.name.trim(), amount: Number(item.amount || 0), unit: item.unit || UNITS[0] })),
+          .map((item) => {
+            const unitId = normalizeUnitId(item.unitId || item.unit || DEFAULT_UNIT_ID, DEFAULT_UNIT_ID);
+            return {
+              name: item.name.trim(),
+              amount: Number(item.amount || 0),
+              unit: getUnitLabelById(unitId, locale),
+            };
+          }),
       });
       setSuggestedServings(data.suggestedServings && data.suggestedServings > 0 ? data.suggestedServings : null);
-      setAiMessage(data.message || "Подсказка по порциям готова.");
+      setAiMessage(data.message || t("recipes.new.ai.servingsReady"));
     } catch (error) {
-      const text = error instanceof Error ? error.message : "Не удалось получить подсказку по порциям.";
+      const text = error instanceof Error ? error.message : t("recipes.new.ai.servingsFailed");
       setAiMessage(text);
     } finally {
       setAiAction(null);
@@ -469,12 +543,12 @@ export default function RecipeDetailPage() {
 
       if (data.imageUrl) {
         setImage(data.imageUrl);
-        setAiMessage(data.message || "Фото сгенерировано.");
+        setAiMessage(data.message || t("recipes.new.ai.imageReady"));
       } else {
-        setAiMessage("ИИ не вернул изображение.");
+        setAiMessage(t("recipes.new.ai.imageMissing"));
       }
     } catch (error) {
-      const text = error instanceof Error ? error.message : "Не удалось сгенерировать фото.";
+      const text = error instanceof Error ? error.message : t("recipes.new.ai.imageFailed");
       setAiMessage(text);
     } finally {
       setAiAction(null);
@@ -483,7 +557,7 @@ export default function RecipeDetailPage() {
 
   const saveCurrentRecipe = async () => {
     if (!title.trim()) {
-      alert("Название рецепта обязательно");
+      alert(t("recipes.new.messages.titleRequired"));
       return;
     }
 
@@ -491,14 +565,18 @@ export default function RecipeDetailPage() {
 
     const normalizedIngredients = ingredients
       .filter((item) => item.name.trim())
-      .map((item) => ({
-        ingredientId: item.ingredientId,
-        name: item.name.trim(),
-        amount: item.unit === "по вкусу" ? 0 : Math.max(0, item.amount || 0),
-        unit: item.unit || UNITS[0],
-        note: item.note,
-        optional: Boolean(item.optional),
-      }));
+      .map((item) => {
+        const unitId = normalizeUnitId(item.unitId || item.unit || DEFAULT_UNIT_ID, DEFAULT_UNIT_ID);
+        return {
+          ingredientId: item.ingredientId || findIngredientIdByName(item.name.trim(), locale) || undefined,
+          unitId,
+          name: item.name.trim(),
+          amount: isTasteLikeUnit(unitId) ? 0 : Math.max(0, item.amount || 0),
+          unit: getUnitLabelById(unitId, locale),
+          note: item.note,
+          optional: Boolean(item.optional),
+        };
+      });
     const normalizedTags = Array.from(new Set(selectedTags.map((tag) => tag.trim()).filter(Boolean)));
     const normalizedRecipeLink = normalizeLink(recipeLink);
     const baseLanguage = normalizeRecipeLanguage(recipe.baseLanguage);
@@ -572,7 +650,7 @@ export default function RecipeDetailPage() {
       }
 
       if (!currentUserId || !canEdit) {
-        alert("Редактировать может только владелец рецепта.");
+        alert(t("recipes.detail.messages.editOwnerOnly"));
         return;
       }
 
@@ -599,12 +677,12 @@ export default function RecipeDetailPage() {
           const inviteResult = await sendRecipeAccessInvites(recipe.id, invitedEmails);
           if (inviteResult.failed.length > 0) {
             const failedEmails = inviteResult.failed.map((item) => item.email).join(", ");
-            setAccessNotice(`Часть приглашений не отправлена: ${failedEmails}`);
+            setAccessNotice(t("recipes.detail.messages.invitesPartial", { emails: failedEmails }));
           } else {
-            setAccessNotice(`Приглашения отправлены: ${inviteResult.sent.length}`);
+            setAccessNotice(t("recipes.detail.messages.invitesSentCount", { count: inviteResult.sent.length }));
           }
         } else {
-          setAccessNotice("Список приглашённых обновлен.");
+          setAccessNotice(t("recipes.detail.messages.invitesUpdated"));
         }
       } else {
         setAccessNotice("");
@@ -658,7 +736,7 @@ export default function RecipeDetailPage() {
         setIsEditing(false);
         return;
       }
-      const text = error instanceof Error ? error.message : "Не удалось сохранить рецепт.";
+      const text = error instanceof Error ? error.message : t("recipes.new.messages.saveFailed");
       alert(text);
     } finally {
       setIsSaving(false);
@@ -667,7 +745,7 @@ export default function RecipeDetailPage() {
 
   const deleteCurrentRecipe = async () => {
     if (!recipe) return;
-    if (!confirm("Удалить этот рецепт?")) return;
+    if (!confirm(t("recipes.messages.deleteOneConfirm", { title: recipe.title }))) return;
 
     try {
       if (!isSupabaseConfigured() || !recipe.ownerId) {
@@ -677,7 +755,7 @@ export default function RecipeDetailPage() {
       }
 
       if (!currentUserId || !canEdit) {
-        alert("Удалять может только владелец рецепта.");
+        alert(t("recipes.detail.messages.deleteOwnerOnly"));
         return;
       }
 
@@ -690,7 +768,7 @@ export default function RecipeDetailPage() {
         router.push("/recipes");
         return;
       }
-      const text = error instanceof Error ? error.message : "Не удалось удалить рецепт.";
+      const text = error instanceof Error ? error.message : t("recipes.messages.deleteFailed");
       alert(text);
     }
   };
@@ -706,7 +784,7 @@ export default function RecipeDetailPage() {
     if (!recipe) return;
     if (!canEdit) return;
     if (recipe.translations?.[contentLanguage]) {
-      setTranslationNotice("Перевод уже существует.");
+      setTranslationNotice(t("recipes.detail.translation.exists"));
       return;
     }
 
@@ -723,14 +801,14 @@ export default function RecipeDetailPage() {
     };
 
     if (!fallbackDraft.title) {
-      setTranslationNotice("Невозможно создать перевод без названия.");
+      setTranslationNotice(t("recipes.detail.translation.noTitle"));
       return;
     }
 
     try {
       setIsCreatingTranslation(true);
       let draft = fallbackDraft;
-      let notice = "Черновик перевода создан.";
+      let notice = t("recipes.detail.translation.draftCreated");
 
       try {
         const aiDraft = await getRecipeTranslationDraft({
@@ -753,9 +831,9 @@ export default function RecipeDetailPage() {
           updatedAt: new Date().toISOString(),
           isAutoGenerated: true,
         };
-        notice = aiDraft.message?.trim() || "Перевод создан. Проверьте текст.";
+        notice = aiDraft.message?.trim() || t("recipes.detail.translation.createdReview");
       } catch {
-        notice = "ИИ недоступен. Создан черновик из исходного текста.";
+        notice = t("recipes.detail.translation.aiUnavailable");
       }
 
       const nextTranslations = { ...(recipe.translations || {}), [contentLanguage]: draft };
@@ -782,7 +860,7 @@ export default function RecipeDetailPage() {
       resetFormFromRecipe(updatedRecipe, contentLanguage);
       setTranslationNotice(notice);
     } catch (error) {
-      const text = toErrorText(error, "Не удалось создать перевод.");
+      const text = toErrorText(error, t("recipes.detail.translation.createFailed"));
       setTranslationNotice(text);
     } finally {
       setIsCreatingTranslation(false);
@@ -901,7 +979,7 @@ export default function RecipeDetailPage() {
         }
         return;
       }
-      const text = toErrorText(error, "Не удалось скопировать рецепт.");
+      const text = toErrorText(error, t("recipes.messages.copyFailed"));
       alert(text);
     }
   };
@@ -910,7 +988,7 @@ export default function RecipeDetailPage() {
     if (!recipe) return;
     const token = (shareToken || recipe.shareToken || "").trim();
     if (!token) {
-      setShareCopyMessage("Сначала сгенерируйте токен и сохраните рецепт.");
+      setShareCopyMessage(t("recipes.detail.share.generateAndSave"));
       return;
     }
 
@@ -919,10 +997,10 @@ export default function RecipeDetailPage() {
 
     try {
       await navigator.clipboard.writeText(shareUrl);
-      setShareCopyMessage("Ссылка скопирована.");
+      setShareCopyMessage(t("recipes.detail.share.copied"));
       window.setTimeout(() => setShareCopyMessage(""), 1200);
     } catch {
-      setShareCopyMessage("Не удалось скопировать. Скопируйте ссылку из строки браузера.");
+      setShareCopyMessage(t("recipes.detail.share.copyFailed"));
     }
   };
 
@@ -930,10 +1008,7 @@ export default function RecipeDetailPage() {
     if (!recipe) return;
     reportRecipeForReview(
       recipe.id,
-      reportReason as
-        | "Нарушение авторских прав"
-        | "Чужой рецепт без указания источника"
-        | "Другое",
+      reportReason,
       reportDetails
     );
     setShowReportForm(false);
@@ -941,20 +1016,19 @@ export default function RecipeDetailPage() {
   };
 
   if (isLoading) {
-    return <div style={{ padding: "20px", textAlign: "center" }}>Загрузка...</div>;
+    return <div style={{ padding: "20px", textAlign: "center" }}>{t("recipes.loading")}</div>;
   }
 
   if (isReportedHidden) {
     return (
       <div style={{ padding: "20px", maxWidth: "760px", margin: "0 auto" }}>
         <div className="card" style={{ padding: "16px" }}>
-          <h2 style={{ marginTop: 0 }}>Рецепт временно скрыт</h2>
+          <h2 style={{ marginTop: 0 }}>{t("recipes.detail.hidden.title")}</h2>
           <p style={{ marginBottom: "12px" }}>
-            Рецепт будет временно скрыт до проверки.
-            Если нарушение подтвердится, рецепт будет удален.
+            {t("recipes.detail.hidden.description")}
           </p>
           <button className="btn" onClick={() => router.push("/recipes")}>
-            К списку рецептов
+            {t("recipes.detail.actions.toRecipes")}
           </button>
         </div>
       </div>
@@ -964,8 +1038,8 @@ export default function RecipeDetailPage() {
   if (!recipe) {
     return (
       <div style={{ padding: "20px", textAlign: "center" }}>
-        <p>Рецепт не найден</p>
-        <button className="btn" onClick={() => router.push("/recipes")}>К списку рецептов</button>
+        <p>{t("recipes.detail.notFound")}</p>
+        <button className="btn" onClick={() => router.push("/recipes")}>{t("recipes.detail.actions.toRecipes")}</button>
       </div>
     );
   }
@@ -987,7 +1061,7 @@ export default function RecipeDetailPage() {
   return (
     <div style={{ padding: "20px", maxWidth: "900px", margin: "0 auto" }}>
       <div style={{ marginBottom: "20px", display: "flex", gap: "10px", flexWrap: "wrap" }}>
-        <button className="btn" onClick={() => router.push("/recipes")}>← Назад к рецептам</button>
+        <button className="btn" onClick={() => router.push("/recipes")}>{t("recipes.detail.actions.backToRecipes")}</button>
 
         {!isEditing && canEdit && (
           <button
@@ -998,7 +1072,7 @@ export default function RecipeDetailPage() {
               setShowAdvancedFields(false);
             }}
           >
-            Редактировать
+            {t("recipes.detail.actions.edit")}
           </button>
         )}
 
@@ -1009,7 +1083,7 @@ export default function RecipeDetailPage() {
               onClick={saveCurrentRecipe}
               disabled={isSaving}
             >
-              {isSaving ? "Сохранение..." : "Сохранить"}
+              {isSaving ? t("recipes.new.actions.saving") : t("recipes.new.actions.saveRecipe")}
             </button>
             <button
               className="btn"
@@ -1018,19 +1092,19 @@ export default function RecipeDetailPage() {
                 setIsEditing(false);
               }}
             >
-              Отмена
+              {t("recipes.new.actions.cancel")}
             </button>
           </>
         )}
 
         {canEdit && (
           <button className="btn btn-danger" onClick={deleteCurrentRecipe}>
-            Удалить
+            {t("recipes.detail.actions.delete")}
           </button>
         )}
 
         {showCopyButton && (
-          <button className="btn btn-primary" onClick={copyToMine}>Добавить в мои рецепты</button>
+          <button className="btn btn-primary" onClick={copyToMine}>{t("recipes.card.addToMine")}</button>
         )}
 
         {showReportButton && !isEditing && (
@@ -1039,14 +1113,14 @@ export default function RecipeDetailPage() {
             className="recipes-report-link"
             onClick={() => setShowReportForm((prev) => !prev)}
           >
-            Пожаловаться
+            {t("recipes.detail.actions.report")}
           </button>
         )}
       </div>
 
       <div className="card" style={{ marginBottom: "14px", padding: "10px 12px" }}>
         <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
-          <span className="muted" style={{ marginRight: "4px" }}>Язык рецепта:</span>
+          <span className="muted" style={{ marginRight: "4px" }}>{t("recipes.detail.translation.languageLabel")}</span>
           {RECIPE_LANGUAGES.map((language) => {
             const exists = Boolean(recipe.translations?.[language]) || language === baseLanguage;
             const active = contentLanguage === language;
@@ -1057,7 +1131,11 @@ export default function RecipeDetailPage() {
                 className={`btn ${active ? "btn-primary" : ""}`}
                 onClick={() => switchContentLanguage(language)}
                 style={{ padding: "4px 10px", fontSize: "12px" }}
-                title={exists ? "Версия доступна" : "Перевода пока нет"}
+                title={
+                  exists
+                    ? t("recipes.detail.translation.versionAvailable")
+                    : t("recipes.detail.translation.versionMissing")
+                }
               >
                 {LANGUAGE_LABELS[language]}{exists ? "" : " *"}
               </button>
@@ -1071,7 +1149,9 @@ export default function RecipeDetailPage() {
               onClick={createTranslationDraft}
               disabled={isCreatingTranslation}
             >
-              {isCreatingTranslation ? "Создаю перевод..." : `Создать перевод (${LANGUAGE_LABELS[contentLanguage]})`}
+              {isCreatingTranslation
+                ? t("recipes.detail.translation.creating")
+                : t("recipes.detail.translation.createButton", { lang: LANGUAGE_LABELS[contentLanguage] })}
             </button>
           ) : null}
         </div>
@@ -1083,36 +1163,37 @@ export default function RecipeDetailPage() {
       {showReportButton && showReportForm && !isEditing && (
         <div className="card" style={{ marginBottom: "16px", padding: "14px" }}>
           <label style={{ display: "block", marginBottom: "8px", fontWeight: "bold" }}>
-            Причина
+            {t("recipes.detail.report.reason")}
           </label>
           <select
             className="input"
             value={reportReason}
-            onChange={(e) => setReportReason(e.target.value)}
+            onChange={(e) => setReportReason(e.target.value as RecipeReportReasonId)}
             style={{ maxWidth: "360px", marginBottom: "10px" }}
           >
-            <option>Нарушение авторских прав</option>
-            <option>Чужой рецепт без указания источника</option>
-            <option>Другое</option>
+            {REPORT_REASON_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {t(option.labelKey)}
+              </option>
+            ))}
           </select>
           <textarea
             className="input"
             rows={3}
             value={reportDetails}
             onChange={(e) => setReportDetails(e.target.value)}
-            placeholder="Комментарий (необязательно)"
+            placeholder={t("recipes.detail.report.commentPlaceholder")}
             style={{ minHeight: "80px" }}
           />
           <p className="muted" style={{ marginTop: "8px" }}>
-            Рецепт будет временно скрыт до проверки.
-            Если нарушение подтвердится, рецепт будет удален.
+            {t("recipes.detail.hidden.description")}
           </p>
           <div style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
             <button className="btn btn-primary" onClick={submitReport}>
-              Отправить жалобу
+              {t("recipes.detail.report.submit")}
             </button>
             <button className="btn" onClick={() => setShowReportForm(false)}>
-              Отмена
+              {t("recipes.new.actions.cancel")}
             </button>
           </div>
         </div>
@@ -1122,23 +1203,23 @@ export default function RecipeDetailPage() {
         <div>
           {aiMessage && (
             <p className="muted" style={{ marginBottom: "14px" }}>
-              Отто: {aiMessage}
+              {t("recipes.new.ottoPrefix")}: {aiMessage}
             </p>
           )}
 
           <p className="muted" style={{ marginTop: "-4px", marginBottom: "14px" }}>
-            Быстрый старт: достаточно названия и ингредиентов. Остальное можно поправить позже.
+            {t("recipes.new.quickStart")}
           </p>
 
           <div className="card" style={{ marginBottom: "14px", padding: "14px" }}>
-            <h3 style={{ margin: "0 0 10px 0" }}>Шаг 1. Основное</h3>
+            <h3 style={{ margin: "0 0 10px 0" }}>{t("recipes.new.step1.title")}</h3>
             <div style={{ marginBottom: "16px" }}>
-              <label style={{ display: "block", marginBottom: "8px", fontWeight: "bold", fontSize: "18px" }}>Название</label>
+              <label style={{ display: "block", marginBottom: "8px", fontWeight: "bold", fontSize: "18px" }}>{t("recipes.new.fields.title")}</label>
               <input className="input" type="text" value={title} onChange={(e) => setTitle(e.target.value)} />
             </div>
 
             <div style={{ marginBottom: "16px" }}>
-              <label style={{ display: "block", marginBottom: "8px", fontWeight: "bold" }}>Доступ</label>
+              <label style={{ display: "block", marginBottom: "8px", fontWeight: "bold" }}>{t("recipes.new.fields.access")}</label>
               <div style={{ display: "grid", gap: "8px" }}>
                 {ACCESS_OPTIONS.map((option) => {
                   const disabled = !canChangeVisibility && option.value !== "private";
@@ -1159,15 +1240,15 @@ export default function RecipeDetailPage() {
                         gap: "2px",
                       }}
                     >
-                      <span>{option.label}</span>
-                      <span style={{ fontSize: "12px", opacity: 0.85 }}>{option.description}</span>
+                      <span>{t(option.labelKey)}</span>
+                      <span style={{ fontSize: "12px", opacity: 0.85 }}>{t(option.descriptionKey)}</span>
                     </button>
                   );
                 })}
               </div>
               {!canChangeVisibility ? (
                 <p className="muted" style={{ margin: "8px 0 0 0" }}>
-                  Режим доступа может менять только владелец рецепта.
+                  {t("recipes.detail.access.ownerOnly")}
                 </p>
               ) : null}
 
@@ -1175,10 +1256,10 @@ export default function RecipeDetailPage() {
                 <div style={{ marginTop: "10px", display: "grid", gap: "8px" }}>
                   <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
                     <button type="button" className="btn" onClick={() => setShareToken(generateShareToken())}>
-                      Сгенерировать ссылку
+                      {t("recipes.new.access.generateLink")}
                     </button>
                     <button type="button" className="btn" onClick={copyShareLink}>
-                      Скопировать ссылку
+                      {t("recipes.detail.share.copyLink")}
                     </button>
                   </div>
                   {shareCopyMessage ? (
@@ -1188,11 +1269,11 @@ export default function RecipeDetailPage() {
                   ) : null}
                   {shareToken || recipe.shareToken ? (
                     <p className="muted" style={{ margin: 0 }}>
-                      Токен: {(shareToken || recipe.shareToken || "").slice(0, 12)}...
+                      {t("recipes.new.access.token")}: {(shareToken || recipe.shareToken || "").slice(0, 12)}...
                     </p>
                   ) : (
                     <p className="muted" style={{ margin: 0 }}>
-                      Сгенерируйте ссылку и сохраните рецепт.
+                      {t("recipes.new.access.linkAvailableAfterSave")}
                     </p>
                   )}
                 </div>
@@ -1203,9 +1284,9 @@ export default function RecipeDetailPage() {
                   <button
                     type="button"
                     className="btn"
-                    onClick={() => setShowInvitedAccessEditor((prev) => !prev)}
+                  onClick={() => setShowInvitedAccessEditor((prev) => !prev)}
                   >
-                    Управлять доступом
+                    {t("recipes.new.access.manage")}
                   </button>
                   {showInvitedAccessEditor ? (
                     <div style={{ display: "grid", gap: "6px" }}>
@@ -1214,11 +1295,11 @@ export default function RecipeDetailPage() {
                         rows={4}
                         value={invitedEmailsDraft}
                         onChange={(e) => setInvitedEmailsDraft(e.target.value)}
-                        placeholder="email пользователей, по одному в строке"
+                        placeholder={t("recipes.new.access.invitedPlaceholder")}
                         style={{ minHeight: "88px", resize: "vertical" }}
                       />
                       <p className="muted" style={{ margin: 0 }}>
-                        Приглашения отправляются на email, доступ выдается после входа в аккаунт.
+                        {t("recipes.new.access.invitedHelp")}
                       </p>
                     </div>
                   ) : null}
@@ -1234,7 +1315,7 @@ export default function RecipeDetailPage() {
 
             <div style={{ marginBottom: "16px" }}>
               <div style={{ display: "flex", gap: "10px", alignItems: "center", marginBottom: "8px", flexWrap: "wrap" }}>
-                <label style={{ display: "block", fontWeight: "bold" }}>Ингредиенты</label>
+                <label style={{ display: "block", fontWeight: "bold" }}>{t("recipes.new.fields.ingredients")}</label>
               </div>
             {ingredients.map((ingredient, index) => (
               <div key={index} style={{ marginBottom: "10px" }}>
@@ -1244,7 +1325,7 @@ export default function RecipeDetailPage() {
                       value={ingredient.name}
                       onChange={(nextValue) => updateIngredient(index, "name", nextValue)}
                       suggestions={productSuggestions}
-                      placeholder="Название"
+                      placeholder={t("recipes.new.fields.ingredientNamePlaceholder")}
                     />
                   </div>
                   <input
@@ -1260,20 +1341,20 @@ export default function RecipeDetailPage() {
                     }
                     step="0.1"
                     min="0"
-                    placeholder="Кол-во"
+                    placeholder={t("recipes.new.fields.ingredientAmountPlaceholder")}
                     style={{ width: "110px" }}
                   />
                   <select
                     className="input"
-                    value={ingredient.unit}
-                    onChange={(e) => updateIngredient(index, "unit", e.target.value)}
+                    value={normalizeUnitId(ingredient.unitId || ingredient.unit || DEFAULT_UNIT_ID, DEFAULT_UNIT_ID)}
+                    onChange={(e) => updateIngredientUnit(index, e.target.value as UnitId)}
                     style={{ width: "120px" }}
                   >
-                    {UNITS.map((unit) => (
-                      <option key={unit} value={unit}>{unit}</option>
+                    {unitOptions.map((unit) => (
+                      <option key={unit.id} value={unit.id}>{unit.label}</option>
                     ))}
                   </select>
-                  <button className="btn btn-danger" onClick={() => removeIngredient(index)}>Удалить</button>
+                  <button className="btn btn-danger" onClick={() => removeIngredient(index)}>{t("recipes.new.actions.deleteIngredient")}</button>
                 </div>
                 {ingredientHints[index]?.length ? (
                   <div style={{ marginTop: "6px", display: "flex", gap: "6px", flexWrap: "wrap" }}>
@@ -1297,11 +1378,11 @@ export default function RecipeDetailPage() {
                 ) : null}
               </div>
             ))}
-              <button className="btn btn-add" onClick={addIngredient}>+ Добавить ингредиент</button>
+              <button className="btn btn-add" onClick={addIngredient}>{t("recipes.new.actions.addIngredient")}</button>
             </div>
 
             <div style={{ marginBottom: "0" }}>
-              <label style={{ display: "block", marginBottom: "8px", fontWeight: "bold" }}>Способ приготовления</label>
+              <label style={{ display: "block", marginBottom: "8px", fontWeight: "bold" }}>{t("recipes.new.fields.instructions")}</label>
               <textarea
                 className="input"
                 rows={8}
@@ -1314,29 +1395,29 @@ export default function RecipeDetailPage() {
 
           <div className="card" style={{ marginBottom: "14px", padding: "12px", background: "var(--background-secondary)" }}>
             <button className="btn" type="button" onClick={() => setShowAiTools((prev) => !prev)}>
-              {showAiTools ? "Скрыть подсказки Отто" : "Отто поможет (необязательно)"}
+              {showAiTools ? t("recipes.new.ai.hideTools") : t("recipes.new.ai.showTools")}
             </button>
             {showAiTools ? (
               <div style={{ marginTop: "10px" }}>
                 <p className="muted" style={{ marginTop: 0, marginBottom: "8px" }}>
-                  Это дополнительные подсказки. Рецепт можно сохранить без них.
+                  {t("recipes.new.ai.toolsHint")}
                 </p>
                 <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
                   <button className="btn" onClick={requestIngredientHints} disabled={aiAction === "ingredients" || !hasCoreInput}>
-                    {aiAction === "ingredients" ? "Ищу..." : "Подсказать названия"}
+                    {aiAction === "ingredients" ? t("recipes.new.ai.searching") : t("recipes.new.ai.suggestNames")}
                   </button>
                   <button className="btn" onClick={requestServingsHint} disabled={aiAction === "servings" || !hasCoreInput}>
-                    {aiAction === "servings" ? "Считаю..." : "Подсказать порции"}
+                    {aiAction === "servings" ? t("recipes.new.ai.counting") : t("recipes.new.ai.suggestServings")}
                   </button>
                   <button className="btn" onClick={requestTagHints} disabled={aiAction === "tags" || !hasCoreInput}>
-                    {aiAction === "tags" ? "Думаю..." : "Предложить теги"}
+                    {aiAction === "tags" ? t("recipes.new.ai.thinking") : t("recipes.new.ai.suggestTags")}
                   </button>
                   <button className="btn" onClick={requestRecipeImage} disabled={aiAction === "image" || !hasCoreInput}>
-                    {aiAction === "image" ? "Генерация..." : "Сгенерировать фото"}
+                    {aiAction === "image" ? t("recipes.new.ai.generating") : t("recipes.new.ai.generatePhoto")}
                   </button>
                   {suggestedServings ? (
                     <button className="btn btn-primary" onClick={() => setServings(suggestedServings)}>
-                      Применить порции: {suggestedServings}
+                      {t("recipes.new.ai.applyServings", { count: suggestedServings })}
                     </button>
                   ) : null}
                   {suggestedTags.length > 0 ? (
@@ -1344,7 +1425,7 @@ export default function RecipeDetailPage() {
                       className="btn btn-primary"
                       onClick={() => setSelectedTags((prev) => Array.from(new Set([...prev, ...suggestedTags])))}
                     >
-                      Добавить предложенные теги
+                      {t("recipes.new.ai.addSuggestedTags")}
                     </button>
                   ) : null}
                 </div>
@@ -1354,12 +1435,12 @@ export default function RecipeDetailPage() {
 
           <div className="card" style={{ marginBottom: "20px", padding: "12px", background: "var(--background-secondary)" }}>
             <button className="btn" type="button" onClick={() => setShowAdvancedFields((prev) => !prev)}>
-              {showAdvancedFields ? "Скрыть дополнительное" : "Шаг 2. Дополнительно (необязательно)"}
+              {showAdvancedFields ? t("recipes.new.step2.hide") : t("recipes.new.step2.show")}
             </button>
             {showAdvancedFields ? (
               <div style={{ marginTop: "12px" }}>
                 <div style={{ marginBottom: "16px" }}>
-                  <label style={{ display: "block", marginBottom: "8px", fontWeight: "bold" }}>Короткое описание</label>
+                  <label style={{ display: "block", marginBottom: "8px", fontWeight: "bold" }}>{t("recipes.new.fields.shortDescription")}</label>
                   <textarea
                     className="input"
                     rows={3}
@@ -1371,7 +1452,7 @@ export default function RecipeDetailPage() {
 
                 <div style={{ marginBottom: "16px", display: "flex", gap: "16px", flexWrap: "wrap" }}>
                   <label style={{ display: "block", fontWeight: "bold" }}>
-                    Порции
+                    {t("recipes.new.fields.servings")}
                     <input
                       className="input"
                       type="number"
@@ -1387,7 +1468,7 @@ export default function RecipeDetailPage() {
 
                 <div style={{ marginBottom: "16px" }}>
                   <label style={{ display: "block", marginBottom: "8px", fontWeight: "bold" }}>
-                    Источник (необязательно)
+                    {t("recipes.new.fields.source")}
                   </label>
                   <input
                     className="input"
@@ -1397,17 +1478,17 @@ export default function RecipeDetailPage() {
                     placeholder="https://..."
                   />
                   <p className="muted" style={{ marginTop: "8px" }}>
-                    Если рецепт взят из книги или сайта, укажите источник.
+                    {t("recipes.new.fields.sourceHint")}
                   </p>
                   {visibility !== "private" ? (
                     <p className="muted" style={{ marginTop: "8px" }}>
-                      Если источник не указан, ответственность за публикацию остается на вас.
+                      {t("recipes.new.fields.sourceWarning")}
                     </p>
                   ) : null}
                 </div>
 
                 <div style={{ marginBottom: "16px" }}>
-                  <label style={{ display: "block", fontWeight: "bold", marginBottom: "8px" }}>Теги (необязательно)</label>
+                  <label style={{ display: "block", fontWeight: "bold", marginBottom: "8px" }}>{t("recipes.new.fields.tags")}</label>
                   {suggestedTags.length > 0 ? (
                     <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "10px" }}>
                       {suggestedTags.map((tag) => (
@@ -1455,15 +1536,15 @@ export default function RecipeDetailPage() {
                 </div>
 
                 <div style={{ marginBottom: "16px" }}>
-                  <label style={{ display: "block", marginBottom: "8px", fontWeight: "bold" }}>Картинка</label>
+                  <label style={{ display: "block", marginBottom: "8px", fontWeight: "bold" }}>{t("recipes.new.fields.image")}</label>
                   {image ? (
                     <div>
                       <img
                         src={image}
-                        alt="Превью рецепта"
+                        alt={t("recipes.new.fields.imagePreviewAlt")}
                         style={{ maxWidth: "220px", maxHeight: "220px", borderRadius: "10px", display: "block", marginBottom: "10px" }}
                       />
-                      <button className="btn btn-danger" onClick={() => setImage("")}>Удалить картинку</button>
+                      <button className="btn btn-danger" onClick={() => setImage("")}>{t("recipes.new.actions.deleteImage")}</button>
                     </div>
                   ) : (
                     <input type="file" accept="image/*" onChange={handleImageUpload} className="input" />
@@ -1471,7 +1552,7 @@ export default function RecipeDetailPage() {
                 </div>
 
                 <div style={{ marginBottom: "0" }}>
-                  <label style={{ display: "block", marginBottom: "8px", fontWeight: "bold" }}>Личные заметки</label>
+                  <label style={{ display: "block", marginBottom: "8px", fontWeight: "bold" }}>{t("recipes.new.fields.notes")}</label>
                   <textarea
                     className="input"
                     rows={4}
@@ -1505,11 +1586,11 @@ export default function RecipeDetailPage() {
           )}
 
           <p style={{ marginBottom: "10px" }}>
-            <strong>Порции:</strong> {recipe.servings || 2}
+            <strong>{t("recipes.new.fields.servings")}:</strong> {recipe.servings || 2}
           </p>
 
           <p style={{ marginBottom: "16px" }}>
-            <strong>Видимость:</strong> {VISIBILITY_LABELS[recipe.visibility || "private"]}
+            <strong>{t("recipes.detail.visibilityLabel")}:</strong> {t(VISIBILITY_LABEL_KEYS[recipe.visibility || "private"])}
           </p>
 
           {recipe.tags && recipe.tags.length > 0 && (
@@ -1533,24 +1614,25 @@ export default function RecipeDetailPage() {
 
           {recipeLinkView && (
             <p style={{ marginBottom: "16px" }}>
-              <strong>Источник:</strong>{" "}
+              <strong>{t("recipes.new.fields.source")}:</strong>{" "}
               <a href={recipeLinkView} target="_blank" rel="noopener noreferrer">
-                Открыть источник
+                {t("recipes.detail.sourceOpen")}
               </a>
             </p>
           )}
 
           {recipe.ingredients && recipe.ingredients.length > 0 && (
             <div style={{ marginBottom: "20px" }}>
-              <h3 style={{ marginBottom: "10px" }}>Ингредиенты</h3>
+              <h3 style={{ marginBottom: "10px" }}>{t("recipes.new.fields.ingredients")}</h3>
               <ul style={{ paddingLeft: "20px" }}>
                 {recipe.ingredients.map((item, index) => (
                   <li key={index}>
                     {(() => {
                       const localizedName = getIngredientNameById(item.ingredientId || "", locale, item.name);
-                      return item.unit === "по вкусу"
-                        ? `${localizedName} — по вкусу`
-                        : `${item.amount} ${item.unit} ${localizedName}`;
+                      const localizedUnit = getUnitLabel(item.unitId || item.unit, locale, item.unit);
+                      return isTasteLikeUnit(item.unitId || item.unit)
+                        ? `${localizedName} — ${t("recipes.detail.taste")}`
+                        : `${item.amount} ${localizedUnit} ${localizedName}`;
                     })()}
                   </li>
                 ))}
@@ -1560,7 +1642,7 @@ export default function RecipeDetailPage() {
 
           {cookingText && (
             <div style={{ marginBottom: "20px" }}>
-              <h3 style={{ marginBottom: "10px" }}>Способ приготовления</h3>
+              <h3 style={{ marginBottom: "10px" }}>{t("recipes.new.fields.instructions")}</h3>
               <div className="card" style={{ padding: "12px", whiteSpace: "pre-wrap", lineHeight: 1.6 }}>
                 <LinkifiedText text={cookingText} />
               </div>
@@ -1569,7 +1651,7 @@ export default function RecipeDetailPage() {
 
           {canEdit && recipe.notes && (
             <div style={{ marginBottom: "20px" }}>
-              <h3 style={{ marginBottom: "10px" }}>Личные заметки</h3>
+              <h3 style={{ marginBottom: "10px" }}>{t("recipes.new.fields.notes")}</h3>
               <div className="card" style={{ padding: "12px" }}>{recipe.notes}</div>
             </div>
           )}

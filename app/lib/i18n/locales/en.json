@@ -399,6 +399,11 @@
       "addDishWithMeal": "Add dish ({{meal}})",
       "addDish": "+ Add dish"
     },
+    "meals": {
+      "breakfast": "Breakfast",
+      "lunch": "Lunch",
+      "dinner": "Dinner"
+    },
     "settings": {
       "title": "Menu settings",
       "dayStructure": "Day structure",
@@ -435,7 +440,13 @@
     },
     "ai": {
       "noSuggestion": "AI could not suggest.",
-      "failedToGetSuggestion": "Failed to get AI suggestion."
+      "failedToGetSuggestion": "Failed to get AI suggestion.",
+      "constraints": {
+        "allergies": "Allergies and strict restrictions: {{items}}. Never use these products.",
+        "dislikes": "Disliked products: {{items}}. Suggest these products less often.",
+        "pantryPriority": "Pantry: prioritize products already available at home.",
+        "activeProducts": "Active products: {{items}}."
+      }
     },
     "errors": {
       "weeklyMenusTableMissing": "weekly_menus table not found in Supabase. Run SQL from supabase/schema.sql.",
@@ -446,7 +457,8 @@
       "clearCurrentMenu": "Are you sure you want to clear current menu?"
     },
     "fallback": {
-      "recipeTitle": "recipe"
+      "recipeTitle": "recipe",
+      "defaultMenuName": "Main"
     },
     "shopping": {
       "allMenusPeriod": "All period menus"
@@ -696,6 +708,62 @@
         "invitesPartial": "Some invites were not sent: {{emails}}",
         "checkAmountAndUnit": "Check amount and unit after import."
       }
+    },
+    "detail": {
+      "messages": {
+        "editOwnerOnly": "Only the recipe owner can edit this recipe.",
+        "invitesPartial": "Some invitations were not sent: {{emails}}",
+        "invitesSentCount": "Invitations sent: {{count}}",
+        "invitesUpdated": "Invited list updated.",
+        "deleteOwnerOnly": "Only the recipe owner can delete this recipe."
+      },
+      "hidden": {
+        "title": "Recipe is temporarily hidden",
+        "description": "The recipe is hidden until review is completed. If a violation is confirmed, the recipe will be deleted."
+      },
+      "actions": {
+        "toRecipes": "To recipes list",
+        "backToRecipes": "Back to recipes",
+        "edit": "Edit",
+        "delete": "Delete",
+        "report": "Report"
+      },
+      "notFound": "Recipe not found",
+      "translation": {
+        "languageLabel": "Recipe language:",
+        "versionAvailable": "Version available",
+        "versionMissing": "No translation yet",
+        "creating": "Creating translation...",
+        "createButton": "Create translation ({{lang}})",
+        "exists": "Translation already exists.",
+        "noTitle": "Cannot create translation without a title.",
+        "draftCreated": "Translation draft created.",
+        "createdReview": "Translation created. Please review the text.",
+        "aiUnavailable": "AI is unavailable. A draft was created from the source text.",
+        "createFailed": "Failed to create translation."
+      },
+      "report": {
+        "reason": "Reason",
+        "commentPlaceholder": "Comment (optional)",
+        "submit": "Submit report",
+        "reasons": {
+          "copyright": "Copyright infringement",
+          "foreignWithoutSource": "Recipe copied without source",
+          "other": "Other"
+        }
+      },
+      "share": {
+        "generateAndSave": "Generate a token and save the recipe first.",
+        "copied": "Link copied.",
+        "copyFailed": "Could not copy link. Copy it from the browser address bar.",
+        "copyLink": "Copy link"
+      },
+      "access": {
+        "ownerOnly": "Only the recipe owner can change access mode."
+      },
+      "visibilityLabel": "Visibility",
+      "sourceOpen": "Open source",
+      "taste": "to taste"
     }
   },
   "languages": {

@@ -5,6 +5,15 @@ import { useRouter } from "next/navigation";
 import { appendProductSuggestions, loadProductSuggestions } from "../../lib/productSuggestions";
 import ProductAutocompleteInput from "../../components/ProductAutocompleteInput";
 import { useI18n } from "../../components/I18nProvider";
+import { findIngredientIdByName } from "../../lib/ingredientDictionary";
+import {
+  DEFAULT_UNIT_ID,
+  getUnitLabelById,
+  getUnitOptions,
+  isTasteLikeUnit,
+  normalizeUnitId,
+  type UnitId,
+} from "../../lib/ingredientUnits";
 import {
   createRecipe,
   getCurrentUserId,
@@ -30,7 +39,6 @@ import {
   getTagHints,
 } from "../../lib/aiAssistantClient";
 
-const UNITS = ["г", "кг", "мл", "л", "шт", "ч.л.", "ст.л.", "по вкусу"];
 const MAX_IMPORT_PHOTOS = 8;
 const IMPORT_MAX_SIDE = 1600;
 const IMPORT_QUALITY = 0.84;
@@ -158,6 +166,7 @@ interface NewRecipeFormProps {
 export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps) {
   const router = useRouter();
   const { t, locale } = useI18n();
+  const unitOptions = getUnitOptions(locale);
 
   const [title, setTitle] = useState("");
   const [shortDescription, setShortDescription] = useState("");
@@ -171,7 +180,14 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
   const [invitedEmailsDraft, setInvitedEmailsDraft] = useState("");
   const [showInvitedAccessEditor, setShowInvitedAccessEditor] = useState(false);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
-  const [ingredients, setIngredients] = useState<Ingredient[]>([{ name: "", amount: 0, unit: UNITS[0] }]);
+  const [ingredients, setIngredients] = useState<Ingredient[]>([
+    {
+      name: "",
+      amount: 0,
+      unitId: DEFAULT_UNIT_ID,
+      unit: getUnitLabelById(DEFAULT_UNIT_ID, locale),
+    },
+  ]);
   const [productSuggestions] = useState<string[]>(() => loadProductSuggestions());
   const [isSaving, setIsSaving] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
@@ -243,7 +259,15 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
   }, []);
 
   const addIngredient = () => {
-    setIngredients((prev) => [...prev, { name: "", amount: 0, unit: UNITS[0] }]);
+    setIngredients((prev) => [
+      ...prev,
+      {
+        name: "",
+        amount: 0,
+        unitId: DEFAULT_UNIT_ID,
+        unit: getUnitLabelById(DEFAULT_UNIT_ID, locale),
+      },
+    ]);
   };
 
   const removeIngredient = (index: number) => {
@@ -347,7 +371,14 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
         title: title.trim(),
         ingredients: ingredients
           .filter((item) => item.name.trim().length > 0)
-          .map((item) => ({ name: item.name.trim(), amount: Number(item.amount || 0), unit: item.unit || UNITS[0] })),
+          .map((item) => {
+            const unitId = normalizeUnitId(item.unitId || item.unit || DEFAULT_UNIT_ID, DEFAULT_UNIT_ID);
+            return {
+              name: item.name.trim(),
+              amount: Number(item.amount || 0),
+              unit: getUnitLabelById(unitId, locale),
+            };
+          }),
       });
       setSuggestedServings(data.suggestedServings && data.suggestedServings > 0 ? data.suggestedServings : null);
       setAiMessage(data.message || t("recipes.new.ai.servingsReady"));
@@ -399,11 +430,15 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
     }
 
     const importedIngredients = (draft.ingredients || [])
-      .map((item) => ({
-        name: item.name?.trim() || "",
-        amount: item.unit === UNITS[UNITS.length - 1] ? 0 : Math.max(0, Number(item.amount || 0)),
-        unit: item.unit || UNITS[0],
-      }))
+      .map((item) => {
+        const unitId = normalizeUnitId(item.unit || DEFAULT_UNIT_ID, DEFAULT_UNIT_ID);
+        return {
+          name: item.name?.trim() || "",
+          amount: isTasteLikeUnit(unitId) ? 0 : Math.max(0, Number(item.amount || 0)),
+          unitId,
+          unit: getUnitLabelById(unitId, locale),
+        };
+      })
       .filter((item) => item.name.length > 0);
 
     if (importedIngredients.length > 0) {
@@ -508,6 +543,24 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
         setAiAction(null);
       }
     }
+  };
+
+  const updateIngredientUnit = (index: number, unitId: UnitId) => {
+    setIngredients((prev) => {
+      const updated = [...prev];
+      updated[index] = {
+        ...updated[index],
+        unitId,
+        unit: getUnitLabelById(unitId, locale),
+      };
+      return updated;
+    });
+    setReviewHints((prev) => {
+      if (!prev[index]) return prev;
+      const next = { ...prev };
+      delete next[index];
+      return next;
+    });
   };
 
   const handleImportPhotoChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -646,14 +699,18 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
 
     const normalizedIngredients = ingredients
       .filter((item) => item.name.trim())
-      .map((item) => ({
-        ingredientId: item.ingredientId,
-        name: item.name.trim(),
-        amount: item.unit === UNITS[UNITS.length - 1] ? 0 : Math.max(0, item.amount || 0),
-        unit: item.unit || UNITS[0],
-        note: item.note,
-        optional: Boolean(item.optional),
-      }));
+      .map((item) => {
+        const unitId = normalizeUnitId(item.unitId || item.unit || DEFAULT_UNIT_ID, DEFAULT_UNIT_ID);
+        return {
+          ingredientId: item.ingredientId || findIngredientIdByName(item.name.trim(), locale) || undefined,
+          unitId,
+          name: item.name.trim(),
+          amount: isTasteLikeUnit(unitId) ? 0 : Math.max(0, item.amount || 0),
+          unit: getUnitLabelById(unitId, locale),
+          note: item.note,
+          optional: Boolean(item.optional),
+        };
+      });
 
     const baseLanguage = normalizeRecipeLanguage(locale);
     const baseTranslation: RecipeTranslation = {
@@ -1074,14 +1131,14 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
                 style={{ width: "100%" }}
               />
               <select
-                value={ingredient.unit}
-                onChange={(e) => updateIngredient(index, "unit", e.target.value)}
+                value={normalizeUnitId(ingredient.unitId || ingredient.unit || DEFAULT_UNIT_ID, DEFAULT_UNIT_ID)}
+                onChange={(e) => updateIngredientUnit(index, e.target.value as UnitId)}
                 className="input"
                 style={{ width: "100%" }}
               >
-                {UNITS.map((unit) => (
-                  <option key={unit} value={unit}>
-                    {unit}
+                {unitOptions.map((unit) => (
+                  <option key={unit.id} value={unit.id}>
+                    {unit.label}
                   </option>
                 ))}
               </select>

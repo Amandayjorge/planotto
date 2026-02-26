@@ -514,12 +514,49 @@ begin
     check (base_language in ('ru', 'en', 'es'));
 end $$;
 
+create table if not exists public.ingredient_categories (
+  id text primary key,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.ingredient_category_translations (
+  category_id text not null references public.ingredient_categories(id) on delete cascade,
+  language text not null check (language in ('ru', 'en', 'es')),
+  name text not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  primary key (category_id, language)
+);
+
+create index if not exists ingredient_category_translations_language_idx
+  on public.ingredient_category_translations(language);
+
 create table if not exists public.ingredient_dictionary (
   id text primary key,
   category_id text not null default 'other',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'ingredient_dictionary_category_fk'
+      and conrelid = 'public.ingredient_dictionary'::regclass
+  ) then
+    alter table public.ingredient_dictionary
+      add constraint ingredient_dictionary_category_fk
+      foreign key (category_id)
+      references public.ingredient_categories(id)
+      on update cascade
+      on delete restrict;
+  end if;
+exception
+  when duplicate_object then null;
+end $$;
 
 create table if not exists public.ingredient_translations (
   ingredient_id text not null references public.ingredient_dictionary(id) on delete cascade,
@@ -550,6 +587,16 @@ create table if not exists public.recipe_translations (
 create index if not exists recipe_translations_language_idx
   on public.recipe_translations(language);
 
+drop trigger if exists ingredient_categories_set_updated_at on public.ingredient_categories;
+create trigger ingredient_categories_set_updated_at
+before update on public.ingredient_categories
+for each row execute function public.set_updated_at();
+
+drop trigger if exists ingredient_category_translations_set_updated_at on public.ingredient_category_translations;
+create trigger ingredient_category_translations_set_updated_at
+before update on public.ingredient_category_translations
+for each row execute function public.set_updated_at();
+
 drop trigger if exists ingredient_dictionary_set_updated_at on public.ingredient_dictionary;
 create trigger ingredient_dictionary_set_updated_at
 before update on public.ingredient_dictionary
@@ -566,8 +613,22 @@ before update on public.recipe_translations
 for each row execute function public.set_updated_at();
 
 alter table public.ingredient_dictionary enable row level security;
+alter table public.ingredient_categories enable row level security;
+alter table public.ingredient_category_translations enable row level security;
 alter table public.ingredient_translations enable row level security;
 alter table public.recipe_translations enable row level security;
+
+drop policy if exists "ingredient_categories_select_all" on public.ingredient_categories;
+create policy "ingredient_categories_select_all"
+on public.ingredient_categories
+for select
+using (true);
+
+drop policy if exists "ingredient_category_translations_select_all" on public.ingredient_category_translations;
+create policy "ingredient_category_translations_select_all"
+on public.ingredient_category_translations
+for select
+using (true);
 
 drop policy if exists "ingredient_dictionary_select_all" on public.ingredient_dictionary;
 create policy "ingredient_dictionary_select_all"
@@ -652,6 +713,47 @@ using (
 );
 
 -- Starter dictionary seed
+insert into public.ingredient_categories (id) values
+  ('vegetables'),
+  ('fruits'),
+  ('protein'),
+  ('dairy'),
+  ('grocery'),
+  ('bakery'),
+  ('drinks'),
+  ('other')
+on conflict (id) do nothing;
+
+insert into public.ingredient_category_translations (category_id, language, name) values
+  ('vegetables', 'ru', 'Овощи'),
+  ('vegetables', 'en', 'Vegetables'),
+  ('vegetables', 'es', 'Verduras'),
+  ('fruits', 'ru', 'Фрукты'),
+  ('fruits', 'en', 'Fruits'),
+  ('fruits', 'es', 'Frutas'),
+  ('protein', 'ru', 'Белок'),
+  ('protein', 'en', 'Protein'),
+  ('protein', 'es', 'Proteína'),
+  ('dairy', 'ru', 'Молочное'),
+  ('dairy', 'en', 'Dairy'),
+  ('dairy', 'es', 'Lácteos'),
+  ('grocery', 'ru', 'Бакалея'),
+  ('grocery', 'en', 'Grocery'),
+  ('grocery', 'es', 'Despensa seca'),
+  ('bakery', 'ru', 'Выпечка'),
+  ('bakery', 'en', 'Bakery'),
+  ('bakery', 'es', 'Panadería'),
+  ('drinks', 'ru', 'Напитки'),
+  ('drinks', 'en', 'Drinks'),
+  ('drinks', 'es', 'Bebidas'),
+  ('other', 'ru', 'Прочее'),
+  ('other', 'en', 'Other'),
+  ('other', 'es', 'Otros')
+on conflict (category_id, language) do update
+set
+  name = excluded.name,
+  updated_at = now();
+
 insert into public.ingredient_dictionary (id, category_id) values
   ('milk', 'dairy'),
   ('cottage_cheese', 'dairy'),
