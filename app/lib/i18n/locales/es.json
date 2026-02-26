@@ -741,7 +741,7 @@
         "exists": "La traducción ya existe.",
         "noTitle": "No se puede crear una traducción sin título.",
         "draftCreated": "Borrador de traducción creado.",
-        "manualDraftCreated": "Borrador manual creado. Revisa y edita el texto.",
+        "manualDraftCreated": "Borrador manual creado desde el texto original. Seguira en el idioma original hasta que lo edites.",
         "createdReview": "Traducción creada. Revisa el texto.",
         "aiUnavailable": "La IA no está disponible. Se creó un borrador desde el texto original.",
         "createFailed": "No se pudo crear la traducción."
