@@ -43,12 +43,22 @@ const CATEGORY_ENTRIES: IngredientCategoryDictionaryEntry[] = [
 
 const ENTRIES: IngredientDictionaryEntry[] = [
   { id: "milk", categoryId: "dairy", names: { ru: "Молоко", en: "Milk", es: "Leche" } },
+  { id: "kefir", categoryId: "dairy", names: { ru: "Кефир", en: "Kefir", es: "Kefir" } },
   { id: "cream", categoryId: "dairy", names: { ru: "Сливки", en: "Cream", es: "Nata" } },
   { id: "cottage_cheese", categoryId: "dairy", names: { ru: "Творог", en: "Cottage cheese", es: "Requeson" } },
   { id: "yogurt", categoryId: "dairy", names: { ru: "Йогурт", en: "Yogurt", es: "Yogur" } },
   { id: "cheese", categoryId: "dairy", names: { ru: "Сыр", en: "Cheese", es: "Queso" } },
   { id: "butter", categoryId: "dairy", names: { ru: "Сливочное масло", en: "Butter", es: "Mantequilla" } },
-  { id: "egg", categoryId: "protein", names: { ru: "Яйцо", en: "Egg", es: "Huevo" } },
+  {
+    id: "egg",
+    categoryId: "protein",
+    names: { ru: "Яйцо", en: "Egg", es: "Huevo" },
+    aliases: {
+      ru: ["Яйца", "Яиц"],
+      en: ["Eggs"],
+      es: ["Huevos"],
+    },
+  },
   { id: "chicken_fillet", categoryId: "protein", names: { ru: "Куриное филе", en: "Chicken fillet", es: "Pechuga de pollo" } },
   { id: "beef", categoryId: "protein", names: { ru: "Говядина", en: "Beef", es: "Ternera" } },
   { id: "salmon", categoryId: "protein", names: { ru: "Лосось", en: "Salmon", es: "Salmon" } },
@@ -57,6 +67,7 @@ const ENTRIES: IngredientDictionaryEntry[] = [
   { id: "oats", categoryId: "grocery", names: { ru: "Овсяные хлопья", en: "Oats", es: "Avena" } },
   { id: "pasta", categoryId: "grocery", names: { ru: "Паста", en: "Pasta", es: "Pasta" } },
   { id: "flour", categoryId: "grocery", names: { ru: "Мука", en: "Flour", es: "Harina" } },
+  { id: "baking_powder", categoryId: "grocery", names: { ru: "Разрыхлитель", en: "Baking powder", es: "Levadura quimica" } },
   { id: "sugar", categoryId: "grocery", names: { ru: "Сахар", en: "Sugar", es: "Azucar" } },
   { id: "salt", categoryId: "grocery", names: { ru: "Соль", en: "Salt", es: "Sal" } },
   { id: "olive_oil", categoryId: "grocery", names: { ru: "Оливковое масло", en: "Olive oil", es: "Aceite de oliva" } },

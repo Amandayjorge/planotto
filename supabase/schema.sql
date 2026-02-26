@@ -251,12 +251,8 @@ on public.recipe_access
 for select
 using (
   user_id = auth.uid()
-  or exists (
-    select 1
-    from public.recipes r
-    where r.id = recipe_access.recipe_id
-      and r.owner_id = auth.uid()
-  )
+  or public.is_recipe_owner(recipe_access.recipe_id)
+  or public.is_admin()
 );
 
 drop policy if exists "recipe_access_insert_owner" on public.recipe_access;
@@ -264,12 +260,8 @@ create policy "recipe_access_insert_owner"
 on public.recipe_access
 for insert
 with check (
-  exists (
-    select 1
-    from public.recipes r
-    where r.id = recipe_access.recipe_id
-      and r.owner_id = auth.uid()
-  )
+  public.is_recipe_owner(recipe_access.recipe_id)
+  or public.is_admin()
 );
 
 drop policy if exists "recipe_access_update_owner" on public.recipe_access;
@@ -277,20 +269,12 @@ create policy "recipe_access_update_owner"
 on public.recipe_access
 for update
 using (
-  exists (
-    select 1
-    from public.recipes r
-    where r.id = recipe_access.recipe_id
-      and r.owner_id = auth.uid()
-  )
+  public.is_recipe_owner(recipe_access.recipe_id)
+  or public.is_admin()
 )
 with check (
-  exists (
-    select 1
-    from public.recipes r
-    where r.id = recipe_access.recipe_id
-      and r.owner_id = auth.uid()
-  )
+  public.is_recipe_owner(recipe_access.recipe_id)
+  or public.is_admin()
 );
 
 drop policy if exists "recipe_access_delete_owner" on public.recipe_access;
@@ -298,12 +282,8 @@ create policy "recipe_access_delete_owner"
 on public.recipe_access
 for delete
 using (
-  exists (
-    select 1
-    from public.recipes r
-    where r.id = recipe_access.recipe_id
-      and r.owner_id = auth.uid()
-  )
+  public.is_recipe_owner(recipe_access.recipe_id)
+  or public.is_admin()
 );
 
 -- recipe_access helpers (email-based invitations)
@@ -388,6 +368,23 @@ as $$
 $$;
 
 grant execute on function public.list_recipe_access_emails(uuid) to authenticated;
+
+create or replace function public.is_recipe_owner(p_recipe_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.recipes r
+    where r.id = p_recipe_id
+      and r.owner_id = auth.uid()
+  );
+$$;
+
+grant execute on function public.is_recipe_owner(uuid) to authenticated;
 
 -- weekly_menus policies
 drop policy if exists "weekly_menus_select_with_visibility" on public.weekly_menus;
@@ -586,6 +583,212 @@ create table if not exists public.recipe_translations (
 
 create index if not exists recipe_translations_language_idx
   on public.recipe_translations(language);
+create index if not exists recipes_base_language_idx
+  on public.recipes(base_language);
+
+-- =========================================================
+-- Admin + user profiles
+-- =========================================================
+
+create table if not exists public.admin_users (
+  email text primary key,
+  note text null,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.user_profiles (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  email text not null,
+  display_name text null,
+  ui_language text not null default 'ru' check (ui_language in ('ru', 'en', 'es')),
+  plan_tier text not null default 'free' check (plan_tier in ('free', 'pro')),
+  subscription_status text not null default 'inactive' check (subscription_status in ('inactive', 'trial', 'active', 'past_due', 'canceled')),
+  is_blocked boolean not null default false,
+  is_test_access boolean not null default false,
+  pro_expires_at timestamptz null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create unique index if not exists user_profiles_email_unique_idx
+  on public.user_profiles(lower(email));
+
+create index if not exists user_profiles_plan_tier_idx
+  on public.user_profiles(plan_tier);
+
+create index if not exists user_profiles_subscription_status_idx
+  on public.user_profiles(subscription_status);
+
+create or replace function public.is_admin()
+returns boolean
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare
+  v_email text;
+begin
+  v_email := lower(coalesce(auth.jwt() ->> 'email', ''));
+  if v_email = '' then
+    return false;
+  end if;
+
+  return exists (
+    select 1
+    from public.admin_users admin_row
+    where lower(admin_row.email) = v_email
+  );
+end;
+$$;
+
+grant execute on function public.is_admin() to authenticated;
+
+create or replace function public.upsert_my_profile(
+  p_email text default null,
+  p_display_name text default null,
+  p_ui_language text default 'ru'
+)
+returns public.user_profiles
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id uuid;
+  v_email text;
+  v_display_name text;
+  v_ui_language text;
+  v_row public.user_profiles;
+begin
+  v_user_id := auth.uid();
+  if v_user_id is null then
+    raise exception 'Forbidden';
+  end if;
+
+  v_email := lower(
+    coalesce(
+      nullif(trim(coalesce(p_email, '')), ''),
+      nullif(trim(coalesce(auth.jwt() ->> 'email', '')), '')
+    )
+  );
+  if v_email is null or v_email = '' then
+    raise exception 'Email is required';
+  end if;
+
+  v_display_name := nullif(trim(coalesce(p_display_name, '')), '');
+  v_ui_language := case
+    when p_ui_language in ('ru', 'en', 'es') then p_ui_language
+    else 'ru'
+  end;
+
+  insert into public.user_profiles (
+    user_id,
+    email,
+    display_name,
+    ui_language
+  ) values (
+    v_user_id,
+    v_email,
+    v_display_name,
+    v_ui_language
+  )
+  on conflict (user_id) do update
+  set
+    email = excluded.email,
+    display_name = coalesce(excluded.display_name, public.user_profiles.display_name),
+    ui_language = excluded.ui_language,
+    updated_at = now()
+  returning * into v_row;
+
+  return v_row;
+end;
+$$;
+
+grant execute on function public.upsert_my_profile(text, text, text) to authenticated;
+
+create or replace function public.admin_merge_ingredients(
+  p_source_id text,
+  p_target_id text
+)
+returns integer
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_source_id text;
+  v_target_id text;
+  v_updated_recipes_count integer := 0;
+begin
+  if not public.is_admin() then
+    raise exception 'Forbidden';
+  end if;
+
+  v_source_id := trim(coalesce(p_source_id, ''));
+  v_target_id := trim(coalesce(p_target_id, ''));
+
+  if v_source_id = '' or v_target_id = '' then
+    raise exception 'Ingredient ids are required';
+  end if;
+
+  if v_source_id = v_target_id then
+    return 0;
+  end if;
+
+  if not exists (select 1 from public.ingredient_dictionary where id = v_source_id) then
+    raise exception 'Source ingredient not found';
+  end if;
+
+  if not exists (select 1 from public.ingredient_dictionary where id = v_target_id) then
+    raise exception 'Target ingredient not found';
+  end if;
+
+  update public.recipes r
+  set ingredients = coalesce((
+    select jsonb_agg(
+      case
+        when jsonb_typeof(item) = 'object'
+          and (
+            item ->> 'ingredientId' = v_source_id
+            or item ->> 'ingredient_id' = v_source_id
+          ) then
+          jsonb_set(
+            jsonb_set(item, '{ingredientId}', to_jsonb(v_target_id), true),
+            '{ingredient_id}', to_jsonb(v_target_id), true
+          )
+        else item
+      end
+    )
+    from jsonb_array_elements(coalesce(r.ingredients, '[]'::jsonb)) item
+  ), '[]'::jsonb)
+  where exists (
+    select 1
+    from jsonb_array_elements(coalesce(r.ingredients, '[]'::jsonb)) item
+    where
+      item ->> 'ingredientId' = v_source_id
+      or item ->> 'ingredient_id' = v_source_id
+  );
+
+  get diagnostics v_updated_recipes_count = row_count;
+
+  insert into public.ingredient_translations (ingredient_id, language, name, aliases)
+  select v_target_id, language, name, aliases
+  from public.ingredient_translations
+  where ingredient_id = v_source_id
+  on conflict (ingredient_id, language) do nothing;
+
+  delete from public.ingredient_translations
+  where ingredient_id = v_source_id;
+
+  delete from public.ingredient_dictionary
+  where id = v_source_id;
+
+  return coalesce(v_updated_recipes_count, 0);
+end;
+$$;
+
+grant execute on function public.admin_merge_ingredients(text, text) to authenticated;
 
 drop trigger if exists ingredient_categories_set_updated_at on public.ingredient_categories;
 create trigger ingredient_categories_set_updated_at
@@ -612,11 +815,18 @@ create trigger recipe_translations_set_updated_at
 before update on public.recipe_translations
 for each row execute function public.set_updated_at();
 
+drop trigger if exists user_profiles_set_updated_at on public.user_profiles;
+create trigger user_profiles_set_updated_at
+before update on public.user_profiles
+for each row execute function public.set_updated_at();
+
 alter table public.ingredient_dictionary enable row level security;
 alter table public.ingredient_categories enable row level security;
 alter table public.ingredient_category_translations enable row level security;
 alter table public.ingredient_translations enable row level security;
 alter table public.recipe_translations enable row level security;
+alter table public.admin_users enable row level security;
+alter table public.user_profiles enable row level security;
 
 drop policy if exists "ingredient_categories_select_all" on public.ingredient_categories;
 create policy "ingredient_categories_select_all"
@@ -711,6 +921,161 @@ using (
       and r.owner_id = auth.uid()
   )
 );
+
+drop policy if exists "admin_users_select_admin" on public.admin_users;
+create policy "admin_users_select_admin"
+on public.admin_users
+for select
+using (public.is_admin());
+
+drop policy if exists "admin_users_insert_admin" on public.admin_users;
+create policy "admin_users_insert_admin"
+on public.admin_users
+for insert
+with check (public.is_admin());
+
+drop policy if exists "admin_users_update_admin" on public.admin_users;
+create policy "admin_users_update_admin"
+on public.admin_users
+for update
+using (public.is_admin())
+with check (public.is_admin());
+
+drop policy if exists "admin_users_delete_admin" on public.admin_users;
+create policy "admin_users_delete_admin"
+on public.admin_users
+for delete
+using (public.is_admin());
+
+drop policy if exists "user_profiles_select_self_or_admin" on public.user_profiles;
+create policy "user_profiles_select_self_or_admin"
+on public.user_profiles
+for select
+using (
+  user_id = auth.uid()
+  or public.is_admin()
+);
+
+drop policy if exists "user_profiles_update_admin" on public.user_profiles;
+create policy "user_profiles_update_admin"
+on public.user_profiles
+for update
+using (public.is_admin())
+with check (public.is_admin());
+
+drop policy if exists "user_profiles_insert_admin" on public.user_profiles;
+create policy "user_profiles_insert_admin"
+on public.user_profiles
+for insert
+with check (public.is_admin());
+
+drop policy if exists "recipes_select_admin" on public.recipes;
+create policy "recipes_select_admin"
+on public.recipes
+for select
+using (public.is_admin());
+
+drop policy if exists "recipes_update_admin" on public.recipes;
+create policy "recipes_update_admin"
+on public.recipes
+for update
+using (public.is_admin())
+with check (public.is_admin());
+
+drop policy if exists "recipes_delete_admin" on public.recipes;
+create policy "recipes_delete_admin"
+on public.recipes
+for delete
+using (public.is_admin());
+
+drop policy if exists "recipe_translations_select_admin" on public.recipe_translations;
+create policy "recipe_translations_select_admin"
+on public.recipe_translations
+for select
+using (public.is_admin());
+
+drop policy if exists "recipe_translations_insert_admin" on public.recipe_translations;
+create policy "recipe_translations_insert_admin"
+on public.recipe_translations
+for insert
+with check (public.is_admin());
+
+drop policy if exists "recipe_translations_update_admin" on public.recipe_translations;
+create policy "recipe_translations_update_admin"
+on public.recipe_translations
+for update
+using (public.is_admin())
+with check (public.is_admin());
+
+drop policy if exists "recipe_translations_delete_admin" on public.recipe_translations;
+create policy "recipe_translations_delete_admin"
+on public.recipe_translations
+for delete
+using (public.is_admin());
+
+drop policy if exists "ingredient_dictionary_insert_admin" on public.ingredient_dictionary;
+create policy "ingredient_dictionary_insert_admin"
+on public.ingredient_dictionary
+for insert
+with check (public.is_admin());
+
+drop policy if exists "ingredient_dictionary_update_admin" on public.ingredient_dictionary;
+create policy "ingredient_dictionary_update_admin"
+on public.ingredient_dictionary
+for update
+using (public.is_admin())
+with check (public.is_admin());
+
+drop policy if exists "ingredient_dictionary_delete_admin" on public.ingredient_dictionary;
+create policy "ingredient_dictionary_delete_admin"
+on public.ingredient_dictionary
+for delete
+using (public.is_admin());
+
+drop policy if exists "ingredient_translations_insert_admin" on public.ingredient_translations;
+create policy "ingredient_translations_insert_admin"
+on public.ingredient_translations
+for insert
+with check (public.is_admin());
+
+drop policy if exists "ingredient_translations_update_admin" on public.ingredient_translations;
+create policy "ingredient_translations_update_admin"
+on public.ingredient_translations
+for update
+using (public.is_admin())
+with check (public.is_admin());
+
+drop policy if exists "ingredient_translations_delete_admin" on public.ingredient_translations;
+create policy "ingredient_translations_delete_admin"
+on public.ingredient_translations
+for delete
+using (public.is_admin());
+
+drop policy if exists "ingredient_categories_insert_admin" on public.ingredient_categories;
+create policy "ingredient_categories_insert_admin"
+on public.ingredient_categories
+for insert
+with check (public.is_admin());
+
+drop policy if exists "ingredient_categories_update_admin" on public.ingredient_categories;
+create policy "ingredient_categories_update_admin"
+on public.ingredient_categories
+for update
+using (public.is_admin())
+with check (public.is_admin());
+
+drop policy if exists "ingredient_category_translations_insert_admin" on public.ingredient_category_translations;
+create policy "ingredient_category_translations_insert_admin"
+on public.ingredient_category_translations
+for insert
+with check (public.is_admin());
+
+drop policy if exists "ingredient_category_translations_update_admin" on public.ingredient_category_translations;
+create policy "ingredient_category_translations_update_admin"
+on public.ingredient_category_translations
+for update
+using (public.is_admin())
+with check (public.is_admin());
 
 -- Starter dictionary seed
 insert into public.ingredient_categories (id) values

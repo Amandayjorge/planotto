@@ -18,6 +18,7 @@ interface AiRequestBody {
 }
 
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
+const GOOGLE_TRANSLATE_URL = "https://translation.googleapis.com/language/translate/v2";
 const DEFAULT_MODEL = process.env.OPENROUTER_MODEL || "openai/gpt-4o-mini";
 const VISION_MODEL = process.env.OPENROUTER_VISION_MODEL || "openai/gpt-4o-mini";
 const VISION_FALLBACK_MODELS = (process.env.OPENROUTER_VISION_FALLBACK_MODELS ||
@@ -895,6 +896,15 @@ const getOpenRouterKey = (): string => {
   return key.trim();
 };
 
+const getGoogleTranslateKey = (): string => {
+  const key =
+    process.env.GOOGLE_TRANSLATE_API_KEY ||
+    process.env.GOOGLE_API_KEY ||
+    process.env.GOOGLE_CLOUD_TRANSLATE_API_KEY ||
+    "";
+  return key.trim();
+};
+
 const extractJsonBlock = (text: string): Record<string, unknown> | null => {
   if (!text.trim()) return null;
   try {
@@ -1068,6 +1078,178 @@ const callOpenRouter = async (
   return result.json;
 };
 
+const callOpenRouterText = async (
+  system: string,
+  user: string,
+  imageDataUrls: string[] = [],
+  model: string = DEFAULT_MODEL
+): Promise<string | null> => {
+  const key = getOpenRouterKey();
+  if (!key) return null;
+
+  const userContent =
+    imageDataUrls.length > 0
+      ? [
+          { type: "text", text: user },
+          ...imageDataUrls.map((url) => ({ type: "image_url", image_url: { url } })),
+        ]
+      : user;
+
+  try {
+    const response = await fetch(OPENROUTER_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${key}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://planotto.local",
+        "X-Title": "Planotto Assistant",
+      },
+      body: JSON.stringify({
+        model,
+        temperature: 0.3,
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: userContent },
+        ],
+      }),
+    });
+
+    if (!response.ok) return null;
+    const rawText = await response.text();
+    let data: {
+      choices?: Array<{ message?: { content?: unknown } }>;
+    } = {};
+    try {
+      data = JSON.parse(rawText) as { choices?: Array<{ message?: { content?: unknown } }> };
+    } catch {
+      return null;
+    }
+    const message = extractMessageText(data.choices?.[0]?.message?.content).trim();
+    return message || null;
+  } catch {
+    return null;
+  }
+};
+
+const translateWithGoogle = async (payload: {
+  sourceLanguage: "ru" | "en" | "es";
+  targetLanguage: "ru" | "en" | "es";
+  title: string;
+  shortDescription?: string;
+  description?: string;
+  instructions?: string;
+}): Promise<{
+  title: string;
+  shortDescription?: string;
+  description?: string;
+  instructions?: string;
+} | null> => {
+  const key = getGoogleTranslateKey();
+  if (!key) return null;
+
+  const fields = [
+    payload.title,
+    payload.shortDescription || "",
+    payload.description || "",
+    payload.instructions || "",
+  ];
+
+  try {
+    const response = await fetch(`${GOOGLE_TRANSLATE_URL}?key=${encodeURIComponent(key)}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        q: fields,
+        source: payload.sourceLanguage,
+        target: payload.targetLanguage,
+        format: "text",
+      }),
+    });
+
+    if (!response.ok) return null;
+    const data = (await response.json()) as {
+      data?: { translations?: Array<{ translatedText?: string }> };
+    };
+    const translations = data?.data?.translations || [];
+    if (translations.length < 1) return null;
+
+    const [title, shortDescription, description, instructions] = translations.map((item) =>
+      safeString(item.translatedText)
+    );
+
+    return {
+      title: title || payload.title,
+      shortDescription: shortDescription || undefined,
+      description: description || undefined,
+      instructions: instructions || undefined,
+    };
+  } catch {
+    return null;
+  }
+};
+
+const normalizeTranslationTextForCompare = (value: string): string =>
+  value
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+
+const isLikelyUntranslatedRecipe = (payload: {
+  source: {
+    title: string;
+    shortDescription?: string;
+    description?: string;
+    instructions?: string;
+  };
+  translated: {
+    title: string;
+    shortDescription?: string;
+    description?: string;
+    instructions?: string;
+  };
+  targetLanguage: "ru" | "en" | "es";
+}): boolean => {
+  const sourceFields = [
+    payload.source.title,
+    payload.source.shortDescription || "",
+    payload.source.description || "",
+    payload.source.instructions || "",
+  ];
+  const translatedFields = [
+    payload.translated.title,
+    payload.translated.shortDescription || "",
+    payload.translated.description || "",
+    payload.translated.instructions || "",
+  ];
+
+  let comparableCount = 0;
+  let unchangedCount = 0;
+  for (let index = 0; index < sourceFields.length; index += 1) {
+    const sourceValue = normalizeTranslationTextForCompare(sourceFields[index] || "");
+    const translatedValue = normalizeTranslationTextForCompare(translatedFields[index] || "");
+    if (!sourceValue) continue;
+    comparableCount += 1;
+    if (sourceValue === translatedValue) unchangedCount += 1;
+  }
+  if (comparableCount > 0 && unchangedCount === comparableCount) {
+    return true;
+  }
+
+  const combined = translatedFields.join(" ");
+  const cyrillicCount = (combined.match(/[А-Яа-яЁё]/g) || []).length;
+  const latinCount = (combined.match(/[A-Za-z]/g) || []).length;
+
+  if ((payload.targetLanguage === "en" || payload.targetLanguage === "es") && cyrillicCount >= 8 && cyrillicCount > latinCount * 2) {
+    return true;
+  }
+  if (payload.targetLanguage === "ru" && latinCount >= 8 && latinCount > cyrillicCount * 2) {
+    return true;
+  }
+  return false;
+};
+
 const callOpenRouterWithVisionFallback = async (
   system: string,
   user: string,
@@ -1187,12 +1369,55 @@ const fallbackMenuSuggestion = (payload: Record<string, unknown>) => {
 const fallbackAssistantHelp = (payload: Record<string, unknown>) => {
   const question = safeString(payload.question).toLowerCase();
   const pathname = safeString(payload.pathname);
+  const locale = safeString(payload.locale);
+  const uiLocale: "ru" | "en" | "es" = locale === "en" || locale === "es" ? locale : "ru";
+
+  if (
+    question.includes("how old are you") ||
+    question.includes("who are you") ||
+    question.includes("what are you") ||
+    question.includes("сколько тебе лет") ||
+    question.includes("кто ты") ||
+    question.includes("что ты такое") ||
+    question.includes("cuantos anos") ||
+    question.includes("quien eres") ||
+    question.includes("que eres")
+  ) {
+    if (uiLocale === "en") {
+      return {
+        message:
+          "I'm Otto, a virtual helper in Planotto. I don't have an age, but I can help with recipes, menu, pantry and shopping.",
+      };
+    }
+    if (uiLocale === "es") {
+      return {
+        message:
+          "Soy Otto, un asistente virtual de Planotto. No tengo edad, pero puedo ayudarte con recetas, menu, despensa y compras.",
+      };
+    }
+    return {
+      message:
+        "Я Отто, виртуальный помощник Planotto. У меня нет возраста, но я могу помочь с рецептами, меню, кладовкой и покупками.",
+    };
+  }
 
   if (
     question.includes("яичниц") ||
     question.includes("омлет") ||
     question.includes("как приготовить")
   ) {
+    if (uiLocale === "en") {
+      return {
+        message:
+          "Quick fried eggs: heat a pan, add a little oil, crack 2-3 eggs, add salt, cook 2-4 minutes on medium heat. Cover for 1 minute for softer texture.",
+      };
+    }
+    if (uiLocale === "es") {
+      return {
+        message:
+          "Huevos rápidos: calienta la sartén, añade un poco de aceite, agrega 2-3 huevos, sal y cocina 2-4 minutos a fuego medio. Tapa 1 minuto para una textura más suave.",
+      };
+    }
     return {
       message:
         "Быстрый вариант яичницы: разогрейте сковороду, добавьте немного масла, вбейте 2-3 яйца, посолите, готовьте 2-4 минуты на среднем огне до нужной степени. Для нежной текстуры накройте крышкой на 1 минуту.",
@@ -1200,27 +1425,87 @@ const fallbackAssistantHelp = (payload: Record<string, unknown>) => {
   }
 
   if (pathname.startsWith("/recipes")) {
+    if (uiLocale === "en") {
+      return {
+        message:
+          "In recipes you can add title, ingredients, steps, tags and photo. Ask a specific cooking question and I will give step-by-step instructions.",
+      };
+    }
+    if (uiLocale === "es") {
+      return {
+        message:
+          "En recetas puedes añadir título, ingredientes, pasos, etiquetas y foto. Haz una pregunta concreta de cocina y te doy pasos claros.",
+      };
+    }
     return {
       message:
         "В рецептах можно: добавить название, ингредиенты, шаги, теги и фото. Если хотите, напишите конкретный вопрос по блюду, и я дам пошаговый ответ.",
     };
   }
   if (pathname.startsWith("/menu")) {
+    if (uiLocale === "en") {
+      return {
+        message:
+          "In menu, choose the period at the top and add dishes by day. I can suggest a simple plan if you share constraints and number of people.",
+      };
+    }
+    if (uiLocale === "es") {
+      return {
+        message:
+          "En menú, elige el período arriba y añade platos por día. Puedo sugerir un plan simple si indicas restricciones y número de personas.",
+      };
+    }
     return {
       message:
         "В меню выберите период сверху и добавляйте блюда по дням. Могу предложить простой план, если напишете ограничения и количество человек.",
     };
   }
   if (pathname.startsWith("/shopping-list")) {
+    if (uiLocale === "en") {
+      return {
+        message:
+          "Shopping list is built from menu. Mark purchased items and you can move them to pantry.",
+      };
+    }
+    if (uiLocale === "es") {
+      return {
+        message:
+          "La lista de compras se forma desde el menú. Marca lo comprado y puedes moverlo a la despensa.",
+      };
+    }
     return {
       message:
         "Список покупок собирается из меню. Отмечайте купленное — позиции можно переносить в кладовку.",
     };
   }
   if (pathname.startsWith("/pantry")) {
+    if (uiLocale === "en") {
+      return {
+        message:
+          "Keep pantry stock by name, amount and unit. When names match, quantities are combined.",
+      };
+    }
+    if (uiLocale === "es") {
+      return {
+        message:
+          "Guarda stock en despensa por nombre, cantidad y unidad. Si los nombres coinciden, las cantidades se suman.",
+      };
+    }
     return {
       message:
         "В кладовке храните остатки по названию, количеству и единице. Если названия совпадают, количество суммируется.",
+    };
+  }
+  if (uiLocale === "en") {
+    return {
+      message:
+        "Ask naturally, for example: \"how to cook eggs\" or \"why product is missing in shopping list\".",
+    };
+  }
+  if (uiLocale === "es") {
+    return {
+      message:
+        "Pregunta en lenguaje normal, por ejemplo: \"cómo cocinar huevos\" o \"por qué falta un producto en compras\".",
     };
   }
   return {
@@ -1777,19 +2062,20 @@ export async function POST(request: Request) {
 
     if (action === "assistant_help") {
       const question = safeString(payload.question);
+      const locale = safeString(payload.locale);
+      const uiLocale: "ru" | "en" | "es" = locale === "en" || locale === "es" ? locale : "ru";
       if (isCookingQuestion(question) && (question.toLowerCase().includes("яичниц") || question.toLowerCase().includes("омлет"))) {
         return NextResponse.json(fallbackAssistantHelp(payload));
       }
+      const responseLanguage = uiLocale === "en" ? "English" : uiLocale === "es" ? "Spanish" : "Russian";
       const system =
-        "Ты Отто, дружелюбный помощник в приложении планирования питания. " +
-        "Отвечай на русском, коротко и по делу. " +
-        "Если вопрос про готовку (например яичница, омлет, суп), дай конкретные шаги приготовления. " +
-        "Если вопрос по интерфейсу, объясни действия в контексте текущего раздела. " +
-        "Если вопрос пользователя про готовку, сначала дай ответ именно по готовке, а не по интерфейсу. " +
-        "Ничего не придумывай про функции, которых нет. " +
-        "Верни только JSON: {\"message\":\"...\"}.";
-      const ai = await callOpenRouter(system, JSON.stringify(payload));
-      const message = safeString(ai?.message);
+        "You are Otto, a helpful assistant inside a meal planning app. " +
+        `Answer in ${responseLanguage}. ` +
+        "Be concise and practical. " +
+        "If user asks about cooking, provide direct cooking steps first. " +
+        "If user asks about the app, explain actions for the current screen. " +
+        "Do not invent unavailable features. Return plain text only.";
+      const message = safeString(await callOpenRouterText(system, JSON.stringify(payload)));
       if (message && isCookingQuestion(question) && looksLikeUiInstruction(message)) {
         return NextResponse.json(fallbackAssistantHelp(payload));
       }
@@ -1851,15 +2137,48 @@ export async function POST(request: Request) {
 
       if (ai && ai.translation && typeof ai.translation === "object") {
         const translated = ai.translation as Record<string, unknown>;
-        const translatedTitle = safeString(translated.title) || title;
+        const aiTranslation = {
+          title: safeString(translated.title) || title,
+          shortDescription: safeString(translated.shortDescription) || undefined,
+          description: safeString(translated.description) || undefined,
+          instructions: safeString(translated.instructions) || undefined,
+        };
+        const likelyUntranslated = isLikelyUntranslatedRecipe({
+          source: {
+            title,
+            shortDescription,
+            description,
+            instructions,
+          },
+          translated: aiTranslation,
+          targetLanguage,
+        });
+        if (!likelyUntranslated) {
+          return NextResponse.json({
+            translation: aiTranslation,
+            message: safeString(ai.message) || "Draft translation generated by AI.",
+          });
+        }
+      }
+
+      const googleTranslated = await translateWithGoogle({
+        sourceLanguage,
+        targetLanguage,
+        title,
+        shortDescription,
+        description,
+        instructions,
+      });
+
+      if (googleTranslated) {
         return NextResponse.json({
           translation: {
-            title: translatedTitle,
-            shortDescription: safeString(translated.shortDescription) || undefined,
-            description: safeString(translated.description) || undefined,
-            instructions: safeString(translated.instructions) || undefined,
+            title: googleTranslated.title || title,
+            shortDescription: googleTranslated.shortDescription || undefined,
+            description: googleTranslated.description || undefined,
+            instructions: googleTranslated.instructions || undefined,
           },
-          message: safeString(ai.message) || "Draft translation generated by AI.",
+          message: "Draft translation generated by Google Translate.",
         });
       }
 

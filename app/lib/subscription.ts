@@ -5,7 +5,9 @@ export type PaidFeature =
   | "recipe_import"
   | "image_generation"
   | "multiple_menus"
-  | "advanced_filters";
+  | "advanced_filters"
+  | "avatar_frames"
+  | "pdf_export";
 
 export const PLAN_TIER_STORAGE_KEY = "planotto:plan-tier";
 
@@ -64,6 +66,8 @@ export const isPaidFeatureEnabled = (
     case "image_generation":
     case "multiple_menus":
     case "advanced_filters":
+    case "avatar_frames":
+    case "pdf_export":
       return planTier === "pro";
     default:
       return false;

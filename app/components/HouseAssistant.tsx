@@ -361,6 +361,22 @@ const isCookingPrompt = (prompt: string): boolean => {
   );
 };
 
+const isGeneralAssistantPrompt = (prompt: string): boolean => {
+  const text = prompt.toLowerCase().trim();
+  if (!text) return false;
+  return (
+    text.includes("how old are you") ||
+    text.includes("who are you") ||
+    text.includes("what are you") ||
+    text.includes("сколько тебе лет") ||
+    text.includes("кто ты") ||
+    text.includes("что ты такое") ||
+    text.includes("cuantos anos") ||
+    text.includes("quien eres") ||
+    text.includes("que eres")
+  );
+};
+
 const buildLocalCookingResponse = (prompt: string, locale: "ru" | "en" | "es"): string => {
   const text = prompt.toLowerCase();
   if (text.includes("пирожное картошка") || text.includes("картошка пирожное")) {
@@ -409,6 +425,15 @@ const buildLocalCookingResponse = (prompt: string, locale: "ru" | "en" | "es"): 
 const getLocalHelpResponse = (pathname: string, prompt: string, locale: "ru" | "en" | "es"): string => {
   if (isCookingPrompt(prompt)) {
     return buildLocalCookingResponse(prompt, locale);
+  }
+  if (isGeneralAssistantPrompt(prompt)) {
+    if (locale === "en") {
+      return "I'm Otto, a virtual helper in Planotto. I don't have an age, but I'm here to help with recipes, menu, pantry, and shopping.";
+    }
+    if (locale === "es") {
+      return "Soy Otto, un asistente virtual de Planotto. No tengo edad, pero puedo ayudarte con recetas, menu, despensa y compras.";
+    }
+    return "Я Отто, виртуальный помощник Planotto. У меня нет возраста, но я помогаю с рецептами, меню, кладовкой и покупками.";
   }
   const text = prompt.toLowerCase();
   if (pathname.startsWith("/recipes")) {
@@ -650,9 +675,7 @@ export default function HouseAssistant() {
         clearMenuTimeout();
         menuRequestTimeoutRef.current = window.setTimeout(() => {
           setMenuAiLoading(false);
-          setMenuAiMessage(
-            "Ответ задерживается. Попробуйте еще раз или переформулируйте вопрос короче."
-          );
+          setMenuAiMessage(assistantText.status.responseDelayed);
           menuRequestTimeoutRef.current = null;
         }, 15000);
       } else {
@@ -678,7 +701,7 @@ export default function HouseAssistant() {
       window.removeEventListener(MENU_AI_STATUS_EVENT, onMenuAiStatus as EventListener);
       window.removeEventListener(MOBILE_MENU_TOGGLE_EVENT, onMobileMenuToggle as EventListener);
     };
-  }, []);
+  }, [assistantText.status.responseDelayed]);
 
   useEffect(() => {
     return () => {
@@ -750,6 +773,7 @@ export default function HouseAssistant() {
       const response = await getAssistantHelp({
         question: prompt,
         pathname,
+        locale: uiLocale,
       });
       const aiReply = String(response.message || "").trim();
       setMenuAiMessage(aiReply || getLocalHelpResponse(pathname, prompt, uiLocale));

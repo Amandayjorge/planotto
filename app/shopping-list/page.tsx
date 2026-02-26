@@ -16,6 +16,12 @@ import {
   type UnitId,
 } from "../lib/ingredientUnits";
 import { useI18n } from "../components/I18nProvider";
+import {
+  SHOPPING_PRINT_SNAPSHOT_KEY,
+  type ShoppingPrintItem,
+  type ShoppingPrintSection,
+  type ShoppingPrintSnapshot,
+} from "./printSnapshot";
 
 interface Ingredient {
   ingredientId?: string;
@@ -1057,6 +1063,66 @@ export default function ShoppingListPage() {
     );
   };
 
+  const buildPrintItem = (item: GroupedIngredient): ShoppingPrintItem => {
+    const remainingAmount = getRemainingAmount(item.name, item.unit, item.totalAmount, item.unitId);
+    const localizedUnit = getUnitLabel(item.unitId || item.unit, locale, item.unit);
+    return {
+      id: String(item.id ?? `${item.name}-${item.unitId || item.unit}`),
+      name: item.name,
+      amountLabel: `${formatAmount(remainingAmount, locale)} ${localizedUnit}`.trim(),
+      purchased: isPurchased(item.name, item.unit, item.unitId),
+    };
+  };
+
+  const buildPrintSections = (): ShoppingPrintSection[] => {
+    if (shoppingSettings.groupByCategories) {
+      const categorized: ShoppingPrintSection[] = categorySections
+        .map((section) => ({
+          id: section.category,
+          title: getCategoryLabel(section.category),
+          items: section.items.map(buildPrintItem),
+        }))
+        .filter((section) => section.items.length > 0);
+
+      const manualItemsForPrint = manualSectionItems.map(buildPrintItem);
+      if (manualItemsForPrint.length > 0) {
+        categorized.push({
+          id: "manual",
+          title: manualSectionLabel,
+          items: manualItemsForPrint,
+        });
+      }
+      return categorized;
+    }
+
+    return [
+      {
+        id: "all",
+        title: t("shopping.title"),
+        items: flatVisibleItems.map(buildPrintItem),
+      },
+    ].filter((section) => section.items.length > 0);
+  };
+
+  const buildPrintPeriodLabel = (): string => {
+    if (activeDatePreset === "today") return t("shopping.period.today");
+    if (activeDatePreset === "tomorrow") return t("shopping.period.tomorrow");
+    return t("shopping.period.full");
+  };
+
+  const openPrintVersion = () => {
+    if (typeof window === "undefined") return;
+    const snapshot: ShoppingPrintSnapshot = {
+      title: t("shopping.title"),
+      periodLabel: buildPrintPeriodLabel(),
+      sourceLabel: shoppingSourceLabel,
+      generatedAt: new Date().toISOString(),
+      sections: buildPrintSections(),
+    };
+    window.sessionStorage.setItem(SHOPPING_PRINT_SNAPSHOT_KEY, JSON.stringify(snapshot));
+    window.open("/shopping-list/print", "_blank", "noopener,noreferrer");
+  };
+
   const todayIso = formatDate(new Date());
   const tomorrowIso = formatDate(addDays(new Date(), 1));
   const getEffectivePeriodDates = (): string[] =>
@@ -1127,6 +1193,14 @@ export default function ShoppingListPage() {
             onClick={() => setIsManualModalOpen(true)}
           >
             {t("shopping.actions.addManual")}
+          </button>
+
+          <button
+            type="button"
+            className="shopping-list__add-manual-btn"
+            onClick={openPrintVersion}
+          >
+            {t("shopping.actions.printVersion")}
           </button>
 
           <button

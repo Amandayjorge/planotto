@@ -4,8 +4,11 @@ import { useEffect, useMemo, useState, type ChangeEvent, type Dispatch, type Set
 import { useRouter } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
 import { SUPABASE_UNAVAILABLE_MESSAGE, getSupabaseClient, isSupabaseConfigured } from "../lib/supabaseClient";
+import { ensureCurrentUserProfile } from "../lib/adminSupabase";
 import { useI18n } from "../components/I18nProvider";
 import { isLocale } from "../lib/i18n";
+import { isPaidFeatureEnabled } from "../lib/subscription";
+import { usePlanTier } from "../lib/usePlanTier";
 import ProductAutocompleteInput from "../components/ProductAutocompleteInput";
 import { appendProductSuggestions, loadProductSuggestions } from "../lib/productSuggestions";
 
@@ -84,6 +87,7 @@ const resolveUserMetaValue = (user: User | null | undefined, key: string, fallba
 export default function AuthPage() {
   const router = useRouter();
   const { locale, locales, setLocale, t } = useI18n();
+  const { planTier } = usePlanTier();
   const [mode, setMode] = useState<Mode>("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -104,6 +108,7 @@ export default function AuthPage() {
   const [loading, setLoading] = useState(false);
   const [profileSaving, setProfileSaving] = useState(false);
   const [message, setMessage] = useState("");
+  const canUseAvatarFrames = isPaidFeatureEnabled(planTier, "avatar_frames");
 
   const languageOptions = useMemo(
     () =>
@@ -132,6 +137,7 @@ export default function AuthPage() {
       setProfileDiet(resolveUserMetaValue(data.user, "diet_type", "none"));
       setProfileAllergiesList(parseItemsList(resolveUserMetaValue(data.user, "allergies", "")));
       setProfileDislikesList(parseItemsList(resolveUserMetaValue(data.user, "dislikes", "")));
+      void ensureCurrentUserProfile();
     });
 
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -148,12 +154,19 @@ export default function AuthPage() {
       setProfileDiet(resolveUserMetaValue(session?.user, "diet_type", "none"));
       setProfileAllergiesList(parseItemsList(resolveUserMetaValue(session?.user, "allergies", "")));
       setProfileDislikesList(parseItemsList(resolveUserMetaValue(session?.user, "dislikes", "")));
+      void ensureCurrentUserProfile();
     });
 
     return () => {
       sub.subscription.unsubscribe();
     };
   }, [setLocale]);
+
+  useEffect(() => {
+    if (canUseAvatarFrames) return;
+    if (!profileFrame) return;
+    setProfileFrame("");
+  }, [canUseAvatarFrames, profileFrame]);
 
   const handleSubmit = async () => {
     if (!isSupabaseConfigured()) {
@@ -200,7 +213,7 @@ export default function AuthPage() {
         data: {
           full_name: profileName.trim(),
           avatar_url: profileAvatar.trim(),
-          avatar_frame: profileFrame.trim(),
+          avatar_frame: (canUseAvatarFrames ? profileFrame : "").trim(),
           goal: profileGoal,
           people_count_default: profilePeopleCount,
           meals_per_day: profileMealsPerDay,
@@ -213,6 +226,7 @@ export default function AuthPage() {
       });
 
       if (error) throw error;
+      await ensureCurrentUserProfile();
       setMessage(t("auth.messages.profileSaved"));
     } catch (error) {
       const text = error instanceof Error ? error.message : t("auth.messages.profileSaveError");
@@ -271,6 +285,8 @@ export default function AuthPage() {
     setter((prev) => prev.filter((item) => item !== value));
   };
 
+  const effectiveProfileFrame = canUseAvatarFrames ? profileFrame : "";
+
   const previewInitial = useMemo(() => {
     const base = profileName.trim() || (userEmail || "").split("@")[0] || "G";
     return base.charAt(0).toUpperCase();
@@ -305,9 +321,9 @@ export default function AuthPage() {
                 <span
                   style={{
                     position: "absolute",
-                    inset: profileFrame ? "16px" : 0,
+                    inset: effectiveProfileFrame ? "16px" : 0,
                     overflow: "hidden",
-                    borderRadius: profileFrame ? "16px" : "0",
+                    borderRadius: effectiveProfileFrame ? "16px" : "0",
                   }}
                 >
                   <img
@@ -324,9 +340,9 @@ export default function AuthPage() {
               ) : (
                 previewInitial
               )}
-              {profileFrame ? (
+              {effectiveProfileFrame ? (
                 <img
-                  src={profileFrame}
+                  src={effectiveProfileFrame}
                   alt={t("auth.profile.currentFrameAlt")}
                   style={{
                     position: "absolute",
@@ -445,13 +461,18 @@ export default function AuthPage() {
               </button>
             </div>
             <div style={{ fontSize: "14px", fontWeight: 600, color: "var(--text-primary)" }}>{t("auth.profile.frameTitle")}</div>
+            {!canUseAvatarFrames ? (
+              <p className="muted" style={{ margin: "0" }}>
+                {t("subscription.locks.avatarFrames")}
+              </p>
+            ) : null}
             <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
               <button
                 type="button"
                 className="btn"
                 onClick={() => setProfileFrame("")}
                 style={{
-                  border: !profileFrame ? "2px solid var(--accent-primary)" : "1px solid var(--border-default)",
+                  border: !effectiveProfileFrame ? "2px solid var(--accent-primary)" : "1px solid var(--border-default)",
                 }}
               >
                 {t("auth.profile.noFrame")}
@@ -460,13 +481,18 @@ export default function AuthPage() {
                 <button
                   key={src}
                   type="button"
-                  onClick={() => setProfileFrame(src)}
+                  onClick={() => {
+                    if (!canUseAvatarFrames) return;
+                    setProfileFrame(src);
+                  }}
+                  disabled={!canUseAvatarFrames}
                   style={{
-                    border: profileFrame === src ? "2px solid var(--accent-primary)" : "1px solid var(--border-default)",
+                    border: effectiveProfileFrame === src ? "2px solid var(--accent-primary)" : "1px solid var(--border-default)",
                     borderRadius: "10px",
                     background: "var(--background-primary)",
                     padding: "4px",
-                    cursor: "pointer",
+                    cursor: canUseAvatarFrames ? "pointer" : "not-allowed",
+                    opacity: canUseAvatarFrames ? 1 : 0.5,
                     width: "86px",
                     height: "86px",
                   }}

@@ -12,6 +12,7 @@ const NAV_ITEMS = [
   { path: "/menu", labelKey: "header.nav.menu" },
   { path: "/pantry", labelKey: "header.nav.pantry" },
   { path: "/shopping-list", labelKey: "header.nav.shopping" },
+  { path: "/how-it-works", labelKey: "header.nav.howIcon", mobileLabelKey: "header.nav.how" },
   { path: "/auth", labelKey: "header.nav.account" },
 ];
 
@@ -97,6 +98,8 @@ export default function Header() {
                   : ""
               }`}
               onClick={() => item.path === "/shopping-list" && clearShoppingHighlight()}
+              title={t(item.mobileLabelKey || item.labelKey)}
+              aria-label={t(item.mobileLabelKey || item.labelKey)}
             >
               {t(item.labelKey)}
             </Link>
@@ -144,7 +147,7 @@ export default function Header() {
                     if (item.path === "/shopping-list") clearShoppingHighlight();
                   }}
                 >
-                  {t(item.labelKey)}
+                  {t(item.mobileLabelKey || item.labelKey)}
                 </Link>
               ))}
             </nav>

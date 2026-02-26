@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import { getSupabaseClient, isSupabaseConfigured } from "./supabaseClient";
+import { ensureCurrentUserProfile, resolveCurrentUserPlanTier } from "./adminSupabase";
 import {
   cachePlanTier,
   readCachedPlanTier,
@@ -28,9 +29,15 @@ export const usePlanTier = (): { planTier: PlanTier; isPro: boolean; isResolved:
       return;
     }
 
-    const applyUserPlan = (user: User | null | undefined) => {
+    const applyUserPlan = async (user: User | null | undefined) => {
       if (isCancelled) return;
-      const resolved = resolveUserPlanTier(user);
+      let resolved = resolveUserPlanTier(user);
+      try {
+        await ensureCurrentUserProfile();
+        resolved = await resolveCurrentUserPlanTier();
+      } catch {
+        // keep metadata fallback
+      }
       setPlanTier(resolved);
       cachePlanTier(resolved);
       setIsResolved(true);
@@ -48,7 +55,7 @@ export const usePlanTier = (): { planTier: PlanTier; isPro: boolean; isResolved:
       });
 
     const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
-      applyUserPlan(session?.user);
+      void applyUserPlan(session?.user);
     });
 
     return () => {

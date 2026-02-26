@@ -145,6 +145,7 @@ export const getMenuSuggestion = (payload: {
 export const getAssistantHelp = (payload: {
   question: string;
   pathname: string;
+  locale?: "ru" | "en" | "es";
 }) => callAssist<AssistantHelpResponse, typeof payload>({ action: "assistant_help", payload });
 
 export const importRecipeByUrl = (payload: {
