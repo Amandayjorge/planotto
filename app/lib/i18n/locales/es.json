@@ -535,7 +535,9 @@
       "backToMenu": "← Volver al menú",
       "addRecipe": "+ Añadir receta",
       "clearMine": "Limpiar mis recetas",
-      "goToMine": "Ir a mis recetas"
+      "goToMine": "Ir a mis recetas",
+      "goToPublic": "Abrir ejemplos",
+      "addToMineHint": "El botón \"Añadir a las mías\" está en la pestaña \"Ejemplos\"."
     },
     "guestReminder": {
       "text": "Ya añadiste varias recetas. Crea cuenta para no perderlas.",

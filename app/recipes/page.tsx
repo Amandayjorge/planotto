@@ -368,7 +368,7 @@ function RecipesPageContent() {
   const [onlyWithActiveProducts, setOnlyWithActiveProducts] = useState(false);
   const [onlyFromPantry, setOnlyFromPantry] = useState(false);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
-  const [viewMode, setViewMode] = useState<ViewMode>("mine");
+  const [viewMode, setViewMode] = useState<ViewMode>("public");
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
   const [currentUserName, setCurrentUserName] = useState<string | null>(null);
@@ -1365,6 +1365,24 @@ function RecipesPageContent() {
           {t("recipes.tabs.public")}
         </button>
       </div>
+      {viewMode === "mine" ? (
+        <div
+          className="card"
+          style={{
+            marginTop: "-4px",
+            marginBottom: "12px",
+            padding: "10px 12px",
+            background: "var(--background-secondary)",
+          }}
+        >
+          <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+            <span className="muted">{t("recipes.actions.addToMineHint")}</span>
+            <button type="button" className="btn" onClick={() => setViewMode("public")}>
+              {t("recipes.actions.goToPublic")}
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {hasAnyRecipes ? (
         <>

@@ -535,7 +535,9 @@
       "backToMenu": "← Back to menu",
       "addRecipe": "+ Add recipe",
       "clearMine": "Clear my recipes",
-      "goToMine": "Go to my recipes"
+      "goToMine": "Go to my recipes",
+      "goToPublic": "Open examples",
+      "addToMineHint": "The \"Add to mine\" button is available in the \"Starter examples\" tab."
     },
     "guestReminder": {
       "text": "You already added several recipes. Create an account to keep them safe.",
