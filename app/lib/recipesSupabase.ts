@@ -2,6 +2,7 @@
 
 import { getSupabaseClient } from "./supabaseClient";
 import { findIngredientIdByName } from "./ingredientDictionary";
+import { normalizeRecipeTags } from "./recipeTags";
 import {
   DEFAULT_UNIT_ID,
   getUnitLabelById,
@@ -1287,7 +1288,12 @@ const normalizeIngredients = (value: unknown): Ingredient[] => {
     const normalizedUnit = unit || getUnitLabelById(normalizedUnitId, "ru");
 
     normalized.push({
-      ingredientId: ingredientIdRaw || findIngredientIdByName(name, "ru") || undefined,
+      ingredientId:
+        ingredientIdRaw ||
+        findIngredientIdByName(name, "ru") ||
+        findIngredientIdByName(name, "en") ||
+        findIngredientIdByName(name, "es") ||
+        undefined,
       unitId: normalizedUnitId,
       name,
       unit: normalizedUnit,
@@ -1313,7 +1319,14 @@ const hasMissingStructuredIngredientFields = (value: unknown): boolean => {
     const unitIdRaw = String(raw.unitId || raw.unit_id || "").trim();
     const unitRaw = String(raw.unit || "").trim();
 
-    if (!ingredientIdRaw && findIngredientIdByName(name, "ru")) return true;
+    if (
+      !ingredientIdRaw &&
+      (findIngredientIdByName(name, "ru") ||
+        findIngredientIdByName(name, "en") ||
+        findIngredientIdByName(name, "es"))
+    ) {
+      return true;
+    }
     if (!unitIdRaw) return true;
 
     const normalizedUnitId = normalizeUnitId(unitIdRaw || unitRaw || DEFAULT_UNIT_ID, DEFAULT_UNIT_ID);
@@ -1355,6 +1368,9 @@ const normalizeStringArray = (value: unknown): string[] => {
     .filter((item) => item.length > 0);
 };
 
+const normalizeRecipeTagArray = (value: unknown): string[] =>
+  normalizeRecipeTags(normalizeStringArray(value));
+
 const serializeRecipeForCloudFallback = (recipe: RecipeModel): Record<string, unknown> => ({
   id: recipe.id,
   title: recipe.title || "Рецепт",
@@ -1365,8 +1381,8 @@ const serializeRecipeForCloudFallback = (recipe: RecipeModel): Record<string, un
   notes: recipe.notes || "",
   servings: recipe.servings && recipe.servings > 0 ? recipe.servings : 2,
   image: recipe.image || "",
-  categories: normalizeStringArray(recipe.categories),
-  tags: normalizeStringArray(recipe.tags || recipe.categories),
+  categories: normalizeRecipeTagArray(recipe.categories),
+  tags: normalizeRecipeTagArray(recipe.tags || recipe.categories),
   baseLanguage: normalizeRecipeLanguage(recipe.baseLanguage),
   translations: buildRecipeTranslations({
     baseLanguage: recipe.baseLanguage,
@@ -1390,8 +1406,8 @@ const mapCloudFallbackItemToRecipe = (ownerId: string, value: unknown): RecipeMo
   const title = String(raw.title || "").trim();
   if (!id || !title) return null;
 
-  const categories = normalizeStringArray(raw.categories);
-  const tags = normalizeStringArray(raw.tags ?? raw.categories);
+  const categories = normalizeRecipeTagArray(raw.categories);
+  const tags = normalizeRecipeTagArray(raw.tags ?? raw.categories);
   const shareToken = String(raw.shareToken || "").trim();
   const baseLanguage = normalizeRecipeLanguage(raw.baseLanguage);
   const translations = buildRecipeTranslations({
@@ -1477,7 +1493,7 @@ const saveCloudFallbackRecipes = async (ownerId: string, recipes: RecipeModel[])
 };
 
 const mapRow = (row: RecipeRow, notes?: string | null): RecipeModel => {
-  const tags = normalizeStringArray(row.categories);
+  const tags = normalizeRecipeTagArray(row.categories);
   const isTemplate = !row.owner_id;
   const baseLanguage: RecipeLanguage = "ru";
   return {
@@ -1557,7 +1573,7 @@ const mergeRecipeTranslations = (
 };
 
 const toPayload = (input: RecipeUpsertInput) => {
-  const tags = normalizeStringArray(input.tags ?? input.categories);
+  const tags = normalizeRecipeTagArray(input.tags ?? input.categories);
   return {
     title: input.title.trim(),
     short_description: (input.shortDescription || "").trim(),

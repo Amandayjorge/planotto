@@ -41,7 +41,7 @@ import {
   type UnitId,
 } from "../../lib/ingredientUnits";
 import { isSupabaseConfigured } from "../../lib/supabaseClient";
-import { RECIPE_TAGS } from "../../lib/recipeTags";
+import { RECIPE_TAGS, localizeRecipeTag, normalizeRecipeTags } from "../../lib/recipeTags";
 import {
   getIngredientHints,
   getRecipeTranslationDraft,
@@ -315,7 +315,7 @@ export default function RecipeDetailPage() {
     setAccessNotice("");
     setImage(source.image || "");
     setIngredients(source.ingredients || []);
-    setSelectedTags(source.tags || source.categories || []);
+    setSelectedTags(normalizeRecipeTags(source.tags || source.categories || []));
     setTranslationNotice("");
   };
 
@@ -491,7 +491,7 @@ export default function RecipeDetailPage() {
       });
 
       const allowed = new Set(RECIPE_TAGS as readonly string[]);
-      const next = (data.suggestedTags || []).filter((tag) => allowed.has(tag));
+      const next = normalizeRecipeTags(data.suggestedTags || []).filter((tag) => allowed.has(tag));
       setSuggestedTags(next);
       setAiMessage(
         data.message || (next.length > 0 ? t("recipes.new.ai.tagsFound") : t("recipes.new.ai.tagsNotFound"))
@@ -581,7 +581,7 @@ export default function RecipeDetailPage() {
           optional: Boolean(item.optional),
         };
       });
-    const normalizedTags = Array.from(new Set(selectedTags.map((tag) => tag.trim()).filter(Boolean)));
+    const normalizedTags = normalizeRecipeTags(selectedTags);
     const normalizedRecipeLink = normalizeLink(recipeLink);
     const baseLanguage = normalizeRecipeLanguage(recipe.baseLanguage);
     const isBaseLanguageEditing = contentLanguage === baseLanguage;
@@ -1661,7 +1661,7 @@ export default function RecipeDetailPage() {
                           className="btn"
                           onClick={() => setSelectedTags((prev) => (prev.includes(tag) ? prev : [...prev, tag]))}
                         >
-                          + {tag}
+                          + {localizeRecipeTag(tag, locale as "ru" | "en" | "es")}
                         </button>
                       ))}
                     </div>
@@ -1669,6 +1669,7 @@ export default function RecipeDetailPage() {
                   <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
                     {RECIPE_TAGS.map((tag) => {
                       const checked = selectedTags.includes(tag);
+                      const tagLabel = localizeRecipeTag(tag, locale as "ru" | "en" | "es");
                       return (
                         <label
                           key={tag}
@@ -1692,7 +1693,7 @@ export default function RecipeDetailPage() {
                               );
                             }}
                           />
-                          <span style={{ fontSize: "13px" }}>{tag}</span>
+                          <span style={{ fontSize: "13px" }}>{tagLabel}</span>
                         </label>
                       );
                     })}
@@ -1759,7 +1760,7 @@ export default function RecipeDetailPage() {
 
           {recipe.tags && recipe.tags.length > 0 && (
             <div style={{ marginBottom: "16px", display: "flex", flexWrap: "wrap", gap: "8px" }}>
-              {recipe.tags.map((tag) => (
+              {normalizeRecipeTags(recipe.tags).map((tag) => (
                 <span
                   key={tag}
                   style={{
@@ -1770,7 +1771,7 @@ export default function RecipeDetailPage() {
                     background: "var(--background-secondary)",
                   }}
                 >
-                  {tag}
+                  {localizeRecipeTag(tag, locale as "ru" | "en" | "es")}
                 </span>
               ))}
             </div>

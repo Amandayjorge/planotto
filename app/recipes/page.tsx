@@ -22,7 +22,7 @@ import {
 import { getSupabaseClient, isSupabaseConfigured } from "../lib/supabaseClient";
 import { usePlanTier } from "../lib/usePlanTier";
 import { isPaidFeatureEnabled } from "../lib/subscription";
-import { RECIPE_TAGS } from "../lib/recipeTags";
+import { RECIPE_TAGS, localizeRecipeTag, normalizeRecipeTags } from "../lib/recipeTags";
 import { useI18n } from "../components/I18nProvider";
 import { downloadPdfExport } from "../lib/pdfExportClient";
 import { resolveRecipeImageForCard } from "../lib/recipeImageCatalog";
@@ -327,9 +327,9 @@ function inferMealFromRecipeForMenu(
     .join(" ")
     .toLocaleLowerCase("ru-RU");
 
-  if (/(завтрак|утрен|каша|омлет|олад|блин)/u.test(text)) return "Завтрак";
-  if (/(обед|суп)/u.test(text)) return "Обед";
-  if (/(ужин|вечер)/u.test(text)) return "Ужин";
+  if (/(завтрак|утрен|каша|омлет|олад|блин|breakfast|desayuno)/u.test(text)) return "Завтрак";
+  if (/(обед|суп|lunch|almuerzo|comida)/u.test(text)) return "Обед";
+  if (/(ужин|вечер|dinner|cena)/u.test(text)) return "Ужин";
   return "Ужин";
 }
 
@@ -832,8 +832,8 @@ function RecipesPageContent() {
 
     const filtered = recipes.filter((item) => {
       const localized = getRecipeLocalizedContent(item, uiRecipeLanguage);
-      const tags = item.tags || item.categories || [];
-      const passesTags = effectiveSelectedTags.every((tag) => tags.includes(tag));
+      const tagIds = new Set(normalizeRecipeTags(item.tags || item.categories || []));
+      const passesTags = effectiveSelectedTags.every((tagId) => tagIds.has(tagId));
       if (!passesTags) return false;
       const hasPhoto = Boolean(resolveRecipeCardImage(item));
       if (effectiveOnlyWithPhoto && !hasPhoto) return false;
@@ -1642,6 +1642,7 @@ function RecipesPageContent() {
               <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
                 {RECIPE_TAGS.map((tag) => {
                   const checked = selectedTags.includes(tag);
+                  const tagLabel = localizeRecipeTag(tag, locale as "ru" | "en" | "es");
                   return (
                     <label
                       key={tag}
@@ -1665,7 +1666,7 @@ function RecipesPageContent() {
                           );
                         }}
                       />
-                      <span style={{ fontSize: "13px" }}>{tag}</span>
+                      <span style={{ fontSize: "13px" }}>{tagLabel}</span>
                     </label>
                   );
                 })}

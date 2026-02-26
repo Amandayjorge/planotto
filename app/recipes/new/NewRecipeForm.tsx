@@ -30,7 +30,7 @@ import {
   type RecipeVisibility,
 } from "../../lib/recipesSupabase";
 import { isSupabaseConfigured } from "../../lib/supabaseClient";
-import { RECIPE_TAGS } from "../../lib/recipeTags";
+import { RECIPE_TAGS, localizeRecipeTag, normalizeRecipeTags } from "../../lib/recipeTags";
 import {
   getIngredientHints,
   importRecipeByPhoto,
@@ -356,7 +356,7 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
       });
 
       const allowed = new Set(RECIPE_TAGS as readonly string[]);
-      const next = (data.suggestedTags || []).filter((tag) => allowed.has(tag));
+      const next = normalizeRecipeTags(data.suggestedTags || []).filter((tag) => allowed.has(tag));
       setSuggestedTags(next);
       setAiMessage(
         data.message || (next.length > 0 ? t("recipes.new.ai.tagsFound") : t("recipes.new.ai.tagsNotFound"))
@@ -463,7 +463,7 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
     setReviewHints(hints);
 
     const allowed = new Set(RECIPE_TAGS as readonly string[]);
-    const tags = (draft.tags || []).filter((tag) => allowed.has(tag));
+    const tags = normalizeRecipeTags(draft.tags || []).filter((tag) => allowed.has(tag));
     if (tags.length > 0) setSelectedTags(tags);
   };
 
@@ -721,7 +721,7 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
       ? (/^https?:\/\//i.test(normalizedLinkRaw) ? normalizedLinkRaw : `https://${normalizedLinkRaw}`)
       : "";
 
-    const normalizedTags = Array.from(new Set(selectedTags.map((tag) => tag.trim()).filter(Boolean)));
+    const normalizedTags = normalizeRecipeTags(selectedTags);
 
     const normalizedIngredients = ingredients
       .filter((item) => item.name.trim())
@@ -1337,7 +1337,7 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
                       className="btn"
                       onClick={() => setSelectedTags((prev) => (prev.includes(tag) ? prev : [...prev, tag]))}
                     >
-                      + {tag}
+                      + {localizeRecipeTag(tag, locale as "ru" | "en" | "es")}
                     </button>
                   ))}
                 </div>
@@ -1345,6 +1345,7 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
               <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
                 {RECIPE_TAGS.map((tag) => {
                   const checked = selectedTags.includes(tag);
+                  const tagLabel = localizeRecipeTag(tag, locale as "ru" | "en" | "es");
                   return (
                     <label
                       key={tag}
@@ -1368,7 +1369,7 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
                           );
                         }}
                       />
-                      <span style={{ fontSize: "13px" }}>{tag}</span>
+                      <span style={{ fontSize: "13px" }}>{tagLabel}</span>
                     </label>
                   );
                 })}

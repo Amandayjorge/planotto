@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { RECIPE_TAGS } from "../../../lib/recipeTags";
+import { RECIPE_TAGS, normalizeRecipeTags } from "../../../lib/recipeTags";
 
 type ActionType =
   | "ingredient_hints"
@@ -1311,16 +1311,18 @@ const fallbackTagHints = (payload: Record<string, unknown>) => {
     .toLowerCase();
 
   const tags: string[] = [];
-  if (text.includes("веган")) tags.push("веган");
-  if (text.includes("вегет")) tags.push("вегетарианский");
-  if (text.includes("без глют")) tags.push("без глютена");
-  if (text.includes("без лакт")) tags.push("без лактозы");
-  if (text.includes("завтрак")) tags.push("завтрак");
-  if (text.includes("обед")) tags.push("обед");
-  if (text.includes("ужин")) tags.push("ужин");
-  if (text.includes("быстр")) tags.push("быстро (до 30 минут)");
+  if (text.includes("веган") || text.includes("vegano") || text.includes("vegan")) tags.push("vegan");
+  if (text.includes("вегет") || text.includes("vegetar")) tags.push("vegetarian");
+  if (text.includes("без глют") || text.includes("sin gluten") || text.includes("gluten free")) tags.push("gluten_free");
+  if (text.includes("без лакт") || text.includes("sin lactosa") || text.includes("lactose free")) tags.push("lactose_free");
+  if (text.includes("завтрак") || text.includes("desayuno") || text.includes("breakfast")) tags.push("breakfast");
+  if (text.includes("обед") || text.includes("almuerzo") || text.includes("comida") || text.includes("lunch")) tags.push("lunch");
+  if (text.includes("ужин") || text.includes("cena") || text.includes("dinner")) tags.push("dinner");
+  if (text.includes("быстр") || text.includes("rapido") || text.includes("quick")) tags.push("quick");
+  if (text.includes("суп") || text.includes("sopa") || text.includes("soup")) tags.push("soup");
+  if (text.includes("духовк") || text.includes("horno") || text.includes("oven")) tags.push("oven");
 
-  return { suggestedTags: tags.slice(0, 6), message: "Подсказка готова." };
+  return { suggestedTags: normalizeRecipeTags(tags).slice(0, 6), message: "Tag hint is ready." };
 };
 
 const fallbackServingsHint = (payload: Record<string, unknown>) => {
@@ -1994,7 +1996,7 @@ export async function POST(request: Request) {
         JSON.stringify({ ...payload, allowedTags: RECIPE_TAGS })
       );
       if (ai) {
-        const suggestedTags = safeStringArray(ai.suggestedTags).filter((tag) =>
+        const suggestedTags = normalizeRecipeTags(safeStringArray(ai.suggestedTags)).filter((tag) =>
           (RECIPE_TAGS as readonly string[]).includes(tag)
         );
         return NextResponse.json({
