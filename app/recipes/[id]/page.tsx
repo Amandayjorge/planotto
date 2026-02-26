@@ -49,6 +49,7 @@ import {
   getServingsHint,
   getTagHints,
 } from "../../lib/aiAssistantClient";
+import { downloadPdfExport } from "../../lib/pdfExportClient";
 
 type IngredientHintsMap = Record<number, string[]>;
 const RECIPE_LANGUAGES: RecipeLanguage[] = ["ru", "en", "es"];
@@ -138,11 +139,36 @@ const TEMPLATE_IMAGE_FALLBACKS: Record<string, string> = {
   "Паста с томатным соусом": "/recipes/templates/pasta-tomato.jpg",
   "Салат с тунцом": "/recipes/templates/tuna-salad.jpg",
   "Оладьи на кефире": "/recipes/templates/oladi-kefir.jpg",
+  "Йогурт с гранолой": "/recipes/templates/oatmeal-fruits.jpg",
+  "Гречка с грибами": "/recipes/templates/chicken-rice.jpg",
+  "Картофельное пюре": "/recipes/templates/baked-fish-potatoes.jpg",
+  "Овощной суп": "/recipes/templates/lentil-soup-v2.jpg",
+  "Жареный рис с яйцом": "/recipes/templates/chicken-rice.jpg",
+  "Сэндвич с индейкой": "/recipes/templates/tuna-salad.jpg",
+  "Творог с ягодами": "/recipes/templates/oatmeal-fruits.jpg",
+  "Запеченные овощи": "/recipes/templates/baked-fish-potatoes.jpg",
+  "Куриный суп с лапшой": "/recipes/templates/lentil-soup.jpg",
+  "Рис с овощами": "/recipes/templates/chicken-rice.jpg",
+  "Блины на молоке": "/recipes/templates/oladi-kefir.jpg",
+  "Паста с тунцом": "/recipes/templates/pasta-tomato.jpg",
 };
 
 const normalizeRecipeTitle = (value: string): string => value.trim().toLowerCase().replace(/\s+/g, " ");
 const normalizeRecipeLanguage = (value: unknown): RecipeLanguage =>
   value === "ru" || value === "en" || value === "es" ? value : "ru";
+const resolveRecipeLanguageFromLocale = (value: string): RecipeLanguage => {
+  const normalized = String(value || "").toLowerCase();
+  if (normalized.startsWith("es")) return "es";
+  if (normalized.startsWith("en")) return "en";
+  return "ru";
+};
+const getPreferredContentLanguage = (source: RecipeModel, locale: string): RecipeLanguage => {
+  const fromUi = resolveRecipeLanguageFromLocale(locale);
+  const base = normalizeRecipeLanguage(source.baseLanguage);
+  if (fromUi === base) return base;
+  if (source.translations?.[fromUi]) return fromUi;
+  return base;
+};
 
 const ACCESS_OPTIONS: Array<{
   value: RecipeVisibility;
@@ -268,9 +294,11 @@ export default function RecipeDetailPage() {
   const [contentLanguage, setContentLanguage] = useState<RecipeLanguage>("ru");
   const [translationNotice, setTranslationNotice] = useState("");
   const [isCreatingTranslation, setIsCreatingTranslation] = useState(false);
+  const [isExportingRecipePdf, setIsExportingRecipePdf] = useState(false);
   const hasCoreInput = title.trim().length > 0 || ingredients.some((item) => item.name.trim().length > 0);
   const canUseAiTranslation = isPaidFeatureEnabled(planTier, "ai_translation");
   const canUseImageGeneration = isPaidFeatureEnabled(planTier, "image_generation");
+  const canUsePdfExport = isPaidFeatureEnabled(planTier, "pdf_export");
 
   const canEdit = useMemo(() => {
     if (!recipe) return false;
@@ -325,7 +353,7 @@ export default function RecipeDetailPage() {
       if (!isSupabaseConfigured()) {
         setRecipe(localRecipe);
         if (localRecipe) {
-          const preferred = normalizeRecipeLanguage(localRecipe.baseLanguage);
+          const preferred = getPreferredContentLanguage(localRecipe, locale);
           setContentLanguage(preferred);
           resetFormFromRecipe(localRecipe, preferred);
         }
@@ -334,7 +362,7 @@ export default function RecipeDetailPage() {
 
       if (localRecipe) {
         setRecipe(localRecipe);
-        const preferred = normalizeRecipeLanguage(localRecipe.baseLanguage);
+        const preferred = getPreferredContentLanguage(localRecipe, locale);
         setContentLanguage(preferred);
         resetFormFromRecipe(localRecipe, preferred);
         setIsReportedHidden(false);
@@ -355,7 +383,7 @@ export default function RecipeDetailPage() {
       }
       setRecipe(data);
       if (data) {
-        const preferred = normalizeRecipeLanguage(data.baseLanguage);
+        const preferred = getPreferredContentLanguage(data, locale);
         setContentLanguage(preferred);
         resetFormFromRecipe(data, preferred);
         if (data.visibility === "invited" && currentUserId && data.ownerId === currentUserId) {
@@ -376,7 +404,9 @@ export default function RecipeDetailPage() {
           visibility: "private",
         };
         setRecipe(localFallback);
-        resetFormFromRecipe(localFallback);
+        const preferred = getPreferredContentLanguage(localFallback, locale);
+        setContentLanguage(preferred);
+        resetFormFromRecipe(localFallback, preferred);
         setIsReportedHidden(false);
         return;
       }
@@ -744,7 +774,9 @@ export default function RecipeDetailPage() {
 
   const deleteCurrentRecipe = async () => {
     if (!recipe) return;
-    if (!confirm(t("recipes.messages.deleteOneConfirm", { title: recipe.title }))) return;
+    const localizedTitle =
+      getRecipeTranslation(recipe, contentLanguage)?.title || recipe.title || t("menu.fallback.recipeTitle");
+    if (!confirm(t("recipes.messages.deleteOneConfirm", { title: localizedTitle }))) return;
 
     try {
       if (!isSupabaseConfigured() || !recipe.ownerId) {
@@ -772,10 +804,15 @@ export default function RecipeDetailPage() {
     }
   };
 
-  const createTranslationDraft = async (targetLanguage: RecipeLanguage = contentLanguage) => {
+  const createTranslationDraft = async (
+    targetLanguage: RecipeLanguage = contentLanguage,
+    options?: { previewOnly?: boolean; replaceExisting?: boolean }
+  ) => {
     if (!recipe) return;
-    if (!canEdit) return;
-    if (recipe.translations?.[targetLanguage]) {
+    const previewOnly = Boolean(options?.previewOnly);
+    const replaceExisting = Boolean(options?.replaceExisting);
+    if (!previewOnly && !canEdit) return;
+    if (recipe.translations?.[targetLanguage] && !replaceExisting) {
       setTranslationNotice(t("recipes.detail.translation.exists"));
       return;
     }
@@ -816,6 +853,11 @@ export default function RecipeDetailPage() {
           });
 
           const translated = aiDraft.translation;
+          const aiMessage = String(aiDraft.message || "").toLowerCase();
+          const isAiUnavailable =
+            aiMessage.includes("temporarily unavailable") ||
+            aiMessage.includes("created draft from source text");
+
           draft = {
             ...fallbackDraft,
             title: (translated.title || fallbackDraft.title || "").trim(),
@@ -824,15 +866,29 @@ export default function RecipeDetailPage() {
             description: (translated.description || fallbackDraft.description || "").trim() || undefined,
             instructions: (translated.instructions || fallbackDraft.instructions || "").trim() || undefined,
             updatedAt: new Date().toISOString(),
-            isAutoGenerated: true,
+            isAutoGenerated: !isAiUnavailable,
           };
-          notice = t("recipes.detail.translation.createdReview");
+          notice = isAiUnavailable
+            ? t("recipes.detail.translation.aiUnavailable")
+            : t("recipes.detail.translation.createdReview");
         } catch {
           notice = t("recipes.detail.translation.aiUnavailable");
         }
       }
 
       const nextTranslations = { ...(recipe.translations || {}), [targetLanguage]: draft };
+
+      if (previewOnly) {
+        const previewRecipe: RecipeModel = {
+          ...recipe,
+          translations: nextTranslations,
+        };
+        setRecipe(previewRecipe);
+        setContentLanguage(targetLanguage);
+        resetFormFromRecipe(previewRecipe, targetLanguage);
+        setTranslationNotice(`${notice} ${t("recipes.detail.translation.previewNotSaved")}`);
+        return;
+      }
 
       if (!isSupabaseConfigured() || !recipe.ownerId || !currentUserId) {
         const localUpdated: RecipeModel = {
@@ -879,6 +935,10 @@ export default function RecipeDetailPage() {
     }
 
     if (!canEdit) {
+      if (canUseAiTranslation) {
+        await createTranslationDraft(nextLanguage, { previewOnly: true });
+        return;
+      }
       setTranslationNotice(t("recipes.detail.translation.versionMissing"));
       return;
     }
@@ -1023,6 +1083,65 @@ export default function RecipeDetailPage() {
     }
   };
 
+  const exportRecipePdf = async () => {
+    if (!recipe) return;
+    if (!canUsePdfExport) {
+      setTranslationNotice(t("subscription.availableInPro"));
+      return;
+    }
+
+    const active = getRecipeTranslation(recipe, contentLanguage);
+    const exportTitle = (active?.title || recipe.title || "").trim();
+    const exportDescription = active?.description || recipe.description || "";
+    const exportInstructions =
+      active?.instructions ||
+      recipe.instructions ||
+      (looksLikeLink(exportDescription) ? "" : exportDescription);
+
+    const stepLines = exportInstructions
+      .split(/\n+/g)
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    const ingredientLines = (recipe.ingredients || []).map((item) => {
+      const detectedIngredientId =
+        item.ingredientId ||
+        findIngredientIdByName(item.name, "ru") ||
+        findIngredientIdByName(item.name, "en") ||
+        findIngredientIdByName(item.name, "es") ||
+        "";
+      const localizedName = getIngredientNameById(detectedIngredientId, locale, item.name);
+      const localizedUnit = getUnitLabel(item.unitId || item.unit, locale, item.unit);
+      return isTasteLikeUnit(item.unitId || item.unit)
+        ? `${localizedName} — ${t("recipes.detail.taste")}`
+        : `${item.amount} ${localizedUnit} ${localizedName}`;
+    });
+
+    const cookingTimeValue = [...(recipe.tags || []), ...(recipe.categories || [])].find((value) =>
+      /\d+\s*(мин|min|ч|hour|hr)/i.test(value || "")
+    );
+
+    try {
+      setIsExportingRecipePdf(true);
+      await downloadPdfExport({
+        kind: "recipe",
+        fileName: `${exportTitle || "recipe"}.pdf`,
+        recipe: {
+          title: exportTitle || t("menu.fallback.recipeTitle"),
+          servings: recipe.servings || 2,
+          cookingTime: cookingTimeValue || undefined,
+          ingredients: ingredientLines,
+          steps: stepLines.length > 0 ? stepLines : [t("pdf.fallback.noSteps")],
+        },
+      });
+    } catch (error) {
+      const text = toErrorText(error, t("pdf.errors.exportFailed"));
+      setTranslationNotice(text);
+    } finally {
+      setIsExportingRecipePdf(false);
+    }
+  };
+
   const submitReport = () => {
     if (!recipe) return;
     reportRecipeForReview(
@@ -1075,7 +1194,14 @@ export default function RecipeDetailPage() {
   const showReportButton = recipe.visibility === "public" && (!currentUserId || recipe.ownerId !== currentUserId);
   const canChangeVisibility = Boolean(recipe.ownerId && currentUserId && recipe.ownerId === currentUserId);
   const recipeImage = resolveRecipeImage(recipe);
-  const canCreateTranslation = canEdit && !recipe.translations?.[contentLanguage] && contentLanguage !== baseLanguage;
+  const isMissingTranslation = !recipe.translations?.[contentLanguage] && contentLanguage !== baseLanguage;
+  const canCreateTranslation = canEdit && isMissingTranslation;
+  const canPreviewTranslation = !canEdit && canUseAiTranslation && isMissingTranslation;
+  const canRegenerateTranslation =
+    canEdit &&
+    canUseAiTranslation &&
+    contentLanguage !== baseLanguage &&
+    Boolean(recipe.translations?.[contentLanguage]);
 
   return (
     <div style={{ padding: "20px", maxWidth: "900px", margin: "0 auto" }}>
@@ -1122,6 +1248,17 @@ export default function RecipeDetailPage() {
           </button>
         )}
 
+        <button
+          className="btn"
+          onClick={() => {
+            void exportRecipePdf();
+          }}
+          disabled={isExportingRecipePdf || !canUsePdfExport}
+          title={!canUsePdfExport ? t("subscription.availableInPro") : undefined}
+        >
+          {isExportingRecipePdf ? t("pdf.actions.exporting") : t("pdf.actions.exportRecipe")}
+        </button>
+
         {showCopyButton && (
           <button className="btn btn-primary" onClick={copyToMine}>{t("recipes.card.addToMine")}</button>
         )}
@@ -1161,12 +1298,12 @@ export default function RecipeDetailPage() {
             );
           })}
 
-          {canCreateTranslation ? (
+          {canCreateTranslation || canPreviewTranslation ? (
             <button
               type="button"
               className="btn"
               onClick={() => {
-                void createTranslationDraft();
+                void createTranslationDraft(contentLanguage, { previewOnly: canPreviewTranslation });
               }}
               disabled={isCreatingTranslation}
             >
@@ -1175,6 +1312,20 @@ export default function RecipeDetailPage() {
                 : canUseAiTranslation
                   ? t("recipes.detail.translation.createButton", { lang: LANGUAGE_LABELS[contentLanguage] })
                   : t("recipes.detail.translation.createManualButton", { lang: LANGUAGE_LABELS[contentLanguage] })}
+            </button>
+          ) : null}
+          {canRegenerateTranslation ? (
+            <button
+              type="button"
+              className="btn"
+              onClick={() => {
+                void createTranslationDraft(contentLanguage, { replaceExisting: true });
+              }}
+              disabled={isCreatingTranslation}
+            >
+              {isCreatingTranslation
+                ? t("recipes.detail.translation.creating")
+                : t("recipes.detail.translation.regenerateButton", { lang: LANGUAGE_LABELS[contentLanguage] })}
             </button>
           ) : null}
         </div>
@@ -1187,6 +1338,11 @@ export default function RecipeDetailPage() {
           <p className="muted" style={{ margin: "8px 0 0 0" }}>{translationNotice}</p>
         ) : null}
       </div>
+      {!canUsePdfExport ? (
+        <p className="muted" style={{ marginTop: "-6px", marginBottom: "12px" }}>
+          {t("subscription.availableInPro")}
+        </p>
+      ) : null}
 
       {showReportButton && showReportForm && !isEditing && (
         <div className="card" style={{ marginBottom: "16px", padding: "14px" }}>
@@ -1604,7 +1760,7 @@ export default function RecipeDetailPage() {
             <div style={{ marginBottom: "20px", textAlign: "center" }}>
               <img
                 src={recipeImage}
-                alt={recipe.title}
+                alt={displayTitle || recipe.title || t("menu.fallback.recipeTitle")}
                 style={{ maxWidth: "100%", maxHeight: "400px", borderRadius: "12px", boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }}
               />
             </div>
@@ -1661,7 +1817,13 @@ export default function RecipeDetailPage() {
                 {recipe.ingredients.map((item, index) => (
                   <li key={index}>
                     {(() => {
-                      const localizedName = getIngredientNameById(item.ingredientId || "", locale, item.name);
+                      const detectedIngredientId =
+                        item.ingredientId ||
+                        findIngredientIdByName(item.name, "ru") ||
+                        findIngredientIdByName(item.name, "en") ||
+                        findIngredientIdByName(item.name, "es") ||
+                        "";
+                      const localizedName = getIngredientNameById(detectedIngredientId, locale, item.name);
                       const localizedUnit = getUnitLabel(item.unitId || item.unit, locale, item.unit);
                       return isTasteLikeUnit(item.unitId || item.unit)
                         ? `${localizedName} — ${t("recipes.detail.taste")}`

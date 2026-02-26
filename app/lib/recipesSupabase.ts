@@ -153,6 +153,25 @@ const RECIPE_COLUMNS =
 const RECIPE_TRANSLATION_COLUMNS =
   "recipe_id,language,title,short_description,description,instructions,is_auto_generated,updated_at";
 
+type SeedTranslationPayload = {
+  title: string;
+  shortDescription: string;
+  instructions: string;
+};
+
+const buildSeedTranslations = (translations: {
+  ru: SeedTranslationPayload;
+  en: SeedTranslationPayload;
+  es: SeedTranslationPayload;
+}): Pick<RecipeModel, "baseLanguage" | "translations"> => ({
+  baseLanguage: "ru",
+  translations: {
+    ru: { language: "ru", ...translations.ru },
+    en: { language: "en", ...translations.en },
+    es: { language: "es", ...translations.es },
+  },
+});
+
 const SEED_TEMPLATE_RECIPES: RecipeModel[] = [
   {
     id: "seed-omelet-vegetables",
@@ -176,6 +195,26 @@ const SEED_TEMPLATE_RECIPES: RecipeModel[] = [
     categories: ["завтрак", "быстро (до 30 минут)", "на каждый день"],
     tags: ["завтрак", "быстро (до 30 минут)", "на каждый день"],
     visibility: "public",
+    ...buildSeedTranslations({
+      ru: {
+        title: "Омлет с овощами",
+        shortDescription: "Быстрый завтрак на каждый день",
+        instructions:
+          "Взбейте яйца с молоком и щепоткой соли. Обжарьте овощи 2-3 минуты, влейте яйца и готовьте под крышкой до готовности.",
+      },
+      en: {
+        title: "Vegetable omelet",
+        shortDescription: "Quick everyday breakfast",
+        instructions:
+          "Beat eggs with milk and a pinch of salt. Saute the vegetables for 2-3 minutes, pour in the eggs, cover, and cook until set.",
+      },
+      es: {
+        title: "Tortilla con verduras",
+        shortDescription: "Desayuno rapido para cada dia",
+        instructions:
+          "Bate los huevos con leche y una pizca de sal. Saltea las verduras durante 2-3 minutos, vierte los huevos, tapa y cocina hasta que cuaje.",
+      },
+    }),
   },
   {
     id: "seed-oatmeal-fruits",
@@ -199,6 +238,26 @@ const SEED_TEMPLATE_RECIPES: RecipeModel[] = [
     categories: ["завтрак", "на каждый день"],
     tags: ["завтрак", "на каждый день"],
     visibility: "public",
+    ...buildSeedTranslations({
+      ru: {
+        title: "Овсяная каша с фруктами",
+        shortDescription: "Простой полезный завтрак",
+        instructions:
+          "Доведите молоко с водой до кипения, добавьте овсяные хлопья и варите 5-7 минут. Добавьте банан и яблоко перед подачей.",
+      },
+      en: {
+        title: "Oatmeal with fruit",
+        shortDescription: "Simple healthy breakfast",
+        instructions:
+          "Bring milk and water to a boil, add rolled oats, and cook for 5-7 minutes. Add banana and apple before serving.",
+      },
+      es: {
+        title: "Avena con fruta",
+        shortDescription: "Desayuno simple y saludable",
+        instructions:
+          "Lleva la leche con agua a ebullicion, agrega avena y cocina 5-7 minutos. Anade el platano y la manzana antes de servir.",
+      },
+    }),
   },
   {
     id: "seed-chicken-rice",
@@ -222,6 +281,26 @@ const SEED_TEMPLATE_RECIPES: RecipeModel[] = [
     categories: ["обед", "на каждый день"],
     tags: ["обед", "на каждый день"],
     visibility: "public",
+    ...buildSeedTranslations({
+      ru: {
+        title: "Курица с рисом",
+        shortDescription: "Базовый обед без сложной техники",
+        instructions:
+          "Обжарьте курицу до легкой корочки, добавьте лук и морковь. Засыпьте рис, влейте воду, накройте крышкой и готовьте 20 минут.",
+      },
+      en: {
+        title: "Chicken with rice",
+        shortDescription: "Basic lunch without complex steps",
+        instructions:
+          "Brown the chicken lightly, add onion and carrot. Add rice, pour in water, cover, and cook for 20 minutes.",
+      },
+      es: {
+        title: "Pollo con arroz",
+        shortDescription: "Almuerzo basico sin tecnicas complejas",
+        instructions:
+          "Dora ligeramente el pollo y agrega cebolla y zanahoria. Anade arroz, vierte agua, tapa y cocina durante 20 minutos.",
+      },
+    }),
   },
   {
     id: "seed-baked-fish-potatoes",
@@ -244,6 +323,26 @@ const SEED_TEMPLATE_RECIPES: RecipeModel[] = [
     categories: ["ужин", "духовка"],
     tags: ["ужин", "духовка"],
     visibility: "public",
+    ...buildSeedTranslations({
+      ru: {
+        title: "Запеченная рыба с картофелем",
+        shortDescription: "Ужин в духовке без лишней суеты",
+        instructions:
+          "Нарежьте картофель, выложите в форму, сверху рыбу. Посолите, добавьте масло и запекайте 30-35 минут при 190°C.",
+      },
+      en: {
+        title: "Baked fish with potatoes",
+        shortDescription: "Easy oven dinner",
+        instructions:
+          "Slice the potatoes, place them in a baking dish, and put fish on top. Season with salt, add oil, and bake at 190C for 30-35 minutes.",
+      },
+      es: {
+        title: "Pescado al horno con patatas",
+        shortDescription: "Cena facil al horno",
+        instructions:
+          "Corta las patatas, colocalas en una fuente y pon el pescado encima. Sala, agrega aceite y hornea 30-35 minutos a 190C.",
+      },
+    }),
   },
   {
     id: "seed-pasta-tomato",
@@ -266,6 +365,26 @@ const SEED_TEMPLATE_RECIPES: RecipeModel[] = [
     categories: ["ужин", "быстро (до 30 минут)"],
     tags: ["ужин", "быстро (до 30 минут)"],
     visibility: "public",
+    ...buildSeedTranslations({
+      ru: {
+        title: "Паста с томатным соусом",
+        shortDescription: "Универсальный быстрый ужин",
+        instructions:
+          "Отварите пасту. На сковороде прогрейте томаты с чесноком и маслом 8-10 минут. Смешайте пасту с соусом.",
+      },
+      en: {
+        title: "Pasta with tomato sauce",
+        shortDescription: "Fast all-purpose dinner",
+        instructions:
+          "Boil the pasta. Warm tomatoes with garlic and oil in a pan for 8-10 minutes. Toss pasta with the sauce.",
+      },
+      es: {
+        title: "Pasta con salsa de tomate",
+        shortDescription: "Cena rapida y versatil",
+        instructions:
+          "Hierve la pasta. Calienta tomate con ajo y aceite en una sarten durante 8-10 minutos. Mezcla la pasta con la salsa.",
+      },
+    }),
   },
   {
     id: "seed-tuna-salad",
@@ -289,6 +408,26 @@ const SEED_TEMPLATE_RECIPES: RecipeModel[] = [
     categories: ["обед", "быстро (до 30 минут)"],
     tags: ["обед", "быстро (до 30 минут)"],
     visibility: "public",
+    ...buildSeedTranslations({
+      ru: {
+        title: "Салат с тунцом",
+        shortDescription: "Быстрый вариант на обед или ужин",
+        instructions:
+          "Нарежьте овощи, добавьте тунец и яйцо. Заправьте маслом и лимонным соком, перемешайте.",
+      },
+      en: {
+        title: "Tuna salad",
+        shortDescription: "Quick lunch or dinner option",
+        instructions:
+          "Chop the vegetables, add tuna and egg. Dress with olive oil and lemon juice, then toss.",
+      },
+      es: {
+        title: "Ensalada con atun",
+        shortDescription: "Opcion rapida para almuerzo o cena",
+        instructions:
+          "Corta las verduras, agrega atun y huevo. Adereza con aceite y jugo de limon, luego mezcla.",
+      },
+    }),
   },
   {
     id: "seed-oladi-kefir",
@@ -312,6 +451,580 @@ const SEED_TEMPLATE_RECIPES: RecipeModel[] = [
     categories: ["завтрак", "выпечка"],
     tags: ["завтрак", "выпечка"],
     visibility: "public",
+    ...buildSeedTranslations({
+      ru: {
+        title: "Оладьи на кефире",
+        shortDescription: "Базовая выпечка к чаю",
+        instructions:
+          "Смешайте кефир, яйцо, сахар и муку с разрыхлителем. Жарьте оладьи на среднем огне с двух сторон до румяности.",
+      },
+      en: {
+        title: "Kefir pancakes",
+        shortDescription: "Simple tea-time pancakes",
+        instructions:
+          "Mix kefir, egg, sugar, and flour with baking powder. Fry pancakes on medium heat on both sides until golden.",
+      },
+      es: {
+        title: "Tortitas de kefir",
+        shortDescription: "Tortitas sencillas para el te",
+        instructions:
+          "Mezcla kefir, huevo, azucar y harina con polvo de hornear. Frie las tortitas a fuego medio por ambos lados hasta dorar.",
+      },
+    }),
+  },
+  {
+    id: "seed-greek-yogurt-granola",
+    ownerId: "system",
+    type: "template",
+    isTemplate: true,
+    title: "Йогурт с гранолой",
+    shortDescription: "Завтрак за 5 минут",
+    instructions:
+      "Разложите йогурт по мискам, добавьте гранолу и ягоды. Полейте медом перед подачей.",
+    ingredients: [
+      { name: "йогурт", amount: 300, unit: "г" },
+      { name: "гранола", amount: 80, unit: "г" },
+      { name: "ягоды", amount: 100, unit: "г" },
+      { name: "мед", amount: 1, unit: "ст.л." },
+    ],
+    notes: "",
+    servings: 2,
+    image: "/recipes/templates/oatmeal-fruits.jpg",
+    categories: ["завтрак", "быстро (до 30 минут)"],
+    tags: ["завтрак", "быстро (до 30 минут)"],
+    visibility: "public",
+    ...buildSeedTranslations({
+      ru: {
+        title: "Йогурт с гранолой",
+        shortDescription: "Завтрак за 5 минут",
+        instructions:
+          "Разложите йогурт по мискам, добавьте гранолу и ягоды. Полейте медом перед подачей.",
+      },
+      en: {
+        title: "Yogurt with granola",
+        shortDescription: "Breakfast in 5 minutes",
+        instructions:
+          "Divide yogurt into bowls, add granola and berries. Drizzle with honey before serving.",
+      },
+      es: {
+        title: "Yogur con granola",
+        shortDescription: "Desayuno en 5 minutos",
+        instructions:
+          "Reparte el yogur en cuencos, agrega granola y frutos rojos. Anade miel antes de servir.",
+      },
+    }),
+  },
+  {
+    id: "seed-buckwheat-mushrooms",
+    ownerId: "system",
+    type: "template",
+    isTemplate: true,
+    title: "Гречка с грибами",
+    shortDescription: "Сытный гарнир или самостоятельное блюдо",
+    instructions:
+      "Отварите гречку. Обжарьте лук с грибами 7-8 минут, смешайте с гречкой, посолите и прогрейте 2 минуты.",
+    ingredients: [
+      { name: "гречка", amount: 200, unit: "г" },
+      { name: "шампиньоны", amount: 250, unit: "г" },
+      { name: "лук", amount: 1, unit: "шт" },
+      { name: "масло растительное", amount: 15, unit: "мл" },
+      { name: "соль", amount: 0, unit: "по вкусу" },
+    ],
+    notes: "",
+    servings: 3,
+    image: "/recipes/templates/chicken-rice.jpg",
+    categories: ["обед", "на каждый день"],
+    tags: ["обед", "на каждый день"],
+    visibility: "public",
+    ...buildSeedTranslations({
+      ru: {
+        title: "Гречка с грибами",
+        shortDescription: "Сытный гарнир или самостоятельное блюдо",
+        instructions:
+          "Отварите гречку. Обжарьте лук с грибами 7-8 минут, смешайте с гречкой, посолите и прогрейте 2 минуты.",
+      },
+      en: {
+        title: "Buckwheat with mushrooms",
+        shortDescription: "Hearty side dish or main",
+        instructions:
+          "Cook buckwheat. Saute onion with mushrooms for 7-8 minutes, mix with buckwheat, season with salt, and heat for 2 more minutes.",
+      },
+      es: {
+        title: "Trigo sarraceno con champinones",
+        shortDescription: "Guarnicion abundante o plato principal",
+        instructions:
+          "Cuece el trigo sarraceno. Saltea cebolla con champinones durante 7-8 minutos, mezcla con el cereal, sala y calienta 2 minutos mas.",
+      },
+    }),
+  },
+  {
+    id: "seed-mashed-potatoes",
+    ownerId: "system",
+    type: "template",
+    isTemplate: true,
+    title: "Картофельное пюре",
+    shortDescription: "Классический мягкий гарнир",
+    instructions:
+      "Отварите картофель до мягкости. Слейте воду, добавьте молоко и масло, разомните до однородности.",
+    ingredients: [
+      { name: "картофель", amount: 800, unit: "г" },
+      { name: "молоко", amount: 120, unit: "мл" },
+      { name: "масло сливочное", amount: 25, unit: "г" },
+      { name: "соль", amount: 0, unit: "по вкусу" },
+    ],
+    notes: "",
+    servings: 4,
+    image: "/recipes/templates/baked-fish-potatoes.jpg",
+    categories: ["обед", "гарнир"],
+    tags: ["обед", "гарнир"],
+    visibility: "public",
+    ...buildSeedTranslations({
+      ru: {
+        title: "Картофельное пюре",
+        shortDescription: "Классический мягкий гарнир",
+        instructions:
+          "Отварите картофель до мягкости. Слейте воду, добавьте молоко и масло, разомните до однородности.",
+      },
+      en: {
+        title: "Mashed potatoes",
+        shortDescription: "Classic smooth side dish",
+        instructions:
+          "Boil potatoes until tender. Drain, add milk and butter, and mash until smooth.",
+      },
+      es: {
+        title: "Pure de patatas",
+        shortDescription: "Guarnicion clasica y cremosa",
+        instructions:
+          "Hierve las patatas hasta que esten tiernas. Escurre, agrega leche y mantequilla, y tritura hasta que quede suave.",
+      },
+    }),
+  },
+  {
+    id: "seed-vegetable-soup",
+    ownerId: "system",
+    type: "template",
+    isTemplate: true,
+    title: "Овощной суп",
+    shortDescription: "Легкий суп на каждый день",
+    instructions:
+      "Нарежьте овощи, залейте водой и доведите до кипения. Варите 20 минут до мягкости, добавьте соль и зелень.",
+    ingredients: [
+      { name: "картофель", amount: 300, unit: "г" },
+      { name: "морковь", amount: 1, unit: "шт" },
+      { name: "лук", amount: 1, unit: "шт" },
+      { name: "кабачок", amount: 200, unit: "г" },
+      { name: "вода", amount: 1200, unit: "мл" },
+    ],
+    notes: "",
+    servings: 4,
+    image: "/recipes/templates/lentil-soup-v2.jpg",
+    categories: ["обед", "суп"],
+    tags: ["обед", "суп"],
+    visibility: "public",
+    ...buildSeedTranslations({
+      ru: {
+        title: "Овощной суп",
+        shortDescription: "Легкий суп на каждый день",
+        instructions:
+          "Нарежьте овощи, залейте водой и доведите до кипения. Варите 20 минут до мягкости, добавьте соль и зелень.",
+      },
+      en: {
+        title: "Vegetable soup",
+        shortDescription: "Light everyday soup",
+        instructions:
+          "Chop the vegetables, add water, and bring to a boil. Simmer for 20 minutes until tender, then season with salt and herbs.",
+      },
+      es: {
+        title: "Sopa de verduras",
+        shortDescription: "Sopa ligera para cada dia",
+        instructions:
+          "Corta las verduras, cubrelas con agua y lleva a ebullicion. Cocina 20 minutos hasta que esten tiernas y agrega sal y hierbas.",
+      },
+    }),
+  },
+  {
+    id: "seed-fried-rice-egg",
+    ownerId: "system",
+    type: "template",
+    isTemplate: true,
+    title: "Жареный рис с яйцом",
+    shortDescription: "Быстрый ужин на сковороде",
+    instructions:
+      "Обжарьте лук и морковь 3 минуты. Добавьте готовый рис и яйцо, быстро перемешайте до готовности яйца.",
+    ingredients: [
+      { name: "рис", amount: 250, unit: "г" },
+      { name: "яйца", amount: 2, unit: "шт" },
+      { name: "морковь", amount: 1, unit: "шт" },
+      { name: "лук", amount: 1, unit: "шт" },
+      { name: "масло растительное", amount: 15, unit: "мл" },
+    ],
+    notes: "",
+    servings: 2,
+    image: "/recipes/templates/chicken-rice.jpg",
+    categories: ["ужин", "быстро (до 30 минут)"],
+    tags: ["ужин", "быстро (до 30 минут)"],
+    visibility: "public",
+    ...buildSeedTranslations({
+      ru: {
+        title: "Жареный рис с яйцом",
+        shortDescription: "Быстрый ужин на сковороде",
+        instructions:
+          "Обжарьте лук и морковь 3 минуты. Добавьте готовый рис и яйцо, быстро перемешайте до готовности яйца.",
+      },
+      en: {
+        title: "Fried rice with egg",
+        shortDescription: "Quick skillet dinner",
+        instructions:
+          "Saute onion and carrot for 3 minutes. Add cooked rice and egg, then stir quickly until the egg is cooked.",
+      },
+      es: {
+        title: "Arroz frito con huevo",
+        shortDescription: "Cena rapida en sarten",
+        instructions:
+          "Saltea cebolla y zanahoria durante 3 minutos. Agrega arroz cocido y huevo, mezcla rapido hasta que el huevo este listo.",
+      },
+    }),
+  },
+  {
+    id: "seed-turkey-sandwich",
+    ownerId: "system",
+    type: "template",
+    isTemplate: true,
+    title: "Сэндвич с индейкой",
+    shortDescription: "Простой перекус или легкий обед",
+    instructions:
+      "Подсушите хлеб, намажьте сыр, добавьте листья салата, индейку и помидор. Накройте вторым ломтиком.",
+    ingredients: [
+      { name: "хлеб", amount: 4, unit: "ломтик" },
+      { name: "индейка", amount: 120, unit: "г" },
+      { name: "творожный сыр", amount: 60, unit: "г" },
+      { name: "помидоры", amount: 1, unit: "шт" },
+      { name: "листья салата", amount: 4, unit: "шт" },
+    ],
+    notes: "",
+    servings: 2,
+    image: "/recipes/templates/tuna-salad.jpg",
+    categories: ["обед", "быстро (до 30 минут)"],
+    tags: ["обед", "быстро (до 30 минут)"],
+    visibility: "public",
+    ...buildSeedTranslations({
+      ru: {
+        title: "Сэндвич с индейкой",
+        shortDescription: "Простой перекус или легкий обед",
+        instructions:
+          "Подсушите хлеб, намажьте сыр, добавьте листья салата, индейку и помидор. Накройте вторым ломтиком.",
+      },
+      en: {
+        title: "Turkey sandwich",
+        shortDescription: "Simple snack or light lunch",
+        instructions:
+          "Toast the bread, spread cream cheese, add lettuce, turkey, and tomato. Top with the second slice.",
+      },
+      es: {
+        title: "Sandwich de pavo",
+        shortDescription: "Tentempie simple o almuerzo ligero",
+        instructions:
+          "Tuesta el pan, unta queso crema, agrega lechuga, pavo y tomate. Cubre con la segunda rebanada.",
+      },
+    }),
+  },
+  {
+    id: "seed-cottage-cheese-berries",
+    ownerId: "system",
+    type: "template",
+    isTemplate: true,
+    title: "Творог с ягодами",
+    shortDescription: "Белковый завтрак без готовки",
+    instructions:
+      "Выложите творог в миску, добавьте ягоды и мед. Перемешайте или подавайте слоями.",
+    ingredients: [
+      { name: "творог", amount: 250, unit: "г" },
+      { name: "ягоды", amount: 120, unit: "г" },
+      { name: "мед", amount: 1, unit: "ст.л." },
+    ],
+    notes: "",
+    servings: 2,
+    image: "/recipes/templates/oatmeal-fruits.jpg",
+    categories: ["завтрак", "на каждый день"],
+    tags: ["завтрак", "на каждый день"],
+    visibility: "public",
+    ...buildSeedTranslations({
+      ru: {
+        title: "Творог с ягодами",
+        shortDescription: "Белковый завтрак без готовки",
+        instructions:
+          "Выложите творог в миску, добавьте ягоды и мед. Перемешайте или подавайте слоями.",
+      },
+      en: {
+        title: "Cottage cheese with berries",
+        shortDescription: "Protein breakfast without cooking",
+        instructions:
+          "Place cottage cheese in a bowl, add berries and honey. Mix or serve in layers.",
+      },
+      es: {
+        title: "Requeson con frutos rojos",
+        shortDescription: "Desayuno proteico sin cocinar",
+        instructions:
+          "Pon el requeson en un cuenco, agrega frutos rojos y miel. Mezcla o sirve en capas.",
+      },
+    }),
+  },
+  {
+    id: "seed-roasted-vegetables",
+    ownerId: "system",
+    type: "template",
+    isTemplate: true,
+    title: "Запеченные овощи",
+    shortDescription: "Универсальный гарнир из духовки",
+    instructions:
+      "Нарежьте овощи крупно, добавьте масло и соль. Запекайте при 200°C 25-30 минут, перемешав один раз.",
+    ingredients: [
+      { name: "картофель", amount: 400, unit: "г" },
+      { name: "кабачок", amount: 250, unit: "г" },
+      { name: "болгарский перец", amount: 1, unit: "шт" },
+      { name: "лук", amount: 1, unit: "шт" },
+      { name: "масло растительное", amount: 20, unit: "мл" },
+    ],
+    notes: "",
+    servings: 3,
+    image: "/recipes/templates/baked-fish-potatoes.jpg",
+    categories: ["ужин", "духовка"],
+    tags: ["ужин", "духовка"],
+    visibility: "public",
+    ...buildSeedTranslations({
+      ru: {
+        title: "Запеченные овощи",
+        shortDescription: "Универсальный гарнир из духовки",
+        instructions:
+          "Нарежьте овощи крупно, добавьте масло и соль. Запекайте при 200°C 25-30 минут, перемешав один раз.",
+      },
+      en: {
+        title: "Roasted vegetables",
+        shortDescription: "Versatile oven side dish",
+        instructions:
+          "Cut vegetables into large pieces, add oil and salt. Roast at 200C for 25-30 minutes, stirring once.",
+      },
+      es: {
+        title: "Verduras al horno",
+        shortDescription: "Guarnicion versatil al horno",
+        instructions:
+          "Corta las verduras en trozos grandes, agrega aceite y sal. Hornea a 200C durante 25-30 minutos y mezcla una vez.",
+      },
+    }),
+  },
+  {
+    id: "seed-lentil-soup",
+    ownerId: "system",
+    type: "template",
+    isTemplate: true,
+    title: "Суп из чечевицы",
+    shortDescription: "Сытный постный суп",
+    instructions:
+      "Промойте чечевицу, добавьте в воду с овощами и варите 25 минут. В конце добавьте соль и специи.",
+    ingredients: [
+      { name: "чечевица", amount: 220, unit: "г" },
+      { name: "морковь", amount: 1, unit: "шт" },
+      { name: "лук", amount: 1, unit: "шт" },
+      { name: "томатная паста", amount: 1, unit: "ст.л." },
+      { name: "вода", amount: 1300, unit: "мл" },
+    ],
+    notes: "",
+    servings: 4,
+    image: "/recipes/templates/lentil-soup-v2.jpg",
+    categories: ["обед", "суп"],
+    tags: ["обед", "суп"],
+    visibility: "public",
+    ...buildSeedTranslations({
+      ru: {
+        title: "Суп из чечевицы",
+        shortDescription: "Сытный постный суп",
+        instructions:
+          "Промойте чечевицу, добавьте в воду с овощами и варите 25 минут. В конце добавьте соль и специи.",
+      },
+      en: {
+        title: "Lentil soup",
+        shortDescription: "Hearty meat-free soup",
+        instructions:
+          "Rinse lentils, add them to water with vegetables, and cook for 25 minutes. Add salt and spices at the end.",
+      },
+      es: {
+        title: "Sopa de lentejas",
+        shortDescription: "Sopa abundante sin carne",
+        instructions:
+          "Enjuaga las lentejas, agregalas al agua con verduras y cocina 25 minutos. Al final agrega sal y especias.",
+      },
+    }),
+  },
+  {
+    id: "seed-chicken-noodle-soup",
+    ownerId: "system",
+    type: "template",
+    isTemplate: true,
+    title: "Куриный суп с лапшой",
+    shortDescription: "Домашний суп на каждый день",
+    instructions:
+      "Сварите курицу 20 минут, добавьте овощи и лапшу. Готовьте еще 10 минут и подавайте с зеленью.",
+    ingredients: [
+      { name: "куриное филе", amount: 300, unit: "г" },
+      { name: "лапша", amount: 120, unit: "г" },
+      { name: "морковь", amount: 1, unit: "шт" },
+      { name: "лук", amount: 1, unit: "шт" },
+      { name: "вода", amount: 1500, unit: "мл" },
+    ],
+    notes: "",
+    servings: 4,
+    image: "/recipes/templates/lentil-soup.jpg",
+    categories: ["обед", "суп"],
+    tags: ["обед", "суп"],
+    visibility: "public",
+    ...buildSeedTranslations({
+      ru: {
+        title: "Куриный суп с лапшой",
+        shortDescription: "Домашний суп на каждый день",
+        instructions:
+          "Сварите курицу 20 минут, добавьте овощи и лапшу. Готовьте еще 10 минут и подавайте с зеленью.",
+      },
+      en: {
+        title: "Chicken noodle soup",
+        shortDescription: "Homestyle everyday soup",
+        instructions:
+          "Cook chicken for 20 minutes, add vegetables and noodles. Cook 10 more minutes and serve with herbs.",
+      },
+      es: {
+        title: "Sopa de pollo con fideos",
+        shortDescription: "Sopa casera para cada dia",
+        instructions:
+          "Cocina el pollo durante 20 minutos, agrega verduras y fideos. Cocina 10 minutos mas y sirve con hierbas.",
+      },
+    }),
+  },
+  {
+    id: "seed-rice-vegetables",
+    ownerId: "system",
+    type: "template",
+    isTemplate: true,
+    title: "Рис с овощами",
+    shortDescription: "Простой вегетарианский ужин",
+    instructions:
+      "Обжарьте овощи 5 минут, добавьте рис и воду. Готовьте под крышкой 18-20 минут до мягкости риса.",
+    ingredients: [
+      { name: "рис", amount: 220, unit: "г" },
+      { name: "болгарский перец", amount: 1, unit: "шт" },
+      { name: "морковь", amount: 1, unit: "шт" },
+      { name: "лук", amount: 1, unit: "шт" },
+      { name: "вода", amount: 450, unit: "мл" },
+    ],
+    notes: "",
+    servings: 3,
+    image: "/recipes/templates/chicken-rice.jpg",
+    categories: ["ужин", "на каждый день"],
+    tags: ["ужин", "на каждый день"],
+    visibility: "public",
+    ...buildSeedTranslations({
+      ru: {
+        title: "Рис с овощами",
+        shortDescription: "Простой вегетарианский ужин",
+        instructions:
+          "Обжарьте овощи 5 минут, добавьте рис и воду. Готовьте под крышкой 18-20 минут до мягкости риса.",
+      },
+      en: {
+        title: "Rice with vegetables",
+        shortDescription: "Simple vegetarian dinner",
+        instructions:
+          "Saute vegetables for 5 minutes, add rice and water. Cook covered for 18-20 minutes until rice is tender.",
+      },
+      es: {
+        title: "Arroz con verduras",
+        shortDescription: "Cena vegetariana simple",
+        instructions:
+          "Saltea las verduras durante 5 minutos, agrega arroz y agua. Cocina tapado 18-20 minutos hasta que el arroz este tierno.",
+      },
+    }),
+  },
+  {
+    id: "seed-crepes-milk",
+    ownerId: "system",
+    type: "template",
+    isTemplate: true,
+    title: "Блины на молоке",
+    shortDescription: "Тонкие блины для завтрака",
+    instructions:
+      "Смешайте яйца, молоко, муку и сахар до жидкого теста. Жарьте тонкие блины на разогретой сковороде.",
+    ingredients: [
+      { name: "молоко", amount: 500, unit: "мл" },
+      { name: "яйца", amount: 2, unit: "шт" },
+      { name: "мука", amount: 200, unit: "г" },
+      { name: "сахар", amount: 20, unit: "г" },
+      { name: "масло растительное", amount: 20, unit: "мл" },
+    ],
+    notes: "",
+    servings: 4,
+    image: "/recipes/templates/oladi-kefir.jpg",
+    categories: ["завтрак", "выпечка"],
+    tags: ["завтрак", "выпечка"],
+    visibility: "public",
+    ...buildSeedTranslations({
+      ru: {
+        title: "Блины на молоке",
+        shortDescription: "Тонкие блины для завтрака",
+        instructions:
+          "Смешайте яйца, молоко, муку и сахар до жидкого теста. Жарьте тонкие блины на разогретой сковороде.",
+      },
+      en: {
+        title: "Milk crepes",
+        shortDescription: "Thin breakfast crepes",
+        instructions:
+          "Whisk eggs, milk, flour, and sugar into a thin batter. Cook thin crepes on a hot pan.",
+      },
+      es: {
+        title: "Crepes con leche",
+        shortDescription: "Crepes finos para desayuno",
+        instructions:
+          "Mezcla huevos, leche, harina y azucar hasta obtener una masa liquida. Cocina crepes finos en una sarten caliente.",
+      },
+    }),
+  },
+  {
+    id: "seed-tuna-pasta-creamy",
+    ownerId: "system",
+    type: "template",
+    isTemplate: true,
+    title: "Паста с тунцом",
+    shortDescription: "Быстрый ужин из простых продуктов",
+    instructions:
+      "Отварите пасту. Прогрейте тунец со сливками 3-4 минуты, добавьте пасту и перемешайте.",
+    ingredients: [
+      { name: "паста", amount: 250, unit: "г" },
+      { name: "тунец консервированный", amount: 1, unit: "шт" },
+      { name: "сливки 20%", amount: 150, unit: "мл" },
+      { name: "чеснок", amount: 1, unit: "зубчик" },
+    ],
+    notes: "",
+    servings: 3,
+    image: "/recipes/templates/pasta-tomato.jpg",
+    categories: ["ужин", "быстро (до 30 минут)"],
+    tags: ["ужин", "быстро (до 30 минут)"],
+    visibility: "public",
+    ...buildSeedTranslations({
+      ru: {
+        title: "Паста с тунцом",
+        shortDescription: "Быстрый ужин из простых продуктов",
+        instructions:
+          "Отварите пасту. Прогрейте тунец со сливками 3-4 минуты, добавьте пасту и перемешайте.",
+      },
+      en: {
+        title: "Pasta with tuna",
+        shortDescription: "Quick dinner from simple ingredients",
+        instructions:
+          "Boil the pasta. Warm tuna with cream for 3-4 minutes, add pasta, and mix well.",
+      },
+      es: {
+        title: "Pasta con atun",
+        shortDescription: "Cena rapida con ingredientes simples",
+        instructions:
+          "Hierve la pasta. Calienta atun con nata durante 3-4 minutos, agrega la pasta y mezcla bien.",
+      },
+    }),
   },
 ];
 

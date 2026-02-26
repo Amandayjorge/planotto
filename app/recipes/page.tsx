@@ -16,6 +16,7 @@ import {
   syncRecipesToLocalCache,
   upsertRecipeInLocalCache,
   type RecipeModel,
+  type RecipeLanguage,
   type RecipeVisibility,
 } from "../lib/recipesSupabase";
 import { getSupabaseClient, isSupabaseConfigured } from "../lib/supabaseClient";
@@ -23,6 +24,7 @@ import { usePlanTier } from "../lib/usePlanTier";
 import { isPaidFeatureEnabled } from "../lib/subscription";
 import { RECIPE_TAGS } from "../lib/recipeTags";
 import { useI18n } from "../components/I18nProvider";
+import { downloadPdfExport } from "../lib/pdfExportClient";
 
 type ViewMode = "mine" | "public";
 type SortOption =
@@ -52,6 +54,18 @@ const TEMPLATE_IMAGE_FALLBACKS: Record<string, string> = {
   "Паста с томатным соусом": "/recipes/templates/pasta-tomato.jpg",
   "Салат с тунцом": "/recipes/templates/tuna-salad.jpg",
   "Оладьи на кефире": "/recipes/templates/oladi-kefir.jpg",
+  "Йогурт с гранолой": "/recipes/templates/oatmeal-fruits.jpg",
+  "Гречка с грибами": "/recipes/templates/chicken-rice.jpg",
+  "Картофельное пюре": "/recipes/templates/baked-fish-potatoes.jpg",
+  "Овощной суп": "/recipes/templates/lentil-soup-v2.jpg",
+  "Жареный рис с яйцом": "/recipes/templates/chicken-rice.jpg",
+  "Сэндвич с индейкой": "/recipes/templates/tuna-salad.jpg",
+  "Творог с ягодами": "/recipes/templates/oatmeal-fruits.jpg",
+  "Запеченные овощи": "/recipes/templates/baked-fish-potatoes.jpg",
+  "Куриный суп с лапшой": "/recipes/templates/lentil-soup.jpg",
+  "Рис с овощами": "/recipes/templates/chicken-rice.jpg",
+  "Блины на молоке": "/recipes/templates/oladi-kefir.jpg",
+  "Паста с тунцом": "/recipes/templates/pasta-tomato.jpg",
 };
 
 const VISIBILITY_BADGE_META: Record<
@@ -78,6 +92,43 @@ function looksLikeUrl(value: string): boolean {
 
 function normalizeRecipeTitle(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function normalizeRecipeLanguage(value: unknown): RecipeLanguage {
+  return value === "ru" || value === "en" || value === "es" ? value : "ru";
+}
+
+function resolveRecipeLanguageFromLocale(locale: string): RecipeLanguage {
+  const normalized = String(locale || "").toLowerCase();
+  if (normalized.startsWith("es")) return "es";
+  if (normalized.startsWith("en")) return "en";
+  return "ru";
+}
+
+function getRecipeCanonicalTitle(recipe: RecipeModel): string {
+  const baseLanguage = normalizeRecipeLanguage(recipe.baseLanguage);
+  return recipe.translations?.[baseLanguage]?.title || recipe.title || "";
+}
+
+function getRecipeLocalizedContent(
+  recipe: RecipeModel,
+  language: RecipeLanguage
+): {
+  title: string;
+  shortDescription: string;
+  description: string;
+  instructions: string;
+} {
+  const baseLanguage = normalizeRecipeLanguage(recipe.baseLanguage);
+  const preferred = recipe.translations?.[language];
+  const fallback = recipe.translations?.[baseLanguage];
+
+  return {
+    title: (preferred?.title || fallback?.title || recipe.title || "").trim(),
+    shortDescription: (preferred?.shortDescription || fallback?.shortDescription || recipe.shortDescription || "").trim(),
+    description: (preferred?.description || fallback?.description || recipe.description || "").trim(),
+    instructions: (preferred?.instructions || fallback?.instructions || recipe.instructions || "").trim(),
+  };
 }
 
 function normalizeMatchText(value: string): string {
@@ -275,7 +326,7 @@ function isSeedTemplateId(recipeId: string | null | undefined): boolean {
 }
 
 function resolveRecipeCardImage(recipe: RecipeModel): string | null {
-  const normalizedTitle = normalizeRecipeTitle(recipe.title || "");
+  const normalizedTitle = normalizeRecipeTitle(getRecipeCanonicalTitle(recipe));
   const matched = Object.entries(TEMPLATE_IMAGE_FALLBACKS).find(
     ([title]) => normalizeRecipeTitle(title) === normalizedTitle
   );
@@ -352,10 +403,11 @@ function resolveUserFrame(user: User | null | undefined): string | null {
 }
 
 function RecipesPageContent() {
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
   const { planTier } = usePlanTier();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const uiRecipeLanguage = useMemo(() => resolveRecipeLanguageFromLocale(locale), [locale]);
 
   const [recipes, setRecipes] = useState<RecipeModel[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -389,7 +441,10 @@ function RecipesPageContent() {
   const [pantryProductNames, setPantryProductNames] = useState<string[]>([]);
   const [openActiveMatchesRecipeId, setOpenActiveMatchesRecipeId] = useState<string | null>(null);
   const [openDislikeRecipeId, setOpenDislikeRecipeId] = useState<string | null>(null);
+  const [selectedRecipeIds, setSelectedRecipeIds] = useState<Record<string, boolean>>({});
+  const [isExportingRecipesPdf, setIsExportingRecipesPdf] = useState(false);
   const canUseAdvancedFilters = isPaidFeatureEnabled(planTier, "advanced_filters");
+  const canUsePdfExport = isPaidFeatureEnabled(planTier, "pdf_export");
   const effectiveSelectedTags = canUseAdvancedFilters ? selectedTags : [];
   const effectiveOnlyWithPhoto = canUseAdvancedFilters ? onlyWithPhoto : false;
   const effectiveOnlyWithoutPhoto = canUseAdvancedFilters ? onlyWithoutPhoto : false;
@@ -416,6 +471,11 @@ function RecipesPageContent() {
     setSelectedTags([]);
     setShowAdvancedFilters(false);
   }, [canUseAdvancedFilters, sortBy]);
+
+  useEffect(() => {
+    if (viewMode === "mine") return;
+    setSelectedRecipeIds({});
+  }, [viewMode]);
 
   const refreshRecipes = async (mode: ViewMode, userId: string | null): Promise<void> => {
     setIsLoading(true);
@@ -789,25 +849,28 @@ function RecipesPageContent() {
 
   const filteredRecipes = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
+    const sortLocale = uiRecipeLanguage === "es" ? "es" : uiRecipeLanguage === "en" ? "en" : "ru";
     const getTimesCooked = (item: RecipeModel): number => {
       const value = (item as RecipeModel & { timesCooked?: number }).timesCooked;
       return Number.isFinite(value) ? Number(value) : 0;
     };
 
     const filtered = recipes.filter((item) => {
+      const localized = getRecipeLocalizedContent(item, uiRecipeLanguage);
       const tags = item.tags || item.categories || [];
       const passesTags = effectiveSelectedTags.every((tag) => tags.includes(tag));
       if (!passesTags) return false;
-      if (effectiveOnlyWithPhoto && !item.image?.trim()) return false;
-      if (effectiveOnlyWithoutPhoto && item.image?.trim()) return false;
+      const hasPhoto = Boolean(resolveRecipeCardImage(item));
+      if (effectiveOnlyWithPhoto && !hasPhoto) return false;
+      if (effectiveOnlyWithoutPhoto && hasPhoto) return false;
       if (effectiveOnlyWithNotes && !item.notes?.trim()) return false;
       if (effectiveOnlyWithActiveProducts && (recipeActiveMatchMap.get(item.id)?.matchCount || 0) === 0) return false;
       if (effectiveOnlyFromPantry && !recipePantryCoverageMap.get(item.id)?.isFullyCovered) return false;
       if (viewMode === "public" && (recipePreferenceMatchMap.get(item.id)?.allergyCount || 0) > 0) return false;
       if (!query) return true;
 
-      const title = (item.title || "").toLowerCase();
-      const shortDescription = (item.shortDescription || "").toLowerCase();
+      const title = localized.title.toLowerCase();
+      const shortDescription = localized.shortDescription.toLowerCase();
       const ingredientsText = (item.ingredients || [])
         .map((ingredient) => (ingredient.name || "").toLowerCase())
         .join(" ");
@@ -820,8 +883,8 @@ function RecipesPageContent() {
     });
 
     filtered.sort((a, b) => {
-      const aTitle = (a.title || "").toLowerCase();
-      const bTitle = (b.title || "").toLowerCase();
+      const aTitle = getRecipeLocalizedContent(a, uiRecipeLanguage).title.toLowerCase();
+      const bTitle = getRecipeLocalizedContent(b, uiRecipeLanguage).title.toLowerCase();
       const aCreated = Date.parse(a.createdAt || "") || 0;
       const bCreated = Date.parse(b.createdAt || "") || 0;
       const aCooked = getTimesCooked(a);
@@ -831,9 +894,9 @@ function RecipesPageContent() {
         case "oldest":
           return aCreated - bCreated;
         case "title_asc":
-          return aTitle.localeCompare(bTitle, "ru");
+          return aTitle.localeCompare(bTitle, sortLocale);
         case "title_desc":
-          return bTitle.localeCompare(aTitle, "ru");
+          return bTitle.localeCompare(aTitle, sortLocale);
         case "often_cooked":
           return bCooked - aCooked;
         case "rarely_cooked":
@@ -887,8 +950,14 @@ function RecipesPageContent() {
     recipePantryCoverageMap,
     recipes,
     searchQuery,
+    uiRecipeLanguage,
     viewMode,
   ]);
+
+  const selectedMineRecipes = useMemo(
+    () => filteredRecipes.filter((recipe) => Boolean(selectedRecipeIds[recipe.id])),
+    [filteredRecipes, selectedRecipeIds]
+  );
 
   const existingMineTitleSet = useMemo(() => {
     if (typeof window === "undefined") return new Set<string>();
@@ -898,7 +967,7 @@ function RecipesPageContent() {
     );
     return new Set(
       source
-        .map((item) => normalizeRecipeTitle(item.title || ""))
+        .map((item) => normalizeRecipeTitle(getRecipeCanonicalTitle(item)))
         .filter(Boolean)
     );
   }, [mineSyncVersion, recipes, viewMode]);
@@ -908,7 +977,7 @@ function RecipesPageContent() {
     const source = loadLocalRecipes().filter((item) => !isSeedTemplateId(item.id));
     const map = new Map<string, string>();
     source.forEach((item) => {
-      const key = normalizeRecipeTitle(item.title || "");
+      const key = normalizeRecipeTitle(getRecipeCanonicalTitle(item));
       if (!key || !item.id || map.has(key)) return;
       map.set(key, item.id);
     });
@@ -987,11 +1056,23 @@ function RecipesPageContent() {
     const recipeForMenu = recipeFromState || findRecipeInLocalCacheById(firstCopiedRecipeId);
     const params = new URLSearchParams({ recipe: firstCopiedRecipeId });
 
-    const recipeTitle = recipeForMenu?.title?.trim();
+    const recipeView = recipeForMenu ? getRecipeLocalizedContent(recipeForMenu, uiRecipeLanguage) : null;
+    const recipeTitle = recipeView?.title?.trim();
     if (recipeTitle) {
       params.set("title", recipeTitle);
     }
-    params.set("meal", inferMealFromRecipeForMenu(recipeForMenu));
+    params.set(
+      "meal",
+      inferMealFromRecipeForMenu(
+        recipeForMenu
+          ? {
+              ...recipeForMenu,
+              title: recipeView?.title || recipeForMenu.title,
+              shortDescription: recipeView?.shortDescription || recipeForMenu.shortDescription,
+            }
+          : null
+      )
+    );
 
     handleDismissFirstRecipeSuccess();
     router.push("/menu?" + params.toString());
@@ -1049,11 +1130,11 @@ function RecipesPageContent() {
     }
     setPendingCopyRecipeId(recipeId);
     const showOverlayForThisCopy = shouldShowFirstRecipeOverlay();
-    const sourceTitleKey = normalizeRecipeTitle(source.title || "");
+    const sourceTitleKey = normalizeRecipeTitle(getRecipeCanonicalTitle(source));
     const findExistingMineLocal = (): RecipeModel | null => {
       const existing = loadLocalRecipes().find((item) => {
         if (isSeedTemplateId(item.id)) return false;
-        return normalizeRecipeTitle(item.title || "") === sourceTitleKey;
+        return normalizeRecipeTitle(getRecipeCanonicalTitle(item)) === sourceTitleKey;
       });
       return existing || null;
     };
@@ -1202,7 +1283,12 @@ function RecipesPageContent() {
   };
 
   const handleDeleteRecipe = async (recipe: RecipeModel) => {
-    const ok = confirm(t("recipes.messages.deleteOneConfirm", { title: recipe.title }));
+    const localized = getRecipeLocalizedContent(recipe, uiRecipeLanguage);
+    const ok = confirm(
+      t("recipes.messages.deleteOneConfirm", {
+        title: localized.title || recipe.title || t("menu.fallback.recipeTitle"),
+      })
+    );
     if (!ok) return;
 
     try {
@@ -1243,6 +1329,51 @@ function RecipesPageContent() {
     setShowGuestRegisterReminder(false);
     if (typeof window !== "undefined") {
       localStorage.setItem(GUEST_RECIPES_REMINDER_DISMISSED_KEY, "1");
+    }
+  };
+
+  const exportSelectedRecipesPdf = async () => {
+    if (!canUsePdfExport) {
+      setActionMessage(t("subscription.availableInPro"));
+      return;
+    }
+    if (selectedMineRecipes.length === 0) {
+      setActionMessage(t("pdf.errors.selectRecipes"));
+      return;
+    }
+
+    try {
+      setIsExportingRecipesPdf(true);
+      setActionMessage("");
+      await downloadPdfExport({
+        kind: "recipes",
+        coverTitle: t("pdf.cover.recipes"),
+        fileName: "planotto-recipes.pdf",
+        recipes: selectedMineRecipes.map((recipe) => {
+          const localized = getRecipeLocalizedContent(recipe, uiRecipeLanguage);
+          const stepLines = String(localized.instructions || localized.description || "")
+            .split(/\n+/g)
+            .map((line) => line.trim())
+            .filter(Boolean);
+          return {
+            title: String(localized.title || recipe.title || t("menu.fallback.recipeTitle")).trim(),
+            servings: recipe.servings || 2,
+            cookingTime:
+              [...(recipe.tags || []), ...(recipe.categories || [])].find((value) =>
+                /\d+\s*(мин|min|ч|hour|hr)/i.test(value || "")
+              ) || undefined,
+            ingredients: (recipe.ingredients || []).map((item) =>
+              `${item.amount} ${item.unit} ${item.name}`.trim()
+            ),
+            steps: stepLines.length > 0 ? stepLines : [t("pdf.fallback.noSteps")],
+          };
+        }),
+      });
+    } catch (error) {
+      const text = toErrorText(error, t("pdf.errors.exportFailed"));
+      setActionMessage(text);
+    } finally {
+      setIsExportingRecipesPdf(false);
     }
   };
 
@@ -1365,6 +1496,31 @@ function RecipesPageContent() {
           {t("recipes.tabs.public")}
         </button>
       </div>
+      {viewMode === "mine" ? (
+        <div className="card" style={{ marginTop: "-4px", marginBottom: "12px", padding: "10px 12px" }}>
+          <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+            <button
+              type="button"
+              className="btn"
+              onClick={() => {
+                void exportSelectedRecipesPdf();
+              }}
+              disabled={isExportingRecipesPdf || !canUsePdfExport || selectedMineRecipes.length === 0}
+              title={!canUsePdfExport ? t("subscription.availableInPro") : undefined}
+            >
+              {isExportingRecipesPdf ? t("pdf.actions.exporting") : t("pdf.actions.exportSelectedRecipes")}
+            </button>
+            <span className="muted">
+              {t("pdf.selectedCount", { count: selectedMineRecipes.length })}
+            </span>
+          </div>
+          {!canUsePdfExport ? (
+            <p className="muted" style={{ marginTop: "8px", marginBottom: 0 }}>
+              {t("subscription.availableInPro")}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
       {viewMode === "mine" ? (
         <div
           className="card"
@@ -1688,13 +1844,19 @@ function RecipesPageContent() {
       ) : (
         <div style={{ display: "grid", gap: "12px" }}>
           {filteredRecipes.map((recipe) => {
+            const localized = getRecipeLocalizedContent(recipe, uiRecipeLanguage);
+            const recipeCardTitle = localized.title || recipe.title || t("menu.fallback.recipeTitle");
+            const recipeCardShortDescription = localized.shortDescription || "";
+            const recipeCardDescription = localized.description || "";
             const isOwner = currentUserId && recipe.ownerId === currentUserId;
+            const isMineCard = viewMode === "mine";
+            const isSelectedForExport = Boolean(selectedRecipeIds[recipe.id]);
             const cardImage = resolveRecipeCardImage(recipe);
             const duplicateExists =
               viewMode === "public" &&
-              existingMineTitleSet.has(normalizeRecipeTitle(recipe.title || ""));
+              existingMineTitleSet.has(normalizeRecipeTitle(getRecipeCanonicalTitle(recipe)));
             const isPublicSourceRecipe = viewMode === "public" && !isOwner;
-            const recipeTitleKey = normalizeRecipeTitle(recipe.title || "");
+            const recipeTitleKey = normalizeRecipeTitle(getRecipeCanonicalTitle(recipe));
             const existingMineRecipeId = isPublicSourceRecipe ? existingMineByTitle.get(recipeTitleKey) || null : null;
             const openTargetId = duplicateExists && existingMineRecipeId ? existingMineRecipeId : recipe.id;
             const addedNow = Boolean(justAddedRecipeTitles[recipeTitleKey]);
@@ -1771,7 +1933,7 @@ function RecipesPageContent() {
                   {cardImage ? (
                     <img
                       src={cardImage}
-                      alt={recipe.title}
+                      alt={recipeCardTitle}
                       style={{
                         width: "84px",
                         height: "84px",
@@ -1785,7 +1947,7 @@ function RecipesPageContent() {
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "flex-start" }}>
                       <div style={{ minWidth: 0 }}>
-                        <h3 style={{ margin: 0 }}>{recipe.title}</h3>
+                        <h3 style={{ margin: 0 }}>{recipeCardTitle}</h3>
                         <div style={{ marginTop: "4px", fontSize: "12px", color: "var(--text-tertiary)", display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
                           <span>{sourceLabel}</span>
                           {viewMode === "mine" && recipe.visibility !== "private" ? (
@@ -1894,11 +2056,29 @@ function RecipesPageContent() {
                       <span style={{ fontSize: "13px", color: "var(--text-secondary)", flexShrink: 0 }}>
                         {t("recipes.card.servings", { count: recipe.servings || 2 })}
                       </span>
+                      {isMineCard ? (
+                        <label style={{ display: "inline-flex", alignItems: "center", gap: "6px", marginLeft: "8px", fontSize: "12px", color: "var(--text-secondary)" }}>
+                          <input
+                            type="checkbox"
+                            checked={isSelectedForExport}
+                            onChange={(event) => {
+                              const checked = event.target.checked;
+                              setSelectedRecipeIds((prev) => {
+                                if (checked) return { ...prev, [recipe.id]: true };
+                                const next = { ...prev };
+                                delete next[recipe.id];
+                                return next;
+                              });
+                            }}
+                          />
+                          {t("pdf.actions.select")}
+                        </label>
+                      ) : null}
                     </div>
 
                     {(() => {
-                      const fallbackDescription = recipe.description || "";
-                      const cardDescription = recipe.shortDescription || (looksLikeUrl(fallbackDescription) ? "" : fallbackDescription);
+                      const cardDescription =
+                        recipeCardShortDescription || (looksLikeUrl(recipeCardDescription) ? "" : recipeCardDescription);
                       return cardDescription ? (
                         <p
                           style={{
