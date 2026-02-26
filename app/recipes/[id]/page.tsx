@@ -50,6 +50,7 @@ import {
   getTagHints,
 } from "../../lib/aiAssistantClient";
 import { downloadPdfExport } from "../../lib/pdfExportClient";
+import { resolveRecipeImageForCard } from "../../lib/recipeImageCatalog";
 
 type IngredientHintsMap = Record<number, string[]>;
 const RECIPE_LANGUAGES: RecipeLanguage[] = ["ru", "en", "es"];
@@ -128,29 +129,6 @@ const isMissingRecipeTranslationsTableError = (error: unknown): boolean => {
   if (text.includes("could not find the table") && text.includes("recipe_translations")) return true;
   if (text.includes("schema cache") && text.includes("recipe_translations")) return true;
   return false;
-};
-
-const TEMPLATE_IMAGE_FALLBACKS: Record<string, string> = {
-  "Омлет с овощами": "/recipes/templates/omelet-vegetables.jpg",
-  "Овсяная каша с фруктами": "/recipes/templates/oatmeal-fruits.jpg",
-  "Курица с рисом": "/recipes/templates/chicken-rice.jpg",
-  "Суп из чечевицы": "/recipes/templates/lentil-soup-v2.jpg",
-  "Запеченная рыба с картофелем": "/recipes/templates/baked-fish-potatoes.jpg",
-  "Паста с томатным соусом": "/recipes/templates/pasta-tomato.jpg",
-  "Салат с тунцом": "/recipes/templates/tuna-salad.jpg",
-  "Оладьи на кефире": "/recipes/templates/oladi-kefir.jpg",
-  "Йогурт с гранолой": "/recipes/templates/oatmeal-fruits.jpg",
-  "Гречка с грибами": "/recipes/templates/chicken-rice.jpg",
-  "Картофельное пюре": "/recipes/templates/baked-fish-potatoes.jpg",
-  "Овощной суп": "/recipes/templates/lentil-soup-v2.jpg",
-  "Жареный рис с яйцом": "/recipes/templates/chicken-rice.jpg",
-  "Сэндвич с индейкой": "/recipes/templates/tuna-salad.jpg",
-  "Творог с ягодами": "/recipes/templates/oatmeal-fruits.jpg",
-  "Запеченные овощи": "/recipes/templates/baked-fish-potatoes.jpg",
-  "Куриный суп с лапшой": "/recipes/templates/lentil-soup.jpg",
-  "Рис с овощами": "/recipes/templates/chicken-rice.jpg",
-  "Блины на молоке": "/recipes/templates/oladi-kefir.jpg",
-  "Паста с тунцом": "/recipes/templates/pasta-tomato.jpg",
 };
 
 const normalizeRecipeTitle = (value: string): string => value.trim().toLowerCase().replace(/\s+/g, " ");
@@ -233,18 +211,15 @@ const parseInvitedEmails = (raw: string): string[] => {
 };
 
 const resolveRecipeImage = (recipe: RecipeModel): string => {
-  const normalizedTitle = normalizeRecipeTitle(recipe.title || "");
-  const matched = Object.entries(TEMPLATE_IMAGE_FALLBACKS).find(
-    ([title]) => normalizeRecipeTitle(title) === normalizedTitle
+  return (
+    resolveRecipeImageForCard({
+      id: recipe.id,
+      title: recipe.title,
+      image: recipe.image,
+      type: recipe.type,
+      isTemplate: recipe.isTemplate,
+    }) || ""
   );
-
-  // Keep starter templates stable even if cached URL/image is broken.
-  if (matched && recipe.type === "template") return matched[1];
-  if (matched && normalizedTitle === normalizeRecipeTitle("Суп из чечевицы")) return matched[1];
-
-  const direct = recipe.image?.trim();
-  if (direct) return direct;
-  return matched?.[1] || "";
 };
 
 export default function RecipeDetailPage() {

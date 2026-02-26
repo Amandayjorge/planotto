@@ -25,6 +25,7 @@ import { isPaidFeatureEnabled } from "../lib/subscription";
 import { RECIPE_TAGS } from "../lib/recipeTags";
 import { useI18n } from "../components/I18nProvider";
 import { downloadPdfExport } from "../lib/pdfExportClient";
+import { resolveRecipeImageForCard } from "../lib/recipeImageCatalog";
 
 type ViewMode = "mine" | "public";
 type SortOption =
@@ -45,28 +46,6 @@ const GUEST_RECIPES_REMINDER_THRESHOLD = 3;
 const MENU_RANGE_STATE_KEY = "selectedMenuRange";
 const ACTIVE_PRODUCTS_STORAGE_PREFIX = "activeProducts:";
 const PANTRY_STORAGE_KEY = "pantry";
-const TEMPLATE_IMAGE_FALLBACKS: Record<string, string> = {
-  "Омлет с овощами": "/recipes/templates/omelet-vegetables.jpg",
-  "Овсяная каша с фруктами": "/recipes/templates/oatmeal-fruits.jpg",
-  "Курица с рисом": "/recipes/templates/chicken-rice.jpg",
-  "Суп из чечевицы": "/recipes/templates/lentil-soup-v2.jpg",
-  "Запеченная рыба с картофелем": "/recipes/templates/baked-fish-potatoes.jpg",
-  "Паста с томатным соусом": "/recipes/templates/pasta-tomato.jpg",
-  "Салат с тунцом": "/recipes/templates/tuna-salad.jpg",
-  "Оладьи на кефире": "/recipes/templates/oladi-kefir.jpg",
-  "Йогурт с гранолой": "/recipes/templates/oatmeal-fruits.jpg",
-  "Гречка с грибами": "/recipes/templates/chicken-rice.jpg",
-  "Картофельное пюре": "/recipes/templates/baked-fish-potatoes.jpg",
-  "Овощной суп": "/recipes/templates/lentil-soup-v2.jpg",
-  "Жареный рис с яйцом": "/recipes/templates/chicken-rice.jpg",
-  "Сэндвич с индейкой": "/recipes/templates/tuna-salad.jpg",
-  "Творог с ягодами": "/recipes/templates/oatmeal-fruits.jpg",
-  "Запеченные овощи": "/recipes/templates/baked-fish-potatoes.jpg",
-  "Куриный суп с лапшой": "/recipes/templates/lentil-soup.jpg",
-  "Рис с овощами": "/recipes/templates/chicken-rice.jpg",
-  "Блины на молоке": "/recipes/templates/oladi-kefir.jpg",
-  "Паста с тунцом": "/recipes/templates/pasta-tomato.jpg",
-};
 
 const VISIBILITY_BADGE_META: Record<
   Exclude<RecipeVisibility, "private">,
@@ -326,18 +305,14 @@ function isSeedTemplateId(recipeId: string | null | undefined): boolean {
 }
 
 function resolveRecipeCardImage(recipe: RecipeModel): string | null {
-  const normalizedTitle = normalizeRecipeTitle(getRecipeCanonicalTitle(recipe));
-  const matched = Object.entries(TEMPLATE_IMAGE_FALLBACKS).find(
-    ([title]) => normalizeRecipeTitle(title) === normalizedTitle
-  );
-  // For seed starter recipes, always prefer local bundled images.
-  if (matched && recipe.type === "template") return matched[1];
-  // Legacy copied "Суп из чечевицы" can contain a broken cached image URL.
-  if (matched && normalizeRecipeTitle("Суп из чечевицы") === normalizedTitle) return matched[1];
-  const direct = recipe.image?.trim();
-  if (direct) return direct;
-  if (matched) return matched[1];
-  return null;
+  const resolved = resolveRecipeImageForCard({
+    id: recipe.id,
+    title: getRecipeCanonicalTitle(recipe),
+    image: recipe.image,
+    type: recipe.type,
+    isTemplate: recipe.isTemplate,
+  });
+  return resolved || null;
 }
 
 function inferMealFromRecipeForMenu(
