@@ -6,6 +6,8 @@
       "menu": "Menú",
       "pantry": "Despensa",
       "shopping": "Compras",
+      "how": "Cómo funciona",
+      "howIcon": "?",
       "account": "Cuenta"
     },
     "aria": {
@@ -283,7 +285,15 @@
       "purchased": "Comprado",
       "done": "Hecho",
       "cancel": "Cancelar",
-      "add": "Añadir"
+      "add": "Añadir",
+      "printVersion": "Versión para imprimir"
+    },
+    "print": {
+      "title": "Lista de compras para imprimir",
+      "empty": "No hay datos para imprimir. Abre Compras y pulsa «Versión para imprimir».",
+      "period": "Período",
+      "source": "Origen",
+      "generated": "Generado"
     }
   },
   "menu": {
@@ -301,7 +311,12 @@
       "open": "Abrir",
       "actions": "Acciones",
       "generateShoppingList": "Generar lista de compras",
-      "clearPeriod": "Limpiar período"
+      "clearPeriod": "Limpiar período",
+      "exportPdf": "Exportar a PDF",
+      "exportingPdf": "Exportando PDF...",
+      "exportFailed": "No se pudo exportar el PDF.",
+      "exportPdfShort": "PDF: solo menú",
+      "exportPdfFull": "PDF: menú + recetas"
     },
     "dialog": {
       "addDish": "Añadir plato",
@@ -375,11 +390,65 @@
     "period": {
       "previousAria": "Período anterior",
       "nextAria": "Período siguiente",
-      "daysCount": "{{count}} días"
+      "daysCount": "{{count}} días",
+      "presets": {
+        "7d": "7 días",
+        "10d": "10 días",
+        "14d": "14 días",
+        "month": "Mes",
+        "custom": "Período personalizado"
+      },
+      "customStart": "Fecha de inicio",
+      "customEnd": "Fecha de fin",
+      "applyCustom": "Aplicar período",
+      "invalidCustomRange": "Revisa el período: la fecha de inicio debe ser anterior o igual a la fecha de fin."
     },
     "selector": {
       "label": "Menú:",
       "aria": "Selección de menú activo"
+    },
+    "templates": {
+      "button": "Plantillas",
+      "newMenu": "Menú nuevo",
+      "startWithExample": "Empezar con ejemplo",
+      "panelDescription": "Elige un formato listo y añádelo a tu cuenta.",
+      "emptyPrompt": "Tu menú está vacío.",
+      "createMenu": "Crear menú",
+      "loadExample": "Cargar ejemplo",
+      "addToMine": "Añadir al mío",
+      "replaceConfirm": "Esta plantilla reemplazará los platos del menú actual. ¿Continuar?",
+      "quick": {
+        "title": "Menú rápido",
+        "description": "Tiempo mínimo de cocina con platos simples del día a día."
+      },
+      "family": {
+        "title": "Menú familiar",
+        "description": "Opción más completa con sopas y platos calientes."
+      },
+      "budget": {
+        "title": "Menú económico",
+        "description": "Platos accesibles con productos básicos."
+      },
+      "dishes": {
+        "omeletVegetables": "Tortilla con verduras",
+        "yogurtGranola": "Yogur con granola",
+        "oatmealFruit": "Avena con fruta",
+        "tunaSalad": "Ensalada con atún",
+        "turkeySandwich": "Sándwich de pavo",
+        "buckwheatMushrooms": "Trigo sarraceno con champiñones",
+        "pastaTomato": "Pasta con salsa de tomate",
+        "friedRiceEgg": "Arroz frito con huevo",
+        "riceVegetables": "Arroz con verduras",
+        "crepesMilk": "Crepes con leche",
+        "oladiKefir": "Tortitas de kéfir",
+        "chickenNoodleSoup": "Sopa de pollo con fideos",
+        "chickenRice": "Pollo con arroz",
+        "vegetableSoup": "Sopa de verduras",
+        "bakedFishPotatoes": "Pescado al horno con patatas",
+        "mashedPotatoes": "Puré de patatas",
+        "pastaTuna": "Pasta con atún",
+        "lentilSoup": "Sopa de lentejas"
+      }
     },
     "mode": {
       "label": "Modo:",
@@ -414,7 +483,9 @@
       "menuNameAria": "Nombre del menú {{name}}",
       "currentMenu": "Menú actual",
       "deleteMenu": "Eliminar menú",
-      "addMenu": "+ Añadir menú"
+      "addMenu": "+ Añadir menú",
+      "periodTitle": "Período de planificación",
+      "periodPresetLabel": "Duración del período"
     },
     "mealsConfig": {
       "title": "Configurar comidas",
@@ -462,6 +533,12 @@
     },
     "shopping": {
       "allMenusPeriod": "Todos los menús del período"
+    },
+    "pdfModal": {
+      "title": "Exportar menú a PDF",
+      "menuOnly": "Solo menú",
+      "menuWithRecipes": "Menú + recetas",
+      "download": "Descargar como PDF"
     }
   },
   "recipes": {
@@ -737,6 +814,7 @@
         "versionMissing": "Aún no hay traducción",
         "creating": "Creando traducción...",
         "createButton": "Crear traducción ({{lang}})",
+        "regenerateButton": "Regenerar traducción ({{lang}})",
         "createManualButton": "Crear traducción manual ({{lang}})",
         "exists": "La traducción ya existe.",
         "noTitle": "No se puede crear una traducción sin título.",
@@ -744,6 +822,7 @@
         "manualDraftCreated": "Borrador manual creado desde el texto original. Seguira en el idioma original hasta que lo edites.",
         "createdReview": "Traducción creada. Revisa el texto.",
         "aiUnavailable": "La IA no está disponible. Se creó un borrador desde el texto original.",
+        "previewNotSaved": "Solo vista previa. Añade la receta a tus recetas para guardar esta traducción.",
         "createFailed": "No se pudo crear la traducción."
       },
       "report": {
@@ -770,18 +849,77 @@
       "taste": "al gusto"
     }
   },
+  "howPage": {
+    "title": "Cómo funciona Planotto",
+    "subtitle": "Resumen corto de la lógica principal.",
+    "periodProducts": {
+      "title": "Qué son los productos del período",
+      "description": "Son los productos en los que quieres enfocarte en el menú actual. Las recetas con estos productos suben en la lista."
+    },
+    "writeOff": {
+      "title": "Cuándo se descuentan productos",
+      "description": "Los productos se descuentan solo después de marcar \"Cocinado\" en el menú."
+    },
+    "menuVsShopping": {
+      "title": "Diferencia entre menú y lista de compras",
+      "description": "El menú se usa para planificar platos por día. La lista de compras se forma y se marca manualmente."
+    },
+    "pro": {
+      "title": "Qué incluye Pro",
+      "features": {
+        "aiTranslation": "Traducción automática de recetas (borrador IA)",
+        "importByPhotoLink": "Importación de recetas por foto o enlace",
+        "imageGeneration": "Generación de imagen del plato",
+        "multipleMenus": "Varios menús al mismo tiempo",
+        "advancedFilters": "Filtros avanzados"
+      }
+    }
+  },
   "subscription": {
+    "proActivated": {
+      "title": "🎉 Activaste Pro",
+      "items": {
+        "aiTranslation": "La traducción con IA está disponible",
+        "photoImport": "La importación por foto está disponible",
+        "multipleMenus": "Varios menús están disponibles"
+      },
+      "actions": {
+        "ok": "Entendido"
+      }
+    },
     "locks": {
       "multipleMenus": "Varios menus estan disponibles en el plan Pro.",
       "translationAi": "La traduccion automatica esta disponible en Pro. La traduccion manual es gratis.",
       "recipeImport": "La importacion por enlace/foto esta disponible en el plan Pro.",
       "imageGeneration": "La generacion de imagen con IA esta disponible en el plan Pro.",
-      "advancedFilters": "Los filtros avanzados estan disponibles en el plan Pro."
-    }
+      "advancedFilters": "Los filtros avanzados estan disponibles en el plan Pro.",
+      "pdfExport": "La exportación a PDF está disponible en el plan Pro.",
+      "pdfExportShort": "El PDF está disponible en Pro."
+    },
+    "availableInPro": "Disponible en Pro"
   },
   "languages": {
     "ru": "Русский",
     "en": "English",
     "es": "Español"
+  },
+  "pdf": {
+    "actions": {
+      "exportRecipe": "Exportar receta a PDF",
+      "exportSelectedRecipes": "Exportar seleccionadas a PDF",
+      "exporting": "Exportando PDF...",
+      "select": "PDF"
+    },
+    "errors": {
+      "exportFailed": "No se pudo exportar el PDF.",
+      "selectRecipes": "Selecciona al menos una receta para exportar."
+    },
+    "fallback": {
+      "noSteps": "No hay pasos de preparación."
+    },
+    "cover": {
+      "recipes": "Recetario"
+    },
+    "selectedCount": "Seleccionadas: {{count}}"
   }
 }

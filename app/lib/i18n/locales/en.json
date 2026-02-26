@@ -6,6 +6,8 @@
       "menu": "Menu",
       "pantry": "Pantry",
       "shopping": "Shopping",
+      "how": "How it works",
+      "howIcon": "?",
       "account": "Account"
     },
     "aria": {
@@ -283,7 +285,15 @@
       "purchased": "Purchased",
       "done": "Done",
       "cancel": "Cancel",
-      "add": "Add"
+      "add": "Add",
+      "printVersion": "Print version"
+    },
+    "print": {
+      "title": "Printable shopping list",
+      "empty": "No print data found. Open Shopping and click \"Print version\".",
+      "period": "Period",
+      "source": "Source",
+      "generated": "Generated"
     }
   },
   "menu": {
@@ -301,7 +311,12 @@
       "open": "Open",
       "actions": "Actions",
       "generateShoppingList": "Generate shopping list",
-      "clearPeriod": "Clear period"
+      "clearPeriod": "Clear period",
+      "exportPdf": "Export to PDF",
+      "exportingPdf": "Exporting PDF...",
+      "exportFailed": "Failed to export PDF.",
+      "exportPdfShort": "PDF: menu only",
+      "exportPdfFull": "PDF: menu + recipes"
     },
     "dialog": {
       "addDish": "Add dish",
@@ -375,11 +390,65 @@
     "period": {
       "previousAria": "Previous period",
       "nextAria": "Next period",
-      "daysCount": "{{count}} days"
+      "daysCount": "{{count}} days",
+      "presets": {
+        "7d": "7 days",
+        "10d": "10 days",
+        "14d": "14 days",
+        "month": "Month",
+        "custom": "Custom period"
+      },
+      "customStart": "Start date",
+      "customEnd": "End date",
+      "applyCustom": "Apply period",
+      "invalidCustomRange": "Check period: start date must be before or equal to end date."
     },
     "selector": {
       "label": "Menu:",
       "aria": "Active menu selection"
+    },
+    "templates": {
+      "button": "Templates",
+      "newMenu": "New menu",
+      "startWithExample": "Start with an example",
+      "panelDescription": "Choose a ready format and add it to your account.",
+      "emptyPrompt": "Your menu is empty.",
+      "createMenu": "Create menu",
+      "loadExample": "Load example",
+      "addToMine": "Add to mine",
+      "replaceConfirm": "This template will replace dishes in the current menu. Continue?",
+      "quick": {
+        "title": "Quick menu",
+        "description": "Minimal cooking time with simple everyday dishes."
+      },
+      "family": {
+        "title": "Family menu",
+        "description": "More hearty option with soups and hot meals."
+      },
+      "budget": {
+        "title": "Budget menu",
+        "description": "Affordable dishes based on staple ingredients."
+      },
+      "dishes": {
+        "omeletVegetables": "Vegetable omelet",
+        "yogurtGranola": "Yogurt with granola",
+        "oatmealFruit": "Oatmeal with fruit",
+        "tunaSalad": "Tuna salad",
+        "turkeySandwich": "Turkey sandwich",
+        "buckwheatMushrooms": "Buckwheat with mushrooms",
+        "pastaTomato": "Pasta with tomato sauce",
+        "friedRiceEgg": "Fried rice with egg",
+        "riceVegetables": "Rice with vegetables",
+        "crepesMilk": "Milk crepes",
+        "oladiKefir": "Kefir pancakes",
+        "chickenNoodleSoup": "Chicken noodle soup",
+        "chickenRice": "Chicken with rice",
+        "vegetableSoup": "Vegetable soup",
+        "bakedFishPotatoes": "Baked fish with potatoes",
+        "mashedPotatoes": "Mashed potatoes",
+        "pastaTuna": "Pasta with tuna",
+        "lentilSoup": "Lentil soup"
+      }
     },
     "mode": {
       "label": "Mode:",
@@ -414,7 +483,9 @@
       "menuNameAria": "Menu name {{name}}",
       "currentMenu": "Current menu",
       "deleteMenu": "Delete menu",
-      "addMenu": "+ Add menu"
+      "addMenu": "+ Add menu",
+      "periodTitle": "Planning period",
+      "periodPresetLabel": "Period length"
     },
     "mealsConfig": {
       "title": "Configure meals",
@@ -462,6 +533,12 @@
     },
     "shopping": {
       "allMenusPeriod": "All period menus"
+    },
+    "pdfModal": {
+      "title": "Menu PDF export",
+      "menuOnly": "Menu only",
+      "menuWithRecipes": "Menu + recipes",
+      "download": "Download as PDF"
     }
   },
   "recipes": {
@@ -737,6 +814,7 @@
         "versionMissing": "No translation yet",
         "creating": "Creating translation...",
         "createButton": "Create translation ({{lang}})",
+        "regenerateButton": "Regenerate translation ({{lang}})",
         "createManualButton": "Create manual translation ({{lang}})",
         "exists": "Translation already exists.",
         "noTitle": "Cannot create translation without a title.",
@@ -744,6 +822,7 @@
         "manualDraftCreated": "Manual draft created from source text. It stays in source language until you edit it.",
         "createdReview": "Translation created. Please review the text.",
         "aiUnavailable": "AI is unavailable. A draft was created from the source text.",
+        "previewNotSaved": "Preview only. Add recipe to your collection to save this translation.",
         "createFailed": "Failed to create translation."
       },
       "report": {
@@ -770,18 +849,77 @@
       "taste": "to taste"
     }
   },
+  "howPage": {
+    "title": "How Planotto works",
+    "subtitle": "Short explanation of the core logic.",
+    "periodProducts": {
+      "title": "What period products are",
+      "description": "These are products you want to focus on in the current menu. Recipes with them are shown higher in the list."
+    },
+    "writeOff": {
+      "title": "When products are written off",
+      "description": "Products are written off only after you mark a dish as \"Cooked\" in the menu."
+    },
+    "menuVsShopping": {
+      "title": "Menu vs shopping list",
+      "description": "The menu is for planning dishes by day. The shopping list is formed and checked manually."
+    },
+    "pro": {
+      "title": "What Pro includes",
+      "features": {
+        "aiTranslation": "Auto recipe translation (AI draft)",
+        "importByPhotoLink": "Recipe import by photo or link",
+        "imageGeneration": "Dish image generation",
+        "multipleMenus": "Multiple menus at once",
+        "advancedFilters": "Advanced filters"
+      }
+    }
+  },
   "subscription": {
+    "proActivated": {
+      "title": "🎉 You activated Pro",
+      "items": {
+        "aiTranslation": "AI translation is available",
+        "photoImport": "Import by photo is available",
+        "multipleMenus": "Multiple menus are available"
+      },
+      "actions": {
+        "ok": "Got it"
+      }
+    },
     "locks": {
       "multipleMenus": "Multiple menus are available in Pro plan.",
       "translationAi": "Auto translation is available in Pro plan. You can translate manually for free.",
       "recipeImport": "Recipe import by URL/photo is available in Pro plan.",
       "imageGeneration": "AI image generation is available in Pro plan.",
-      "advancedFilters": "Advanced filters are available in Pro plan."
-    }
+      "advancedFilters": "Advanced filters are available in Pro plan.",
+      "pdfExport": "PDF export is available in Pro plan.",
+      "pdfExportShort": "PDF is available in Pro."
+    },
+    "availableInPro": "Available in Pro"
   },
   "languages": {
     "ru": "Русский",
     "en": "English",
     "es": "Español"
+  },
+  "pdf": {
+    "actions": {
+      "exportRecipe": "Export recipe to PDF",
+      "exportSelectedRecipes": "Export selected to PDF",
+      "exporting": "Exporting PDF...",
+      "select": "PDF"
+    },
+    "errors": {
+      "exportFailed": "Failed to export PDF.",
+      "selectRecipes": "Select at least one recipe to export."
+    },
+    "fallback": {
+      "noSteps": "No cooking steps provided."
+    },
+    "cover": {
+      "recipes": "Recipe Collection"
+    },
+    "selectedCount": "Selected: {{count}}"
   }
 }

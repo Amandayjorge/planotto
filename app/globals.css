@@ -260,6 +260,44 @@ body {
   display: none;
 }
 
+.pro-activation-toast {
+  position: fixed;
+  right: 16px;
+  top: 92px;
+  z-index: 20000;
+  width: min(420px, calc(100vw - 32px));
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 14px;
+  box-shadow: var(--card-shadow);
+  padding: 14px;
+  display: grid;
+  gap: 10px;
+}
+
+.pro-activation-toast__title {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.pro-activation-toast__list {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text-secondary);
+  display: grid;
+  gap: 4px;
+}
+
+@media (max-width: 860px) {
+  .pro-activation-toast {
+    right: 12px;
+    left: 12px;
+    width: auto;
+    top: 76px;
+  }
+}
+
 .main {
   padding: 18px 0 40px;
 }
@@ -3108,6 +3146,77 @@ body {
   border-color: var(--accent-primary);
 }
 
+.menu-empty-actions {
+  margin-top: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.menu-empty-actions__buttons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.menu-templates-panel {
+  margin-bottom: 10px;
+  padding: 12px;
+}
+
+.menu-templates-panel__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.menu-templates-panel__title {
+  margin: 0;
+  font-size: 20px;
+  line-height: 1.2;
+}
+
+.menu-templates-panel__description {
+  margin: 4px 0 0;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.menu-templates-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+}
+
+.menu-template-card {
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  background: var(--background-secondary);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.menu-template-card__title {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.2;
+}
+
+.menu-template-card__description {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.4;
+  min-height: 38px;
+}
+
 .menu-board {
   margin-top: 12px;
   display: grid;
@@ -3829,6 +3938,118 @@ body {
   border-color: var(--border-default);
   color: var(--text-secondary);
   cursor: not-allowed;
+}
+
+/* Shopping print page */
+body.shopping-print-page .header,
+body.shopping-print-page .footer,
+body.shopping-print-page .house-assistant,
+body:has(.shopping-print-page-marker) .header,
+body:has(.shopping-print-page-marker) .footer,
+body:has(.shopping-print-page-marker) .house-assistant {
+  display: none !important;
+}
+
+body.shopping-print-page .main,
+body:has(.shopping-print-page-marker) .main {
+  max-width: 100%;
+  width: 100%;
+  padding: 0;
+}
+
+.shopping-print {
+  background: #fff;
+  color: #111;
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 28px 24px 40px;
+  font-size: 18px;
+  line-height: 1.45;
+}
+
+.shopping-print__title {
+  font-size: 34px;
+  margin: 0 0 10px 0;
+}
+
+.shopping-print__meta {
+  font-size: 14px;
+  color: #555;
+  display: grid;
+  gap: 4px;
+  margin-bottom: 18px;
+}
+
+.shopping-print__section {
+  margin-bottom: 16px;
+  break-inside: avoid;
+}
+
+.shopping-print__section-title {
+  font-size: 20px;
+  margin: 0 0 8px 0;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #ddd;
+}
+
+.shopping-print__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.shopping-print__item {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  align-items: start;
+  column-gap: 10px;
+}
+
+.shopping-print__item--done .shopping-print__name {
+  text-decoration: line-through;
+  color: #666;
+}
+
+.shopping-print__checkbox {
+  width: 18px;
+  height: 18px;
+  margin-top: 3px;
+}
+
+.shopping-print__name {
+  word-break: break-word;
+}
+
+.shopping-print__amount {
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.shopping-print__muted {
+  color: #666;
+}
+
+@media print {
+  .shopping-print {
+    max-width: none;
+    padding: 0;
+    margin: 0;
+    font-size: 16px;
+  }
+
+  .shopping-print__title {
+    font-size: 28px;
+  }
+
+  .shopping-print__section-title {
+    font-size: 18px;
+  }
+
+  .shopping-print__item {
+    break-inside: avoid;
+  }
 }
 
 .recipes-report-link {

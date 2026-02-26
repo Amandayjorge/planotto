@@ -25,6 +25,7 @@ import {
 import { useI18n } from "../components/I18nProvider";
 import { usePlanTier } from "../lib/usePlanTier";
 import { isPaidFeatureEnabled } from "../lib/subscription";
+import { downloadPdfExport, type PdfRecipePayload } from "../lib/pdfExportClient";
 import {
   DEFAULT_UNIT_ID,
   getUnitLabelById,
@@ -52,6 +53,7 @@ const ACTIVE_PRODUCTS_CLOUD_META_KEY = "planotto_active_products_v1";
 const ACTIVE_PRODUCT_NOTE_MAX_LENGTH = 40;
 const MENU_STORAGE_VERSION = 2;
 const DEFAULT_MENU_NAME_FALLBACK = "Main";
+const SYSTEM_MENU_NAME_ALIASES = new Set(["main", "основное", "principal"]);
 const MENU_SHOPPING_MERGE_KEY_PREFIX = "menuShoppingMerge";
 const DAY_STRUCTURE_MODE_KEY = "menuDayStructureMode";
 const MEAL_STRUCTURE_SETTINGS_KEY = "menuMealStructureSettings";
@@ -245,7 +247,11 @@ interface Recipe {
   id: string;
   title: string;
   ingredients?: Ingredient[];
+  shortDescription?: string;
+  description?: string;
+  instructions?: string;
   categories?: string[];
+  tags?: string[];
   notes?: string;
   timesCooked?: number;
   servings?: number;
@@ -425,7 +431,11 @@ const getRecipeFromLocalStorageById = (recipeId: string): Recipe | null => {
       id: String(found.id || recipeId),
       title: String(found.title || ""),
       ingredients: Array.isArray(found.ingredients) ? found.ingredients : [],
+      shortDescription: typeof found.shortDescription === "string" ? found.shortDescription : "",
+      description: typeof found.description === "string" ? found.description : "",
+      instructions: typeof found.instructions === "string" ? found.instructions : "",
       categories: Array.isArray(found.categories) ? found.categories : [],
+      tags: Array.isArray(found.tags) ? found.tags : [],
       notes: String(found.notes || ""),
       timesCooked: Number(found.timesCooked || 0),
       servings: Number(found.servings || 2),
@@ -467,6 +477,14 @@ const shouldUseStrongGuestReminder = (recipesCount: number): boolean => {
 };
 
 type PeriodPreset = "7d" | "10d" | "14d" | "month" | "custom";
+type DemoMenuTemplateId = "quick" | "family" | "budget";
+
+interface DemoMenuTemplate {
+  id: DemoMenuTemplateId;
+  title: string;
+  description: string;
+  meals: Record<MealType, string[]>;
+}
 
 // Helper functions for period management
 const getMonday = (date: Date): Date => {
@@ -1180,6 +1198,7 @@ function MenuPageContent() {
   const [activeMenuId, setActiveMenuId] = useState("");
   const [nameDrafts, setNameDrafts] = useState<Record<string, string>>({});
   const [showMenuSettingsDialog, setShowMenuSettingsDialog] = useState(false);
+  const [showMenuTemplatesPanel, setShowMenuTemplatesPanel] = useState(false);
   const [isCreateMenuDialogOpen, setIsCreateMenuDialogOpen] = useState(false);
   const [newMenuNameDraft, setNewMenuNameDraft] = useState("");
   const [pendingDeleteMenuId, setPendingDeleteMenuId] = useState<string | null>(null);
@@ -1262,6 +1281,10 @@ function MenuPageContent() {
   const [publicWeeks, setPublicWeeks] = useState<PublicWeekSummary[]>([]);
   const [selectedPublicWeekId, setSelectedPublicWeekId] = useState("");
   const [menuSyncError, setMenuSyncError] = useState("");
+  const [isExportingMenuPdf, setIsExportingMenuPdf] = useState(false);
+  const [isExportingMenuWithRecipesPdf, setIsExportingMenuWithRecipesPdf] = useState(false);
+  const [showPdfExportDialog, setShowPdfExportDialog] = useState(false);
+  const [pdfExportMode, setPdfExportMode] = useState<"menu" | "menu_full">("menu");
   const [activeProducts, setActiveProducts] = useState<ActivePeriodProduct[]>([]);
   const [activeProductName, setActiveProductName] = useState("");
   const [activeProductsSearch, setActiveProductsSearch] = useState("");
@@ -1303,8 +1326,35 @@ function MenuPageContent() {
     [dayKeys, locale]
   );
   const activeLocale = resolveIntlLocale(locale);
+  const getMenuDisplayName = useCallback(
+    (rawName: string): string => {
+      const normalized = String(rawName || "").trim();
+      if (!normalized) return defaultMenuName;
+      if (SYSTEM_MENU_NAME_ALIASES.has(normalized.toLocaleLowerCase(activeLocale))) {
+        return defaultMenuName;
+      }
+      return normalized;
+    },
+    [activeLocale, defaultMenuName]
+  );
   const canUseMultipleMenus = isPaidFeatureEnabled(planTier, "multiple_menus");
+  const canUsePdfExport = isPaidFeatureEnabled(planTier, "pdf_export");
+  const isAnyMenuPdfExporting = isExportingMenuPdf || isExportingMenuWithRecipesPdf;
   const additionalMenusLocked = !canUseMultipleMenus && menuProfiles.length >= 1;
+  const countMenuItems = useCallback(
+    (data: Record<string, MenuItem[]>) =>
+      Object.values(data || {}).reduce((sum, items) => sum + (Array.isArray(items) ? items.length : 0), 0),
+    []
+  );
+  const isActiveMenuEmpty = useMemo(() => countMenuItems(mealData) === 0, [countMenuItems, mealData]);
+  const allMenusEmpty = useMemo(() => {
+    if (menuProfiles.length === 0) return true;
+    return menuProfiles.every((menu) => {
+      const sourceMealData = menu.id === activeMenuId ? mealData : menu.mealData;
+      return countMenuItems(sourceMealData) === 0;
+    });
+  }, [activeMenuId, countMenuItems, mealData, menuProfiles]);
+  const shouldShowMenuTemplatesPanel = allMenusEmpty || showMenuTemplatesPanel;
   const visibleActiveProductsCount = activeProducts.length;
   const shouldEnableActiveProductsSearch = activeProducts.length >= 8;
   const shouldShowActiveProductsSearch = shouldEnableActiveProductsSearch && expandedActiveProductNoteId === null;
@@ -1527,10 +1577,12 @@ function MenuPageContent() {
     closeMoveDialog();
     closeActiveProductsDialog();
     closeMenuSettingsDialog();
+    setShowPdfExportDialog(false);
   };
 
   useEffect(() => {
     if (
+      !showPdfExportDialog &&
       !showMenuSettingsDialog &&
       !showMealSettingsDialog &&
       !isCreateMenuDialogOpen &&
@@ -1541,6 +1593,10 @@ function MenuPageContent() {
 
     const onEscape = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
+      if (showPdfExportDialog) {
+        setShowPdfExportDialog(false);
+        return;
+      }
       if (pendingDeleteMenuId) {
         setPendingDeleteMenuId(null);
         return;
@@ -1560,7 +1616,7 @@ function MenuPageContent() {
     return () => {
       document.removeEventListener("keydown", onEscape, true);
     };
-  }, [isCreateMenuDialogOpen, pendingDeleteMenuId, showMealSettingsDialog, showMenuSettingsDialog]);
+  }, [isCreateMenuDialogOpen, pendingDeleteMenuId, showMealSettingsDialog, showMenuSettingsDialog, showPdfExportDialog]);
 
   const handleOnboardingAddFirstRecipe = () => {
     setShowFirstVisitOnboarding(false);
@@ -1612,12 +1668,14 @@ function MenuPageContent() {
         nextStart = parsedCustomStart;
         nextEnd = parsedCustomEnd;
       } else {
+        setMenuSyncError(t("menu.period.invalidCustomRange"));
         return;
       }
     } else {
       nextEnd = addDays(nextStart, 6);
     }
 
+    setMenuSyncError("");
     setPeriodPreset(preset);
     setWeekStart(formatDate(nextStart));
     setPeriodEnd(formatDate(nextEnd));
@@ -1982,6 +2040,39 @@ function MenuPageContent() {
       return recipe ? recipe.title : item.value || "";
     }
     return item.value || "";
+  };
+
+  const getMenuItemTitleForExport = (item: MenuItem): string => {
+    if (item.type === "recipe" && item.recipeId) {
+      const recipe = recipes.find((entry) => entry.id === item.recipeId);
+      return String(recipe?.title || item.value || t("menu.fallback.recipeTitle")).trim();
+    }
+    return String(item.value || "").trim();
+  };
+
+  const getRecipeForPdfExport = (recipeId: string): Recipe | null => {
+    const fromState = recipes.find((entry) => entry.id === recipeId);
+    if (fromState) return fromState;
+    return getRecipeFromLocalStorageById(recipeId);
+  };
+
+  const formatIngredientForPdf = (ingredient: Ingredient): string => {
+    const ingredientName = String(ingredient.name || "").trim();
+    if (!ingredientName) return "";
+    const resolvedUnitId = normalizeUnitId(
+      ingredient.unitId || ingredient.unit_id || ingredient.unit || DEFAULT_UNIT_ID,
+      DEFAULT_UNIT_ID
+    );
+    if (isTasteLikeUnit(resolvedUnitId)) {
+      return `${ingredientName} — ${t("recipes.detail.taste")}`;
+    }
+    const unitLabel = getUnitLabelById(resolvedUnitId, locale);
+    return `${ingredient.amount} ${unitLabel} ${ingredientName}`.trim();
+  };
+
+  const findCookingTimeLabel = (recipe: Recipe): string | undefined => {
+    const source = [...(recipe.tags || []), ...(recipe.categories || [])].map((item) => String(item || "").trim());
+    return source.find((value) => /\d+\s*(мин|min|ч|час|hour|hr)/i.test(value));
   };
 
   const isDayInPast = (dayKey: string): boolean => {
@@ -2361,10 +2452,14 @@ function MenuPageContent() {
     }
 
     const isDismissed = localStorage.getItem(MENU_FIRST_VISIT_ONBOARDING_KEY) === "1";
+    if (menuMode === "mine" && allMenusEmpty) {
+      setShowFirstVisitOnboarding(false);
+      return;
+    }
     if (menuMode === "mine" && recipes.length === 0 && !isDismissed) {
       setShowFirstVisitOnboarding(true);
     }
-  }, [forceFirstFromQuery, hasLoaded, menuMode, recipes.length, router]);
+  }, [allMenusEmpty, forceFirstFromQuery, hasLoaded, menuMode, recipes.length, router]);
 
   useEffect(() => {
     if (forceFirstFromQuery) return;
@@ -2546,6 +2641,184 @@ function MenuPageContent() {
     persistMenuBundleSnapshot(nextMenus, activeMenuId);
     setMenuProfiles(nextMenus);
     setNameDrafts(buildNameDrafts(nextMenus));
+  };
+
+  const demoMenuTemplates = useMemo<DemoMenuTemplate[]>(
+    () => [
+      {
+        id: "quick",
+        title: t("menu.templates.quick.title"),
+        description: t("menu.templates.quick.description"),
+        meals: {
+          breakfast: [
+            t("menu.templates.dishes.omeletVegetables"),
+            t("menu.templates.dishes.yogurtGranola"),
+            t("menu.templates.dishes.oatmealFruit"),
+          ],
+          lunch: [
+            t("menu.templates.dishes.tunaSalad"),
+            t("menu.templates.dishes.turkeySandwich"),
+            t("menu.templates.dishes.buckwheatMushrooms"),
+          ],
+          dinner: [
+            t("menu.templates.dishes.pastaTomato"),
+            t("menu.templates.dishes.friedRiceEgg"),
+            t("menu.templates.dishes.riceVegetables"),
+          ],
+        },
+      },
+      {
+        id: "family",
+        title: t("menu.templates.family.title"),
+        description: t("menu.templates.family.description"),
+        meals: {
+          breakfast: [
+            t("menu.templates.dishes.crepesMilk"),
+            t("menu.templates.dishes.oladiKefir"),
+            t("menu.templates.dishes.oatmealFruit"),
+          ],
+          lunch: [
+            t("menu.templates.dishes.chickenNoodleSoup"),
+            t("menu.templates.dishes.chickenRice"),
+            t("menu.templates.dishes.vegetableSoup"),
+          ],
+          dinner: [
+            t("menu.templates.dishes.bakedFishPotatoes"),
+            t("menu.templates.dishes.mashedPotatoes"),
+            t("menu.templates.dishes.pastaTuna"),
+          ],
+        },
+      },
+      {
+        id: "budget",
+        title: t("menu.templates.budget.title"),
+        description: t("menu.templates.budget.description"),
+        meals: {
+          breakfast: [
+            t("menu.templates.dishes.oatmealFruit"),
+            t("menu.templates.dishes.crepesMilk"),
+            t("menu.templates.dishes.yogurtGranola"),
+          ],
+          lunch: [
+            t("menu.templates.dishes.lentilSoup"),
+            t("menu.templates.dishes.buckwheatMushrooms"),
+            t("menu.templates.dishes.vegetableSoup"),
+          ],
+          dinner: [
+            t("menu.templates.dishes.riceVegetables"),
+            t("menu.templates.dishes.friedRiceEgg"),
+            t("menu.templates.dishes.pastaTomato"),
+          ],
+        },
+      },
+    ],
+    [t]
+  );
+
+  const buildUniqueMenuName = useCallback(
+    (baseName: string): string => {
+      const normalized = normalizeMenuProfileName(baseName) || defaultMenuName;
+      const names = new Set(menuProfiles.map((menu) => menu.name.toLocaleLowerCase(activeLocale)));
+      if (!names.has(normalized.toLocaleLowerCase(activeLocale))) return normalized;
+
+      let index = 2;
+      let candidate = `${normalized} ${index}`;
+      while (names.has(candidate.toLocaleLowerCase(activeLocale))) {
+        index += 1;
+        candidate = `${normalized} ${index}`;
+      }
+      return candidate;
+    },
+    [activeLocale, defaultMenuName, menuProfiles]
+  );
+
+  const buildTemplateMealData = useCallback(
+    (template: DemoMenuTemplate): Record<string, MenuItem[]> => {
+      const nextMealData: Record<string, MenuItem[]> = {};
+
+      dayKeys.forEach((dayKey, dayIndex) => {
+        const dayMeals = getDayMeals(dayKey);
+        (["breakfast", "lunch", "dinner"] as const).forEach((mealType) => {
+          const options = template.meals[mealType];
+          if (!Array.isArray(options) || options.length === 0) return;
+          const dish = options[dayIndex % options.length];
+          if (!dish) return;
+
+          const mealLabel = selectMealLabelByType(mealType, dayMeals, defaultDayMeals);
+          const cellKey = getCellKey(dayKey, mealLabel);
+          const entry: MenuItem = {
+            id: crypto.randomUUID(),
+            type: "text",
+            value: dish,
+            includeInShopping: true,
+            ingredients: [],
+            cooked: false,
+          };
+          nextMealData[cellKey] = [...(nextMealData[cellKey] || []), entry];
+        });
+      });
+
+      return nextMealData;
+    },
+    [dayKeys, defaultDayMeals, getDayMeals]
+  );
+
+  const applyDemoMenuTemplate = (templateId: DemoMenuTemplateId) => {
+    const template = demoMenuTemplates.find((item) => item.id === templateId);
+    if (!template) return;
+
+    const templateMealData = buildTemplateMealData(template);
+    const templateMenuName = buildUniqueMenuName(template.title);
+    const replaceActiveMenu = !canUseMultipleMenus || (menuProfiles.length <= 1 && allMenusEmpty);
+
+    if (!allMenusEmpty && replaceActiveMenu && typeof window !== "undefined") {
+      const confirmed = window.confirm(t("menu.templates.replaceConfirm"));
+      if (!confirmed) return;
+    }
+
+    if (replaceActiveMenu) {
+      const targetId = activeMenuId || menuProfiles[0]?.id;
+      if (!targetId) return;
+      const nextMenus = menuProfiles.map((menu) =>
+        menu.id === targetId
+          ? {
+              ...menu,
+              name: templateMenuName,
+              mealData: templateMealData,
+              cellPeopleCount: {},
+              cookedStatus: {},
+            }
+          : menu
+      );
+      persistMenuBundleSnapshot(nextMenus, targetId);
+      setMenuProfiles(nextMenus);
+      setActiveMenuId(targetId);
+      setNameDrafts(buildNameDrafts(nextMenus));
+      setMealData(templateMealData);
+      setCellPeopleCount({});
+      setCookedStatus({});
+      setShowMenuTemplatesPanel(false);
+      setMenuSyncError("");
+      return;
+    }
+
+    const created = createMenuProfileState(templateMenuName);
+    const nextMenu = {
+      ...created,
+      mealData: templateMealData,
+      cellPeopleCount: {},
+      cookedStatus: {},
+    };
+    const nextMenus = [...menuProfiles, nextMenu];
+    persistMenuBundleSnapshot(nextMenus, nextMenu.id);
+    setMenuProfiles(nextMenus);
+    setActiveMenuId(nextMenu.id);
+    setNameDrafts(buildNameDrafts(nextMenus));
+    setMealData(templateMealData);
+    setCellPeopleCount({});
+    setCookedStatus({});
+    setShowMenuTemplatesPanel(false);
+    setMenuSyncError("");
   };
 
   const addMenu = () => {
@@ -3496,6 +3769,145 @@ function MenuPageContent() {
     );
   };
 
+  const exportCurrentMenuPdf = async () => {
+    if (!canUsePdfExport) {
+      setMenuSyncError(t("subscription.locks.pdfExportShort"));
+      return;
+    }
+
+    const activeMenuName =
+      getMenuDisplayName(menuProfiles.find((menu) => menu.id === activeMenuId)?.name || "") ||
+      defaultMenuName ||
+      t("menu.fallback.defaultMenuName");
+
+    const days = dayEntries.map((dayEntry) => {
+      const meals = getDayMeals(dayEntry.dateKey).map((meal) => {
+        const cellKey = getCellKey(dayEntry.dateKey, meal);
+        const dishes = (mealData[cellKey] || [])
+          .map((item) => getMenuItemTitleForExport(item))
+          .filter(Boolean);
+        return { mealName: meal, dishes };
+      });
+      return {
+        dayLabel: dayEntry.dayLabel,
+        dateLabel: dayEntry.displayDate,
+        meals,
+      };
+    });
+
+    try {
+      setMenuSyncError("");
+      setIsExportingMenuPdf(true);
+      await downloadPdfExport({
+        kind: "menu",
+        menuTitle: activeMenuName,
+        periodLabel: getRangeDisplay(weekStart, periodEnd, locale),
+        days,
+        fileName: `planotto-menu-${weekStart}-${periodEnd}.pdf`,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : t("menu.actions.exportFailed");
+      setMenuSyncError(message);
+    } finally {
+      setIsExportingMenuPdf(false);
+    }
+  };
+
+  const exportMenuWithRecipesPdf = async () => {
+    if (!canUsePdfExport) {
+      setMenuSyncError(t("subscription.locks.pdfExportShort"));
+      return;
+    }
+
+    const activeMenuName =
+      getMenuDisplayName(menuProfiles.find((menu) => menu.id === activeMenuId)?.name || "") ||
+      defaultMenuName ||
+      t("menu.fallback.defaultMenuName");
+
+    const days = dayEntries.map((dayEntry) => {
+      const meals = getDayMeals(dayEntry.dateKey).map((meal) => {
+        const cellKey = getCellKey(dayEntry.dateKey, meal);
+        const dishes = (mealData[cellKey] || [])
+          .map((item) => getMenuItemTitleForExport(item))
+          .filter(Boolean);
+        return { mealName: meal, dishes };
+      });
+      return {
+        dayLabel: dayEntry.dayLabel,
+        dateLabel: dayEntry.displayDate,
+        meals,
+      };
+    });
+
+    const recipesUsageMap = new Map<string, { recipe: Recipe; usedIn: Set<string> }>();
+    dayEntries.forEach((dayEntry) => {
+      const dayKeyLabel = `${dayEntry.dayLabel} ${dayEntry.displayDate}`.trim();
+      getDayMeals(dayEntry.dateKey).forEach((meal) => {
+        const cellKey = getCellKey(dayEntry.dateKey, meal);
+        (mealData[cellKey] || []).forEach((item) => {
+          if (item.type !== "recipe" || !item.recipeId) return;
+          const recipe = getRecipeForPdfExport(item.recipeId);
+          if (!recipe) return;
+
+          if (!recipesUsageMap.has(recipe.id)) {
+            recipesUsageMap.set(recipe.id, { recipe, usedIn: new Set<string>() });
+          }
+          recipesUsageMap.get(recipe.id)?.usedIn.add(dayKeyLabel);
+        });
+      });
+    });
+
+    const recipePayloads: PdfRecipePayload[] = Array.from(recipesUsageMap.values())
+      .map(({ recipe, usedIn }) => {
+        const instructions = String(recipe.instructions || recipe.description || "").trim();
+        const steps = instructions
+          .split(/\n+/g)
+          .map((line) => line.trim())
+          .filter(Boolean);
+        return {
+          title: String(recipe.title || t("menu.fallback.recipeTitle")).trim(),
+          servings: recipe.servings || 2,
+          cookingTime: findCookingTimeLabel(recipe),
+          ingredients: (recipe.ingredients || []).map(formatIngredientForPdf).filter(Boolean),
+          steps: steps.length > 0 ? steps : [t("pdf.fallback.noSteps")],
+          usedIn: Array.from(usedIn.values()),
+        };
+      })
+      .sort((a, b) => a.title.localeCompare(b.title, activeLocale));
+
+    try {
+      setMenuSyncError("");
+      setIsExportingMenuWithRecipesPdf(true);
+      await downloadPdfExport({
+        kind: "menu_full",
+        menuTitle: activeMenuName,
+        periodLabel: getRangeDisplay(weekStart, periodEnd, locale),
+        days,
+        recipes: recipePayloads,
+        fileName: `planotto-menu-full-${weekStart}-${periodEnd}.pdf`,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : t("menu.actions.exportFailed");
+      setMenuSyncError(message);
+    } finally {
+      setIsExportingMenuWithRecipesPdf(false);
+    }
+  };
+
+  const handleDownloadPdfFromDialog = async () => {
+    if (!canUsePdfExport) {
+      setMenuSyncError(t("subscription.locks.pdfExportShort"));
+      return;
+    }
+
+    setShowPdfExportDialog(false);
+    if (pdfExportMode === "menu_full") {
+      await exportMenuWithRecipesPdf();
+      return;
+    }
+    await exportCurrentMenuPdf();
+  };
+
   const pendingDeleteMenu = pendingDeleteMenuId
     ? menuProfiles.find((menu) => menu.id === pendingDeleteMenuId) || null
     : null;
@@ -3696,10 +4108,27 @@ function MenuPageContent() {
             >
               {menuProfiles.map((menu) => (
                 <option key={menu.id} value={menu.id}>
-                  {menu.name}
+                  {getMenuDisplayName(menu.name)}
                 </option>
               ))}
             </select>
+            <button
+              type="button"
+              className="btn"
+              style={{ whiteSpace: "nowrap", padding: "6px 10px" }}
+              onClick={() => setIsCreateMenuDialogOpen(true)}
+              title={additionalMenusLocked ? t("subscription.locks.multipleMenus") : undefined}
+            >
+              {t("menu.templates.newMenu")}
+            </button>
+            <button
+              type="button"
+              className="btn"
+              style={{ whiteSpace: "nowrap", padding: "6px 10px" }}
+              onClick={() => setShowMenuTemplatesPanel((prev) => !prev)}
+            >
+              {t("menu.templates.button")}
+            </button>
             <button
               type="button"
               className="btn"
@@ -3744,8 +4173,114 @@ function MenuPageContent() {
               </button>
             </div>
           </div>
+          <div style={{ display: "grid", gap: "6px" }}>
+            <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+              <span className="muted" style={{ fontSize: "12px" }}>
+                {t("menu.settings.periodPresetLabel")}
+              </span>
+              <select
+                className="input"
+                value={periodPreset}
+                onChange={(e) => {
+                  const nextPreset = e.target.value as PeriodPreset;
+                  setPeriodPreset(nextPreset);
+                  if (nextPreset !== "custom") {
+                    applyPeriodPreset(nextPreset);
+                  }
+                }}
+                style={{ maxWidth: "190px" }}
+              >
+                <option value="7d">{t("menu.period.presets.7d")}</option>
+                <option value="10d">{t("menu.period.presets.10d")}</option>
+                <option value="14d">{t("menu.period.presets.14d")}</option>
+                <option value="month">{t("menu.period.presets.month")}</option>
+                <option value="custom">{t("menu.period.presets.custom")}</option>
+              </select>
+            </div>
+            {periodPreset === "custom" ? (
+              <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+                <label style={{ display: "grid", gap: "3px", fontSize: "12px" }}>
+                  <span className="muted">{t("menu.period.customStart")}</span>
+                  <input
+                    type="date"
+                    className="input"
+                    value={customStartInput}
+                    onChange={(e) => setCustomStartInput(e.target.value)}
+                    style={{ minWidth: "155px" }}
+                  />
+                </label>
+                <label style={{ display: "grid", gap: "3px", fontSize: "12px" }}>
+                  <span className="muted">{t("menu.period.customEnd")}</span>
+                  <input
+                    type="date"
+                    className="input"
+                    value={customEndInput}
+                    onChange={(e) => setCustomEndInput(e.target.value)}
+                    style={{ minWidth: "155px" }}
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  style={{ alignSelf: "end" }}
+                  onClick={() => applyPeriodPreset("custom")}
+                  disabled={!customStartInput || !customEndInput}
+                >
+                  {t("menu.period.applyCustom")}
+                </button>
+              </div>
+            ) : null}
+          </div>
+          {isActiveMenuEmpty && (
+            <div className="menu-empty-actions">
+              <span className="muted">{t("menu.templates.emptyPrompt")}</span>
+              <div className="menu-empty-actions__buttons">
+                <button type="button" className="btn" onClick={() => setIsCreateMenuDialogOpen(true)}>
+                  {t("menu.templates.createMenu")}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={() => setShowMenuTemplatesPanel(true)}
+                >
+                  {t("menu.templates.loadExample")}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
+
+      {shouldShowMenuTemplatesPanel && (
+        <div className="card menu-templates-panel">
+          <div className="menu-templates-panel__header">
+            <div>
+              <h2 className="menu-templates-panel__title">{t("menu.templates.startWithExample")}</h2>
+              <p className="menu-templates-panel__description">{t("menu.templates.panelDescription")}</p>
+            </div>
+            {!allMenusEmpty && (
+              <button
+                type="button"
+                className="menu-first-onboarding__skip"
+                onClick={() => setShowMenuTemplatesPanel(false)}
+              >
+                {t("menu.actions.close")}
+              </button>
+            )}
+          </div>
+          <div className="menu-templates-grid">
+            {demoMenuTemplates.map((template) => (
+              <article key={template.id} className="menu-template-card">
+                <h3 className="menu-template-card__title">{template.title}</h3>
+                <p className="menu-template-card__description">{template.description}</p>
+                <button type="button" className="btn btn-primary" onClick={() => applyDemoMenuTemplate(template.id)}>
+                  {t("menu.templates.addToMine")}
+                </button>
+              </article>
+            ))}
+          </div>
+        </div>
+      )}
 
       {showCalendarInlineHint && recipes.length === 0 && (
         <div className="menu-inline-onboarding-hint">
@@ -3942,6 +4477,75 @@ function MenuPageContent() {
               </div>
             </div>
 
+            <div
+              style={{
+                marginTop: "10px",
+                border: "1px solid var(--border-default)",
+                borderRadius: "10px",
+                padding: "10px",
+                display: "grid",
+                gap: "8px",
+              }}
+            >
+              <strong style={{ fontSize: "14px" }}>{t("menu.settings.periodTitle")}</strong>
+              <label style={{ display: "grid", gap: "6px", fontSize: "14px" }}>
+                <span>{t("menu.settings.periodPresetLabel")}</span>
+                <select
+                  className="menu-dialog__select"
+                  value={periodPreset}
+                  onChange={(e) => {
+                    const nextPreset = e.target.value as PeriodPreset;
+                    setPeriodPreset(nextPreset);
+                    if (nextPreset !== "custom") {
+                      applyPeriodPreset(nextPreset);
+                    }
+                  }}
+                  style={{ maxWidth: "240px" }}
+                >
+                  <option value="7d">{t("menu.period.presets.7d")}</option>
+                  <option value="10d">{t("menu.period.presets.10d")}</option>
+                  <option value="14d">{t("menu.period.presets.14d")}</option>
+                  <option value="month">{t("menu.period.presets.month")}</option>
+                  <option value="custom">{t("menu.period.presets.custom")}</option>
+                </select>
+              </label>
+
+              {periodPreset === "custom" ? (
+                <div style={{ display: "grid", gap: "8px" }}>
+                  <label style={{ display: "grid", gap: "4px", fontSize: "13px" }}>
+                    <span>{t("menu.period.customStart")}</span>
+                    <input
+                      type="date"
+                      className="input"
+                      value={customStartInput}
+                      onChange={(e) => setCustomStartInput(e.target.value)}
+                      style={{ maxWidth: "240px" }}
+                    />
+                  </label>
+                  <label style={{ display: "grid", gap: "4px", fontSize: "13px" }}>
+                    <span>{t("menu.period.customEnd")}</span>
+                    <input
+                      type="date"
+                      className="input"
+                      value={customEndInput}
+                      onChange={(e) => setCustomEndInput(e.target.value)}
+                      style={{ maxWidth: "240px" }}
+                    />
+                  </label>
+                  <div>
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      onClick={() => applyPeriodPreset("custom")}
+                      disabled={!customStartInput || !customEndInput}
+                    >
+                      {t("menu.period.applyCustom")}
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
             <label style={{ marginTop: "10px", display: "inline-flex", alignItems: "center", gap: "8px" }}>
               <input
                 type="checkbox"
@@ -4006,7 +4610,7 @@ function MenuPageContent() {
                       className="input"
                       style={{ minWidth: "180px", flex: "1 1 220px" }}
                       value={nameDrafts[menu.id] || ""}
-                      aria-label={t("menu.settings.menuNameAria", { name: menu.name })}
+                      aria-label={t("menu.settings.menuNameAria", { name: getMenuDisplayName(menu.name) })}
                       onChange={(e) =>
                         setNameDrafts((prev) => ({
                           ...prev,
@@ -4195,12 +4799,64 @@ function MenuPageContent() {
         </div>
       ) : null}
 
+      {showPdfExportDialog ? (
+        <div className="menu-dialog-overlay" role="dialog" aria-modal="true" aria-label={t("menu.pdfModal.title")}>
+          <div className="menu-dialog" style={{ maxWidth: "460px" }}>
+            <h3 style={{ marginTop: 0, marginBottom: "10px" }}>{t("menu.pdfModal.title")}</h3>
+            <div style={{ display: "grid", gap: "8px" }}>
+              <label style={{ display: "inline-flex", alignItems: "center", gap: "8px", fontSize: "14px" }}>
+                <input
+                  type="radio"
+                  name="menuPdfMode"
+                  value="menu"
+                  checked={pdfExportMode === "menu"}
+                  onChange={() => setPdfExportMode("menu")}
+                />
+                {t("menu.pdfModal.menuOnly")}
+              </label>
+              <label style={{ display: "inline-flex", alignItems: "center", gap: "8px", fontSize: "14px" }}>
+                <input
+                  type="radio"
+                  name="menuPdfMode"
+                  value="menu_full"
+                  checked={pdfExportMode === "menu_full"}
+                  onChange={() => setPdfExportMode("menu_full")}
+                />
+                {t("menu.pdfModal.menuWithRecipes")}
+              </label>
+            </div>
+
+            {!canUsePdfExport ? (
+              <p className="muted" style={{ marginTop: "10px", marginBottom: 0 }}>
+                {t("subscription.locks.pdfExportShort")}
+              </p>
+            ) : null}
+
+            <div className="menu-dialog__actions">
+              <button
+                type="button"
+                className="menu-dialog__confirm"
+                onClick={() => {
+                  void handleDownloadPdfFromDialog();
+                }}
+                disabled={!canUsePdfExport || isAnyMenuPdfExporting}
+              >
+                {isAnyMenuPdfExporting ? t("menu.actions.exportingPdf") : t("menu.pdfModal.download")}
+              </button>
+              <button type="button" className="menu-dialog__cancel" onClick={() => setShowPdfExportDialog(false)}>
+                {t("menu.actions.cancel")}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {pendingDeleteMenu ? (
         <div className="menu-dialog-overlay" role="dialog" aria-modal="true" aria-label={t("menu.deleteMenu.title")}>
           <div className="menu-dialog" style={{ maxWidth: "420px" }}>
             <h3 style={{ marginTop: 0, marginBottom: "8px" }}>{t("menu.deleteMenu.title")}</h3>
             <p style={{ marginTop: 0 }}>
-              {t("menu.deleteMenu.confirm", { name: pendingDeleteMenu.name })}
+              {t("menu.deleteMenu.confirm", { name: getMenuDisplayName(pendingDeleteMenu.name) })}
             </p>
             <div className="menu-dialog__actions">
               <button
@@ -4271,6 +4927,15 @@ function MenuPageContent() {
       />
 
       <div className="menu-actions">
+        <button
+          className={canUsePdfExport ? "menu-actions__generate-btn" : "btn"}
+          onClick={() => {
+            setShowPdfExportDialog(true);
+          }}
+          disabled={isAnyMenuPdfExporting}
+        >
+          {isAnyMenuPdfExporting ? t("menu.actions.exportingPdf") : t("menu.actions.exportPdf")}
+        </button>
         <button
           className="menu-actions__generate-btn"
           onClick={generateShoppingList}
