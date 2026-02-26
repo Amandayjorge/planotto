@@ -735,9 +735,11 @@
         "versionMissing": "No translation yet",
         "creating": "Creating translation...",
         "createButton": "Create translation ({{lang}})",
+        "createManualButton": "Create manual translation ({{lang}})",
         "exists": "Translation already exists.",
         "noTitle": "Cannot create translation without a title.",
         "draftCreated": "Translation draft created.",
+        "manualDraftCreated": "Manual translation draft created. Review and edit text.",
         "createdReview": "Translation created. Please review the text.",
         "aiUnavailable": "AI is unavailable. A draft was created from the source text.",
         "createFailed": "Failed to create translation."

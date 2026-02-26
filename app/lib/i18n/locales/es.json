@@ -735,9 +735,11 @@
         "versionMissing": "Aún no hay traducción",
         "creating": "Creando traducción...",
         "createButton": "Crear traducción ({{lang}})",
+        "createManualButton": "Crear traducción manual ({{lang}})",
         "exists": "La traducción ya existe.",
         "noTitle": "No se puede crear una traducción sin título.",
         "draftCreated": "Borrador de traducción creado.",
+        "manualDraftCreated": "Borrador manual creado. Revisa y edita el texto.",
         "createdReview": "Traducción creada. Revisa el texto.",
         "aiUnavailable": "La IA no está disponible. Se creó un borrador desde el texto original.",
         "createFailed": "No se pudo crear la traducción."

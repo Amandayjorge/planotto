@@ -62,6 +62,50 @@ const MEAL_TYPE_INDEX: Record<MealType, number> = { breakfast: 0, lunch: 1, dinn
 const RECIPE_CATEGORY_FILTER_ALL = "__all__";
 type DayStructureMode = "list" | "meals";
 
+const normalizeMealAlias = (value: string): string =>
+  value
+    .toLocaleLowerCase()
+    .normalize("NFD")
+    .replace(/\p{Diacritic}+/gu, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const DEFAULT_MEAL_ALIASES: Record<MealType, Set<string>> = {
+  breakfast: new Set(["breakfast", "desayuno", "завтрак"]),
+  lunch: new Set(["lunch", "comida", "almuerzo", "обед"]),
+  dinner: new Set(["dinner", "cena", "ужин"]),
+};
+
+const resolveDefaultMealTypeByName = (value: string): MealType | null => {
+  const normalized = normalizeMealAlias(value);
+  if (!normalized) return null;
+  for (const mealType of DEFAULT_DAY_MEAL_KEYS) {
+    if (DEFAULT_MEAL_ALIASES[mealType].has(normalized)) {
+      return mealType;
+    }
+  }
+  return null;
+};
+
+const localizeDefaultMealSlots = (
+  slots: MealSlotSetting[],
+  defaultMealLabels: readonly string[]
+): MealSlotSetting[] =>
+  slots.map((slot) => {
+    if (!slot.id.startsWith("default-")) return slot;
+    const rawIndex = Number(slot.id.slice("default-".length));
+    if (!Number.isInteger(rawIndex) || rawIndex < 0 || rawIndex >= DEFAULT_DAY_MEAL_KEYS.length) {
+      return slot;
+    }
+    const expectedMealType = DEFAULT_DAY_MEAL_KEYS[rawIndex];
+    const currentMealType = resolveDefaultMealTypeByName(slot.name);
+    if (currentMealType !== expectedMealType) return slot;
+
+    const localizedName = defaultMealLabels[MEAL_TYPE_INDEX[expectedMealType]] || slot.name;
+    if (slot.name === localizedName) return slot;
+    return { ...slot, name: localizedName };
+  });
+
 interface MealSlotSetting {
   id: string;
   name: string;
@@ -130,11 +174,11 @@ const parseMealSlots = (raw: string | null): MealSlotSetting[] | null => {
 const loadDefaultMealSlotsFromStorage = (defaultMealLabels: readonly string[]): MealSlotSetting[] => {
   if (typeof window === "undefined") return createDefaultMealSlots(defaultMealLabels);
   const defaults = parseMealSlots(window.localStorage.getItem(MEAL_STRUCTURE_DEFAULT_SETTINGS_KEY));
-  if (defaults) return defaults;
+  if (defaults) return localizeDefaultMealSlots(defaults, defaultMealLabels);
 
   // Backward compatibility with old single-key storage.
   const legacy = parseMealSlots(window.localStorage.getItem(MEAL_STRUCTURE_SETTINGS_KEY));
-  if (legacy) return legacy;
+  if (legacy) return localizeDefaultMealSlots(legacy, defaultMealLabels);
 
   return createDefaultMealSlots(defaultMealLabels);
 };
@@ -145,7 +189,7 @@ const loadMealSlotsFromStorage = (
 ): MealSlotSetting[] => {
   if (typeof window === "undefined") return createDefaultMealSlots(defaultMealLabels);
   const byRange = parseMealSlots(window.localStorage.getItem(`${MEAL_STRUCTURE_SETTINGS_KEY}:${rangeKey}`));
-  if (byRange) return byRange;
+  if (byRange) return localizeDefaultMealSlots(byRange, defaultMealLabels);
   return loadDefaultMealSlotsFromStorage(defaultMealLabels);
 };
 
