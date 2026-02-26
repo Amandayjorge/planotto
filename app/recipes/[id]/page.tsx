@@ -772,17 +772,10 @@ export default function RecipeDetailPage() {
     }
   };
 
-  const switchContentLanguage = (nextLanguage: RecipeLanguage) => {
-    setContentLanguage(nextLanguage);
-    if (recipe) {
-      resetFormFromRecipe(recipe, nextLanguage);
-    }
-  };
-
-  const createTranslationDraft = async () => {
+  const createTranslationDraft = async (targetLanguage: RecipeLanguage = contentLanguage) => {
     if (!recipe) return;
     if (!canEdit) return;
-    if (recipe.translations?.[contentLanguage]) {
+    if (recipe.translations?.[targetLanguage]) {
       setTranslationNotice(t("recipes.detail.translation.exists"));
       return;
     }
@@ -790,7 +783,7 @@ export default function RecipeDetailPage() {
     const baseLanguage = normalizeRecipeLanguage(recipe.baseLanguage);
     const base = getRecipeTranslation(recipe, baseLanguage);
     const fallbackDraft: RecipeTranslation = {
-      language: contentLanguage,
+      language: targetLanguage,
       title: (base?.title || recipe.title || "").trim(),
       shortDescription: (base?.shortDescription || recipe.shortDescription || "").trim() || undefined,
       description: (base?.description || recipe.description || "").trim() || undefined,
@@ -815,7 +808,7 @@ export default function RecipeDetailPage() {
         try {
           const aiDraft = await getRecipeTranslationDraft({
             sourceLanguage: baseLanguage,
-            targetLanguage: contentLanguage,
+            targetLanguage,
             title: fallbackDraft.title,
             shortDescription: fallbackDraft.shortDescription,
             description: fallbackDraft.description,
@@ -839,7 +832,7 @@ export default function RecipeDetailPage() {
         }
       }
 
-      const nextTranslations = { ...(recipe.translations || {}), [contentLanguage]: draft };
+      const nextTranslations = { ...(recipe.translations || {}), [targetLanguage]: draft };
 
       if (!isSupabaseConfigured() || !recipe.ownerId || !currentUserId) {
         const localUpdated: RecipeModel = {
@@ -848,7 +841,8 @@ export default function RecipeDetailPage() {
         };
         upsertRecipeInLocalCache(localUpdated);
         setRecipe(localUpdated);
-        resetFormFromRecipe(localUpdated, contentLanguage);
+        setContentLanguage(targetLanguage);
+        resetFormFromRecipe(localUpdated, targetLanguage);
         setTranslationNotice(notice);
         return;
       }
@@ -856,11 +850,12 @@ export default function RecipeDetailPage() {
       const saved = await upsertRecipeTranslation(currentUserId, recipe.id, draft);
       const updatedRecipe: RecipeModel = {
         ...recipe,
-        translations: { ...(recipe.translations || {}), [contentLanguage]: saved },
+        translations: { ...(recipe.translations || {}), [targetLanguage]: saved },
       };
       upsertRecipeInLocalCache(updatedRecipe);
       setRecipe(updatedRecipe);
-      resetFormFromRecipe(updatedRecipe, contentLanguage);
+      setContentLanguage(targetLanguage);
+      resetFormFromRecipe(updatedRecipe, targetLanguage);
       setTranslationNotice(notice);
     } catch (error) {
       const text = toErrorText(error, t("recipes.detail.translation.createFailed"));
@@ -868,6 +863,27 @@ export default function RecipeDetailPage() {
     } finally {
       setIsCreatingTranslation(false);
     }
+  };
+
+  const switchContentLanguage = async (nextLanguage: RecipeLanguage) => {
+    setContentLanguage(nextLanguage);
+    if (!recipe) return;
+
+    resetFormFromRecipe(recipe, nextLanguage);
+
+    const baseLanguage = normalizeRecipeLanguage(recipe.baseLanguage);
+    const hasTranslation = nextLanguage === baseLanguage || Boolean(recipe.translations?.[nextLanguage]);
+    if (hasTranslation) {
+      setTranslationNotice("");
+      return;
+    }
+
+    if (!canEdit) {
+      setTranslationNotice(t("recipes.detail.translation.versionMissing"));
+      return;
+    }
+
+    await createTranslationDraft(nextLanguage);
   };
 
   const copyToMine = async () => {
@@ -1149,7 +1165,9 @@ export default function RecipeDetailPage() {
             <button
               type="button"
               className="btn"
-              onClick={createTranslationDraft}
+              onClick={() => {
+                void createTranslationDraft();
+              }}
               disabled={isCreatingTranslation}
             >
               {isCreatingTranslation
