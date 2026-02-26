@@ -766,6 +766,15 @@
       "taste": "al gusto"
     }
   },
+  "subscription": {
+    "locks": {
+      "multipleMenus": "Varios menus estan disponibles en el plan Pro.",
+      "translationAi": "La traduccion automatica esta disponible en Pro. La traduccion manual es gratis.",
+      "recipeImport": "La importacion por enlace/foto esta disponible en el plan Pro.",
+      "imageGeneration": "La generacion de imagen con IA esta disponible en el plan Pro.",
+      "advancedFilters": "Los filtros avanzados estan disponibles en el plan Pro."
+    }
+  },
   "languages": {
     "ru": "Русский",
     "en": "English",

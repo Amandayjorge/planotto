@@ -5,6 +5,8 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import LinkifiedText from "../../components/LinkifiedText";
 import ProductAutocompleteInput from "../../components/ProductAutocompleteInput";
 import { appendProductSuggestions, loadProductSuggestions } from "../../lib/productSuggestions";
+import { usePlanTier } from "../../lib/usePlanTier";
+import { isPaidFeatureEnabled } from "../../lib/subscription";
 import {
   copyPublicRecipeToMine,
   deleteRecipe,
@@ -222,6 +224,7 @@ const resolveRecipeImage = (recipe: RecipeModel): string => {
 export default function RecipeDetailPage() {
   const router = useRouter();
   const { locale, t } = useI18n();
+  const { planTier } = usePlanTier();
   const unitOptions = getUnitOptions(locale);
   const params = useParams();
   const searchParams = useSearchParams();
@@ -266,6 +269,8 @@ export default function RecipeDetailPage() {
   const [translationNotice, setTranslationNotice] = useState("");
   const [isCreatingTranslation, setIsCreatingTranslation] = useState(false);
   const hasCoreInput = title.trim().length > 0 || ingredients.some((item) => item.name.trim().length > 0);
+  const canUseAiTranslation = isPaidFeatureEnabled(planTier, "ai_translation");
+  const canUseImageGeneration = isPaidFeatureEnabled(planTier, "image_generation");
 
   const canEdit = useMemo(() => {
     if (!recipe) return false;
@@ -532,6 +537,11 @@ export default function RecipeDetailPage() {
   };
 
   const requestRecipeImage = async () => {
+    if (!canUseImageGeneration) {
+      setAiMessage(t("subscription.locks.imageGeneration"));
+      return;
+    }
+
     try {
       setAiAction("image");
       const data = await getRecipeImage({
@@ -783,6 +793,10 @@ export default function RecipeDetailPage() {
   const createTranslationDraft = async () => {
     if (!recipe) return;
     if (!canEdit) return;
+    if (!canUseAiTranslation) {
+      setTranslationNotice(t("subscription.locks.translationAi"));
+      return;
+    }
     if (recipe.translations?.[contentLanguage]) {
       setTranslationNotice(t("recipes.detail.translation.exists"));
       return;
@@ -1057,6 +1071,7 @@ export default function RecipeDetailPage() {
   const canChangeVisibility = Boolean(recipe.ownerId && currentUserId && recipe.ownerId === currentUserId);
   const recipeImage = resolveRecipeImage(recipe);
   const canCreateTranslation = canEdit && !recipe.translations?.[contentLanguage] && contentLanguage !== baseLanguage;
+  const canCreateTranslationDraft = canCreateTranslation && canUseAiTranslation;
 
   return (
     <div style={{ padding: "20px", maxWidth: "900px", margin: "0 auto" }}>
@@ -1142,7 +1157,7 @@ export default function RecipeDetailPage() {
             );
           })}
 
-          {canCreateTranslation ? (
+          {canCreateTranslationDraft ? (
             <button
               type="button"
               className="btn"
@@ -1155,6 +1170,11 @@ export default function RecipeDetailPage() {
             </button>
           ) : null}
         </div>
+        {canCreateTranslation && !canUseAiTranslation ? (
+          <p className="muted" style={{ margin: "8px 0 0 0" }}>
+            {t("subscription.locks.translationAi")}
+          </p>
+        ) : null}
         {translationNotice ? (
           <p className="muted" style={{ margin: "8px 0 0 0" }}>{translationNotice}</p>
         ) : null}
@@ -1402,6 +1422,11 @@ export default function RecipeDetailPage() {
                 <p className="muted" style={{ marginTop: 0, marginBottom: "8px" }}>
                   {t("recipes.new.ai.toolsHint")}
                 </p>
+                {!canUseImageGeneration ? (
+                  <p className="muted" style={{ marginTop: 0, marginBottom: "8px" }}>
+                    {t("subscription.locks.imageGeneration")}
+                  </p>
+                ) : null}
                 <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
                   <button className="btn" onClick={requestIngredientHints} disabled={aiAction === "ingredients" || !hasCoreInput}>
                     {aiAction === "ingredients" ? t("recipes.new.ai.searching") : t("recipes.new.ai.suggestNames")}

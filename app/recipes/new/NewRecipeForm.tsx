@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { appendProductSuggestions, loadProductSuggestions } from "../../lib/productSuggestions";
 import ProductAutocompleteInput from "../../components/ProductAutocompleteInput";
 import { useI18n } from "../../components/I18nProvider";
+import { usePlanTier } from "../../lib/usePlanTier";
+import { isPaidFeatureEnabled } from "../../lib/subscription";
 import { findIngredientIdByName } from "../../lib/ingredientDictionary";
 import {
   DEFAULT_UNIT_ID,
@@ -166,7 +168,10 @@ interface NewRecipeFormProps {
 export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps) {
   const router = useRouter();
   const { t, locale } = useI18n();
+  const { planTier } = usePlanTier();
   const unitOptions = getUnitOptions(locale);
+  const canUseRecipeImport = isPaidFeatureEnabled(planTier, "recipe_import");
+  const canUseImageGeneration = isPaidFeatureEnabled(planTier, "image_generation");
 
   const [title, setTitle] = useState("");
   const [shortDescription, setShortDescription] = useState("");
@@ -391,6 +396,11 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
   };
 
   const requestRecipeImage = async () => {
+    if (!canUseImageGeneration) {
+      setAiMessage(t("subscription.locks.imageGeneration"));
+      return;
+    }
+
     try {
       setAiAction("image");
       const data = await getRecipeImage({
@@ -485,6 +495,14 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
   };
 
   const handleImportByUrl = async () => {
+    if (!canUseRecipeImport) {
+      const message = t("subscription.locks.recipeImport");
+      setImportStatus("error");
+      setImportStatusMessage(message);
+      setImportIssues([]);
+      return;
+    }
+
     const requestId = importRequestIdRef.current + 1;
     importRequestIdRef.current = requestId;
     const normalizedUrl = normalizeImportUrl(importUrl);
@@ -626,6 +644,14 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
   };
 
   const handleImportByPhoto = async () => {
+    if (!canUseRecipeImport) {
+      const message = t("subscription.locks.recipeImport");
+      setImportStatus("error");
+      setImportStatusMessage(message);
+      setImportIssues([]);
+      return;
+    }
+
     const requestId = importRequestIdRef.current + 1;
     importRequestIdRef.current = requestId;
     if (isPreparingImportPhotos) {
@@ -871,6 +897,11 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
 
         {showImportTools ? (
           <div style={{ marginTop: "10px" }}>
+            {!canUseRecipeImport ? (
+              <p className="muted" style={{ marginTop: 0, marginBottom: "8px" }}>
+                {t("subscription.locks.recipeImport")}
+              </p>
+            ) : null}
             <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "10px" }}>
               <button
                 className={`btn ${importMode === "url" ? "btn-primary" : ""}`}
@@ -1202,6 +1233,11 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
             <p className="muted" style={{ marginTop: 0, marginBottom: "8px" }}>
               {t("recipes.new.ai.toolsHint")}
             </p>
+            {!canUseImageGeneration ? (
+              <p className="muted" style={{ marginTop: 0, marginBottom: "8px" }}>
+                {t("subscription.locks.imageGeneration")}
+              </p>
+            ) : null}
             <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
               <button className="btn" onClick={requestIngredientHints} disabled={aiAction === "ingredients" || !hasCoreInput}>
                 {aiAction === "ingredients" ? t("recipes.new.ai.searching") : t("recipes.new.ai.suggestNames")}

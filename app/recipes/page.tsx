@@ -19,6 +19,8 @@ import {
   type RecipeVisibility,
 } from "../lib/recipesSupabase";
 import { getSupabaseClient, isSupabaseConfigured } from "../lib/supabaseClient";
+import { usePlanTier } from "../lib/usePlanTier";
+import { isPaidFeatureEnabled } from "../lib/subscription";
 import { RECIPE_TAGS } from "../lib/recipeTags";
 import { useI18n } from "../components/I18nProvider";
 
@@ -351,6 +353,7 @@ function resolveUserFrame(user: User | null | undefined): string | null {
 
 function RecipesPageContent() {
   const { t } = useI18n();
+  const { planTier } = usePlanTier();
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -386,9 +389,33 @@ function RecipesPageContent() {
   const [pantryProductNames, setPantryProductNames] = useState<string[]>([]);
   const [openActiveMatchesRecipeId, setOpenActiveMatchesRecipeId] = useState<string | null>(null);
   const [openDislikeRecipeId, setOpenDislikeRecipeId] = useState<string | null>(null);
+  const canUseAdvancedFilters = isPaidFeatureEnabled(planTier, "advanced_filters");
+  const effectiveSelectedTags = canUseAdvancedFilters ? selectedTags : [];
+  const effectiveOnlyWithPhoto = canUseAdvancedFilters ? onlyWithPhoto : false;
+  const effectiveOnlyWithoutPhoto = canUseAdvancedFilters ? onlyWithoutPhoto : false;
+  const effectiveOnlyWithNotes = canUseAdvancedFilters ? onlyWithNotes : false;
+  const effectiveOnlyWithActiveProducts = canUseAdvancedFilters ? onlyWithActiveProducts : false;
+  const effectiveOnlyFromPantry = canUseAdvancedFilters ? onlyFromPantry : false;
+  const effectiveSortBy: SortOption = canUseAdvancedFilters
+    ? sortBy
+    : (sortBy === "often_cooked" || sortBy === "rarely_cooked" ? "newest" : sortBy);
 
   const importedForUser = useRef<string | null>(null);
   const addedToastTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (canUseAdvancedFilters) return;
+    if (sortBy === "often_cooked" || sortBy === "rarely_cooked") {
+      setSortBy("newest");
+    }
+    setOnlyWithPhoto(false);
+    setOnlyWithoutPhoto(false);
+    setOnlyWithNotes(false);
+    setOnlyWithActiveProducts(false);
+    setOnlyFromPantry(false);
+    setSelectedTags([]);
+    setShowAdvancedFilters(false);
+  }, [canUseAdvancedFilters, sortBy]);
 
   const refreshRecipes = async (mode: ViewMode, userId: string | null): Promise<void> => {
     setIsLoading(true);
@@ -769,13 +796,13 @@ function RecipesPageContent() {
 
     const filtered = recipes.filter((item) => {
       const tags = item.tags || item.categories || [];
-      const passesTags = selectedTags.every((tag) => tags.includes(tag));
+      const passesTags = effectiveSelectedTags.every((tag) => tags.includes(tag));
       if (!passesTags) return false;
-      if (onlyWithPhoto && !item.image?.trim()) return false;
-      if (onlyWithoutPhoto && item.image?.trim()) return false;
-      if (onlyWithNotes && !item.notes?.trim()) return false;
-      if (onlyWithActiveProducts && (recipeActiveMatchMap.get(item.id)?.matchCount || 0) === 0) return false;
-      if (onlyFromPantry && !recipePantryCoverageMap.get(item.id)?.isFullyCovered) return false;
+      if (effectiveOnlyWithPhoto && !item.image?.trim()) return false;
+      if (effectiveOnlyWithoutPhoto && item.image?.trim()) return false;
+      if (effectiveOnlyWithNotes && !item.notes?.trim()) return false;
+      if (effectiveOnlyWithActiveProducts && (recipeActiveMatchMap.get(item.id)?.matchCount || 0) === 0) return false;
+      if (effectiveOnlyFromPantry && !recipePantryCoverageMap.get(item.id)?.isFullyCovered) return false;
       if (viewMode === "public" && (recipePreferenceMatchMap.get(item.id)?.allergyCount || 0) > 0) return false;
       if (!query) return true;
 
@@ -800,7 +827,7 @@ function RecipesPageContent() {
       const aCooked = getTimesCooked(a);
       const bCooked = getTimesCooked(b);
 
-      switch (sortBy) {
+      switch (effectiveSortBy) {
         case "oldest":
           return aCreated - bCreated;
         case "title_asc":
@@ -848,18 +875,18 @@ function RecipesPageContent() {
 
     return [...matched, ...rest].map((row) => row.item);
   }, [
-    onlyFromPantry,
-    onlyWithActiveProducts,
-    onlyWithNotes,
-    onlyWithPhoto,
-    onlyWithoutPhoto,
+    effectiveOnlyFromPantry,
+    effectiveOnlyWithActiveProducts,
+    effectiveOnlyWithNotes,
+    effectiveOnlyWithPhoto,
+    effectiveOnlyWithoutPhoto,
+    effectiveSelectedTags,
+    effectiveSortBy,
     recipeActiveMatchMap,
     recipePreferenceMatchMap,
     recipePantryCoverageMap,
     recipes,
     searchQuery,
-    selectedTags,
-    sortBy,
     viewMode,
   ]);
 
@@ -1200,12 +1227,12 @@ function RecipesPageContent() {
   const accountInitial = accountNameView.charAt(0).toUpperCase() || "G";
   const hasAnyRecipes = recipes.length > 0;
   const hasActiveFilters =
-    selectedTags.length > 0 ||
-    onlyWithPhoto ||
-    onlyWithoutPhoto ||
-    onlyWithNotes ||
-    onlyWithActiveProducts ||
-    onlyFromPantry ||
+    effectiveSelectedTags.length > 0 ||
+    effectiveOnlyWithPhoto ||
+    effectiveOnlyWithoutPhoto ||
+    effectiveOnlyWithNotes ||
+    effectiveOnlyWithActiveProducts ||
+    effectiveOnlyFromPantry ||
     searchQuery.trim().length > 0;
   const showBlockingLoading = isLoading && recipes.length === 0;
   const isEmptyState = !isLoading && !hasAnyRecipes;
@@ -1359,92 +1386,108 @@ function RecipesPageContent() {
               <option value="oldest">{t("recipes.sort.oldest")}</option>
               <option value="title_asc">{t("recipes.sort.titleAsc")}</option>
               <option value="title_desc">{t("recipes.sort.titleDesc")}</option>
-              <option value="often_cooked">{t("recipes.sort.oftenCooked")}</option>
-              <option value="rarely_cooked">{t("recipes.sort.rarelyCooked")}</option>
+              {canUseAdvancedFilters ? (
+                <>
+                  <option value="often_cooked">{t("recipes.sort.oftenCooked")}</option>
+                  <option value="rarely_cooked">{t("recipes.sort.rarelyCooked")}</option>
+                </>
+              ) : null}
             </select>
             <button
               type="button"
               className={`btn ${showAdvancedFilters ? "btn-primary" : ""}`}
-              onClick={() => setShowAdvancedFilters((prev) => !prev)}
+              onClick={() => {
+                if (!canUseAdvancedFilters) {
+                  setActionMessage(t("subscription.locks.advancedFilters"));
+                  return;
+                }
+                setShowAdvancedFilters((prev) => !prev);
+              }}
             >
-              {t("recipes.filters.button")}{selectedTags.length > 0 ? ` (${selectedTags.length})` : ""}
+              {t("recipes.filters.button")}{effectiveSelectedTags.length > 0 ? ` (${effectiveSelectedTags.length})` : ""}
             </button>
           </div>
 
-          <div className="recipes-filters-chips">
-            <button
-              type="button"
-              className={`btn ${onlyWithPhoto ? "btn-primary" : ""}`}
-              onClick={() => {
-                setOnlyWithPhoto((prev) => !prev);
-                setOnlyWithoutPhoto(false);
-              }}
-            >
-              {t("recipes.filters.withPhoto")}
-            </button>
-            <button
-              type="button"
-              className={`btn ${onlyWithoutPhoto ? "btn-primary" : ""}`}
-              onClick={() => {
-                setOnlyWithoutPhoto((prev) => !prev);
-                setOnlyWithPhoto(false);
-              }}
-            >
-              {t("recipes.filters.withoutPhoto")}
-            </button>
-            <button
-              type="button"
-              className={`btn ${onlyWithNotes ? "btn-primary" : ""}`}
-              onClick={() => setOnlyWithNotes((prev) => !prev)}
-            >
-              {t("recipes.filters.withNotes")}
-            </button>
-            <button
-              type="button"
-              className={`btn ${onlyWithActiveProducts ? "btn-primary" : ""}`}
-              onClick={() => setOnlyWithActiveProducts((prev) => !prev)}
-              disabled={activeProductNames.length === 0}
-              title={
-                activeProductNames.length === 0
-                  ? t("recipes.filters.activeProductsDisabled")
-                  : t("recipes.filters.activeProductsTooltip")
-              }
-            >
-              {t("recipes.filters.onlyWithActiveProducts")}
-            </button>
-            <button
-              type="button"
-              className={`btn ${onlyFromPantry ? "btn-primary" : ""}`}
-              onClick={() => setOnlyFromPantry((prev) => !prev)}
-              disabled={pantryProductNames.length === 0}
-              title={
-                pantryProductNames.length === 0
-                  ? t("recipes.filters.pantryEmpty")
-                  : t("recipes.filters.onlyFromPantryTooltip")
-              }
-            >
-              {t("recipes.filters.onlyFromPantry")}
-            </button>
-            {hasActiveFilters && (
+          {canUseAdvancedFilters ? (
+            <div className="recipes-filters-chips">
               <button
                 type="button"
-                className="btn"
+                className={`btn ${onlyWithPhoto ? "btn-primary" : ""}`}
                 onClick={() => {
-                  setOnlyWithPhoto(false);
+                  setOnlyWithPhoto((prev) => !prev);
                   setOnlyWithoutPhoto(false);
-                  setOnlyWithNotes(false);
-                  setOnlyWithActiveProducts(false);
-                  setOnlyFromPantry(false);
-                  setSelectedTags([]);
-                  setSearchQuery("");
                 }}
               >
-                {t("recipes.filters.resetAll")}
+                {t("recipes.filters.withPhoto")}
               </button>
-            )}
-          </div>
+              <button
+                type="button"
+                className={`btn ${onlyWithoutPhoto ? "btn-primary" : ""}`}
+                onClick={() => {
+                  setOnlyWithoutPhoto((prev) => !prev);
+                  setOnlyWithPhoto(false);
+                }}
+              >
+                {t("recipes.filters.withoutPhoto")}
+              </button>
+              <button
+                type="button"
+                className={`btn ${onlyWithNotes ? "btn-primary" : ""}`}
+                onClick={() => setOnlyWithNotes((prev) => !prev)}
+              >
+                {t("recipes.filters.withNotes")}
+              </button>
+              <button
+                type="button"
+                className={`btn ${onlyWithActiveProducts ? "btn-primary" : ""}`}
+                onClick={() => setOnlyWithActiveProducts((prev) => !prev)}
+                disabled={activeProductNames.length === 0}
+                title={
+                  activeProductNames.length === 0
+                    ? t("recipes.filters.activeProductsDisabled")
+                    : t("recipes.filters.activeProductsTooltip")
+                }
+              >
+                {t("recipes.filters.onlyWithActiveProducts")}
+              </button>
+              <button
+                type="button"
+                className={`btn ${onlyFromPantry ? "btn-primary" : ""}`}
+                onClick={() => setOnlyFromPantry((prev) => !prev)}
+                disabled={pantryProductNames.length === 0}
+                title={
+                  pantryProductNames.length === 0
+                    ? t("recipes.filters.pantryEmpty")
+                    : t("recipes.filters.onlyFromPantryTooltip")
+                }
+              >
+                {t("recipes.filters.onlyFromPantry")}
+              </button>
+              {hasActiveFilters && (
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => {
+                    setOnlyWithPhoto(false);
+                    setOnlyWithoutPhoto(false);
+                    setOnlyWithNotes(false);
+                    setOnlyWithActiveProducts(false);
+                    setOnlyFromPantry(false);
+                    setSelectedTags([]);
+                    setSearchQuery("");
+                  }}
+                >
+                  {t("recipes.filters.resetAll")}
+                </button>
+              )}
+            </div>
+          ) : (
+            <p className="muted" style={{ marginTop: "8px" }}>
+              {t("subscription.locks.advancedFilters")}
+            </p>
+          )}
 
-          {showAdvancedFilters && (
+          {canUseAdvancedFilters && showAdvancedFilters ? (
             <div className="recipes-filters-advanced">
               <div style={{ marginBottom: "8px", fontWeight: 600 }}>{t("recipes.filters.tags")}</div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
@@ -1488,7 +1531,7 @@ function RecipesPageContent() {
                 )}
               </div>
             </div>
-          )}
+          ) : null}
         </>
       ) : null}
 

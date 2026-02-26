@@ -766,6 +766,15 @@
       "taste": "to taste"
     }
   },
+  "subscription": {
+    "locks": {
+      "multipleMenus": "Multiple menus are available in Pro plan.",
+      "translationAi": "Auto translation is available in Pro plan. You can translate manually for free.",
+      "recipeImport": "Recipe import by URL/photo is available in Pro plan.",
+      "imageGeneration": "AI image generation is available in Pro plan.",
+      "advancedFilters": "Advanced filters are available in Pro plan."
+    }
+  },
   "languages": {
     "ru": "Русский",
     "en": "English",

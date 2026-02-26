@@ -23,6 +23,8 @@ import {
   upsertMineWeekMenu,
 } from "../lib/weeklyMenusSupabase";
 import { useI18n } from "../components/I18nProvider";
+import { usePlanTier } from "../lib/usePlanTier";
+import { isPaidFeatureEnabled } from "../lib/subscription";
 import {
   DEFAULT_UNIT_ID,
   getUnitLabelById,
@@ -1088,6 +1090,7 @@ AddEditDialog.displayName = "AddEditDialog";
 
 function MenuPageContent() {
   const { locale, t } = useI18n();
+  const { planTier } = usePlanTier();
   const defaultMenuName = t("menu.fallback.defaultMenuName");
   const defaultDayMeals = useMemo(
     () => [t("menu.meals.breakfast"), t("menu.meals.lunch"), t("menu.meals.dinner")],
@@ -1256,6 +1259,8 @@ function MenuPageContent() {
     [dayKeys, locale]
   );
   const activeLocale = resolveIntlLocale(locale);
+  const canUseMultipleMenus = isPaidFeatureEnabled(planTier, "multiple_menus");
+  const additionalMenusLocked = !canUseMultipleMenus && menuProfiles.length >= 1;
   const visibleActiveProductsCount = activeProducts.length;
   const shouldEnableActiveProductsSearch = activeProducts.length >= 8;
   const shouldShowActiveProductsSearch = shouldEnableActiveProductsSearch && expandedActiveProductNoteId === null;
@@ -1469,6 +1474,7 @@ function MenuPageContent() {
     setPendingDeleteMenuId(null);
     setSaveMealSlotsAsDefault(false);
     setNewMealSlotName("");
+    setMenuSyncError("");
   };
 
   const resetAllModalStates = () => {
@@ -2499,6 +2505,12 @@ function MenuPageContent() {
   };
 
   const addMenu = () => {
+    if (additionalMenusLocked) {
+      setMenuSyncError(t("subscription.locks.multipleMenus"));
+      setIsCreateMenuDialogOpen(false);
+      return;
+    }
+
     const normalized = normalizeMenuProfileName(newMenuNameDraft);
     if (!normalized) return;
     const duplicate = menuProfiles.some(
@@ -2515,6 +2527,7 @@ function MenuPageContent() {
     setNameDrafts(buildNameDrafts(nextMenus));
     setNewMenuNameDraft("");
     setIsCreateMenuDialogOpen(false);
+    setMenuSyncError("");
   };
 
   const requestRemoveMenu = (menuId: string) => {
@@ -3811,6 +3824,12 @@ function MenuPageContent() {
         })}
       </div>
 
+      {menuSyncError ? (
+        <p className="muted" style={{ marginTop: "0", marginBottom: "10px" }}>
+          {menuSyncError}
+        </p>
+      ) : null}
+
       {showMenuSettingsDialog ? (
         <div
           className="menu-dialog-overlay"
@@ -3993,9 +4012,14 @@ function MenuPageContent() {
                 type="button"
                 className="btn btn-primary"
                 onClick={() => {
+                  if (additionalMenusLocked) {
+                    setMenuSyncError(t("subscription.locks.multipleMenus"));
+                    return;
+                  }
                   setNewMenuNameDraft("");
                   setIsCreateMenuDialogOpen(true);
                 }}
+                title={additionalMenusLocked ? t("subscription.locks.multipleMenus") : undefined}
               >
                 {t("menu.settings.addMenu")}
               </button>
