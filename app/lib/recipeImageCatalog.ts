@@ -27,6 +27,12 @@ const LEGACY_TEMPLATE_IMAGE_URLS = new Set<string>([
   "/recipes/templates/oladi-kefir.jpg",
 ]);
 
+const isUnstableExternalRecipeImageUrl = (value: string): boolean => {
+  const normalized = value.trim().toLowerCase();
+  if (!normalized.startsWith("http://") && !normalized.startsWith("https://")) return false;
+  return normalized.includes("loremflickr.com");
+};
+
 const TEMPLATE_RECIPE_IMAGE_ENTRIES: TemplateRecipeImageEntry[] = [
   {
     id: "seed-omelet-vegetables",
@@ -65,42 +71,42 @@ const TEMPLATE_RECIPE_IMAGE_ENTRIES: TemplateRecipeImageEntry[] = [
   },
   {
     id: "seed-greek-yogurt-granola",
-    image: "https://loremflickr.com/1200/900/yogurt,granola,berries,breakfast?lock=5101",
+    image: "/recipes/templates/oatmeal-fruits.jpg",
     titles: ["Йогурт с гранолой", "Yogurt with granola", "Yogur con granola"],
   },
   {
     id: "seed-buckwheat-mushrooms",
-    image: "https://loremflickr.com/1200/900/buckwheat,mushrooms,food?lock=5102",
+    image: "/recipes/templates/chicken-rice.jpg",
     titles: ["Гречка с грибами", "Buckwheat with mushrooms", "Trigo sarraceno con champinones"],
   },
   {
     id: "seed-mashed-potatoes",
-    image: "https://loremflickr.com/1200/900/mashed,potatoes,food?lock=5103",
+    image: "/recipes/templates/baked-fish-potatoes.jpg",
     titles: ["Картофельное пюре", "Mashed potatoes", "Pure de patatas"],
   },
   {
     id: "seed-vegetable-soup",
-    image: "https://loremflickr.com/1200/900/vegetable,soup,bowl?lock=5104",
+    image: "/recipes/templates/lentil-soup-v2.jpg",
     titles: ["Овощной суп", "Vegetable soup", "Sopa de verduras"],
   },
   {
     id: "seed-fried-rice-egg",
-    image: "https://loremflickr.com/1200/900/fried,rice,egg,food?lock=5105",
+    image: "/recipes/templates/chicken-rice.jpg",
     titles: ["Жареный рис с яйцом", "Fried rice with egg", "Arroz frito con huevo"],
   },
   {
     id: "seed-turkey-sandwich",
-    image: "https://loremflickr.com/1200/900/turkey,sandwich,food?lock=5106",
+    image: "/recipes/templates/tuna-salad.jpg",
     titles: ["Сэндвич с индейкой", "Turkey sandwich", "Sandwich de pavo"],
   },
   {
     id: "seed-cottage-cheese-berries",
-    image: "https://loremflickr.com/1200/900/cottage,cheese,berries,breakfast?lock=5107",
+    image: "/recipes/templates/oatmeal-fruits.jpg",
     titles: ["Творог с ягодами", "Cottage cheese with berries", "Requeson con frutos rojos"],
   },
   {
     id: "seed-roasted-vegetables",
-    image: "https://loremflickr.com/1200/900/roasted,vegetables,food?lock=5108",
+    image: "/recipes/templates/baked-fish-potatoes.jpg",
     titles: ["Запеченные овощи", "Roasted vegetables", "Verduras al horno"],
   },
   {
@@ -110,22 +116,22 @@ const TEMPLATE_RECIPE_IMAGE_ENTRIES: TemplateRecipeImageEntry[] = [
   },
   {
     id: "seed-chicken-noodle-soup",
-    image: "https://loremflickr.com/1200/900/chicken,noodle,soup?lock=5109",
+    image: "/recipes/templates/lentil-soup.jpg",
     titles: ["Куриный суп с лапшой", "Chicken noodle soup", "Sopa de pollo con fideos"],
   },
   {
     id: "seed-rice-vegetables",
-    image: "https://loremflickr.com/1200/900/rice,vegetables,food?lock=5110",
+    image: "/recipes/templates/chicken-rice.jpg",
     titles: ["Рис с овощами", "Rice with vegetables", "Arroz con verduras"],
   },
   {
     id: "seed-crepes-milk",
-    image: "https://loremflickr.com/1200/900/crepes,breakfast,food?lock=5111",
+    image: "/recipes/templates/oladi-kefir.jpg",
     titles: ["Блины на молоке", "Milk crepes", "Crepes con leche"],
   },
   {
     id: "seed-tuna-pasta-creamy",
-    image: "https://loremflickr.com/1200/900/tuna,pasta,food?lock=5112",
+    image: "/recipes/templates/pasta-tomato.jpg",
     titles: ["Паста с тунцом", "Pasta with tuna", "Pasta con atun"],
   },
 ];
@@ -170,5 +176,6 @@ export const resolveRecipeImageForCard = (recipe: RecipeImageCandidate): string 
 
   if (!direct) return mapped;
   if (isLegacyTemplateImageUrl(direct)) return mapped;
+  if (isUnstableExternalRecipeImageUrl(direct)) return mapped;
   return direct;
 };
