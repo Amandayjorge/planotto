@@ -4173,64 +4173,6 @@ function MenuPageContent() {
               </button>
             </div>
           </div>
-          <div style={{ display: "grid", gap: "6px" }}>
-            <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
-              <span className="muted" style={{ fontSize: "12px" }}>
-                {t("menu.settings.periodPresetLabel")}
-              </span>
-              <select
-                className="input"
-                value={periodPreset}
-                onChange={(e) => {
-                  const nextPreset = e.target.value as PeriodPreset;
-                  setPeriodPreset(nextPreset);
-                  if (nextPreset !== "custom") {
-                    applyPeriodPreset(nextPreset);
-                  }
-                }}
-                style={{ maxWidth: "190px" }}
-              >
-                <option value="7d">{t("menu.period.presets.7d")}</option>
-                <option value="10d">{t("menu.period.presets.10d")}</option>
-                <option value="14d">{t("menu.period.presets.14d")}</option>
-                <option value="month">{t("menu.period.presets.month")}</option>
-                <option value="custom">{t("menu.period.presets.custom")}</option>
-              </select>
-            </div>
-            {periodPreset === "custom" ? (
-              <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
-                <label style={{ display: "grid", gap: "3px", fontSize: "12px" }}>
-                  <span className="muted">{t("menu.period.customStart")}</span>
-                  <input
-                    type="date"
-                    className="input"
-                    value={customStartInput}
-                    onChange={(e) => setCustomStartInput(e.target.value)}
-                    style={{ minWidth: "155px" }}
-                  />
-                </label>
-                <label style={{ display: "grid", gap: "3px", fontSize: "12px" }}>
-                  <span className="muted">{t("menu.period.customEnd")}</span>
-                  <input
-                    type="date"
-                    className="input"
-                    value={customEndInput}
-                    onChange={(e) => setCustomEndInput(e.target.value)}
-                    style={{ minWidth: "155px" }}
-                  />
-                </label>
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  style={{ alignSelf: "end" }}
-                  onClick={() => applyPeriodPreset("custom")}
-                  disabled={!customStartInput || !customEndInput}
-                >
-                  {t("menu.period.applyCustom")}
-                </button>
-              </div>
-            ) : null}
-          </div>
           {isActiveMenuEmpty && (
             <div className="menu-empty-actions">
               <span className="muted">{t("menu.templates.emptyPrompt")}</span>
