@@ -659,6 +659,21 @@
       "confirm": "Yes",
       "later": "Later"
     },
+    "personalTags": {
+      "hintText": "Add personal tags to quickly find your own recipes.",
+      "hintArrow": "Use + Add tag below.",
+      "hintDone": "Got it",
+      "filterLabel": "Filter by my tags:",
+      "noteLabel": "Personal note",
+      "noteEmpty": "none",
+      "myTagsLabel": "My tags",
+      "addTag": "+ Add tag",
+      "addPlaceholder": "For example: dinner",
+      "addAction": "Add",
+      "cancel": "Cancel",
+      "removeTagAria": "Remove tag {{tag}}",
+      "saveFailed": "Failed to save personal tags."
+    },
     "guestReminder": {
       "text": "You already added several recipes. Create an account to keep them safe.",
       "createAccount": "Create account",

@@ -49,6 +49,7 @@ export interface RecipeModel {
   instructions?: string;
   ingredients: Ingredient[];
   notes?: string;
+  personalTags?: string[];
   servings: number;
   image?: string;
   categories: string[];
@@ -116,6 +117,7 @@ interface RecipeAccessEmailRpcRow {
 interface RecipeNoteRow {
   recipe_id: string;
   notes: string | null;
+  personal_tags: string[] | null;
 }
 
 interface RecipeTranslationRow {
@@ -1143,6 +1145,14 @@ const isMissingFunctionError = (error: unknown, functionName: string): boolean =
   return typed.code === "42883" || message.includes(name) || message.includes("function") && message.includes("does not exist");
 };
 
+const isMissingColumnError = (error: unknown, columnName: string): boolean => {
+  if (!error || typeof error !== "object") return false;
+  const typed = error as PostgrestLikeError;
+  const message = String(typed.message || "").toLowerCase();
+  const column = columnName.toLowerCase();
+  return typed.code === "42703" || (message.includes("column") && message.includes(column));
+};
+
 const isDuplicateKeyError = (error: unknown): boolean => {
   if (!error || typeof error !== "object") return false;
   const typed = error as PostgrestLikeError;
@@ -1387,6 +1397,18 @@ const normalizeStringArray = (value: unknown): string[] => {
     .filter((item) => item.length > 0);
 };
 
+const normalizePersonalTags = (value: unknown): string[] => {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  normalizeStringArray(value).forEach((item) => {
+    const normalizedKey = item.toLocaleLowerCase("ru-RU").replace(/\s+/g, " ").trim();
+    if (!normalizedKey || seen.has(normalizedKey)) return;
+    seen.add(normalizedKey);
+    result.push(item.replace(/\s+/g, " ").trim());
+  });
+  return result;
+};
+
 const normalizeRecipeTagArray = (value: unknown): string[] =>
   normalizeRecipeTags(normalizeStringArray(value));
 
@@ -1398,6 +1420,7 @@ const serializeRecipeForCloudFallback = (recipe: RecipeModel): Record<string, un
   instructions: recipe.instructions || "",
   ingredients: normalizeIngredients(recipe.ingredients),
   notes: recipe.notes || "",
+  personalTags: normalizePersonalTags(recipe.personalTags),
   servings: recipe.servings && recipe.servings > 0 ? recipe.servings : 2,
   image: recipe.image || "",
   categories: normalizeRecipeTagArray(recipe.categories),
@@ -1450,6 +1473,7 @@ const mapCloudFallbackItemToRecipe = (ownerId: string, value: unknown): RecipeMo
     instructions: String(raw.instructions || raw.description || ""),
     ingredients: normalizeIngredients(raw.ingredients),
     notes: String(raw.notes || ""),
+    personalTags: normalizePersonalTags(raw.personalTags),
     servings: Number(raw.servings || 2),
     image: String(raw.image || ""),
     categories,
@@ -1511,7 +1535,7 @@ const saveCloudFallbackRecipes = async (ownerId: string, recipes: RecipeModel[])
   }
 };
 
-const mapRow = (row: RecipeRow, notes?: string | null): RecipeModel => {
+const mapRow = (row: RecipeRow, notes?: string | null, personalTags?: string[] | null): RecipeModel => {
   const tags = normalizeRecipeTagArray(row.categories);
   const isTemplate = !row.owner_id;
   const baseLanguage: RecipeLanguage = "ru";
@@ -1526,6 +1550,7 @@ const mapRow = (row: RecipeRow, notes?: string | null): RecipeModel => {
     instructions: row.instructions || "",
     ingredients: normalizeIngredients(row.ingredients),
     notes: notes || "",
+    personalTags: normalizePersonalTags(personalTags),
     servings: row.servings && row.servings > 0 ? row.servings : 2,
     image: row.image || "",
     categories: tags,
@@ -1617,6 +1642,7 @@ export const syncRecipesToLocalCache = (recipes: RecipeModel[]): void => {
     instructions: item.instructions || "",
     ingredients: item.ingredients || [],
     notes: item.notes || "",
+    personalTags: normalizePersonalTags(item.personalTags),
     servings: item.servings || 2,
     image: item.image || "",
     categories: item.categories || [],
@@ -1682,6 +1708,7 @@ export const loadLocalRecipes = (): RecipeModel[] => {
         instructions: String(row.instructions || row.description || ""),
         ingredients: normalizeIngredients(row.ingredients),
         notes: String(row.notes || ""),
+        personalTags: normalizePersonalTags(row.personalTags),
         servings: Number(row.servings || 2),
         image: String(row.image || ""),
         categories: normalizeStringArray(row.categories),
@@ -1746,7 +1773,7 @@ export const listMyRecipes = async (ownerId: string): Promise<RecipeModel[]> => 
   const ids = rows.map((row) => row.id);
   const { data: noteRows, error: notesError } = await supabase
     .from("recipe_notes")
-    .select("recipe_id,notes")
+    .select("*")
     .eq("owner_id", ownerId)
     .in("recipe_id", ids);
 
@@ -1757,12 +1784,20 @@ export const listMyRecipes = async (ownerId: string): Promise<RecipeModel[]> => 
     return rows.map((row) => mapRow(row));
   }
 
-  const notesMap = new Map<string, string>();
+  const notesMap = new Map<string, { notes: string; personalTags: string[] }>();
   (noteRows as RecipeNoteRow[]).forEach((row) => {
-    notesMap.set(row.recipe_id, row.notes || "");
+    notesMap.set(row.recipe_id, {
+      notes: row.notes || "",
+      personalTags: normalizePersonalTags(row.personal_tags),
+    });
   });
 
-  return dedupeRecipesByTitle(rows.map((row) => mapRow(row, notesMap.get(row.id))));
+  return dedupeRecipesByTitle(
+    rows.map((row) => {
+      const meta = notesMap.get(row.id);
+      return mapRow(row, meta?.notes, meta?.personalTags);
+    })
+  );
 };
 
 export const listPublicRecipes = async (): Promise<RecipeModel[]> => {
@@ -1940,11 +1975,12 @@ export const getRecipeById = async (
     if (isRecipeHiddenByReport(row.id)) return null;
   }
   let notes = "";
+  let personalTags: string[] = [];
 
   if (isOwner && currentUserId) {
     const { data: noteData, error: noteError } = await supabase
       .from("recipe_notes")
-      .select("recipe_id,notes")
+      .select("*")
       .eq("recipe_id", recipeId)
       .eq("owner_id", currentUserId)
       .maybeSingle();
@@ -1954,11 +1990,13 @@ export const getRecipeById = async (
         throw noteError;
       }
     } else {
-      notes = (noteData as RecipeNoteRow | null)?.notes || "";
+      const meta = noteData as RecipeNoteRow | null;
+      notes = meta?.notes || "";
+      personalTags = normalizePersonalTags(meta?.personal_tags);
     }
   }
 
-  const mapped = mapRow(row, notes);
+  const mapped = mapRow(row, notes, personalTags);
   try {
     const translations = await listRecipeTranslations(recipeId);
     return mergeRecipeTranslations(mapped, translations);
@@ -2083,6 +2121,7 @@ export const createRecipe = async (ownerId: string, input: RecipeUpsertInput): P
         instructions: payload.instructions || payload.description || "",
         ingredients: normalizeIngredients(payload.ingredients),
         notes: (input.notes || "").trim(),
+        personalTags: [],
         servings: payload.servings && payload.servings > 0 ? payload.servings : 2,
         image: payload.image || "",
         categories: normalizeStringArray(payload.categories),
@@ -2115,7 +2154,7 @@ export const createRecipe = async (ownerId: string, input: RecipeUpsertInput): P
     }
   }
 
-  return mapRow(created, notes);
+  return mapRow(created, notes, []);
 };
 
 export const updateRecipe = async (ownerId: string, recipeId: string, input: RecipeUpsertInput): Promise<RecipeModel> => {
@@ -2156,6 +2195,7 @@ export const updateRecipe = async (ownerId: string, recipeId: string, input: Rec
         instructions: payload.instructions || payload.description || "",
         ingredients: normalizeIngredients(payload.ingredients),
         notes: (input.notes || "").trim(),
+        personalTags: normalizePersonalTags(existing.personalTags),
         servings: payload.servings && payload.servings > 0 ? payload.servings : 2,
         image: payload.image || "",
         categories: normalizeStringArray(payload.categories),
@@ -2174,16 +2214,50 @@ export const updateRecipe = async (ownerId: string, recipeId: string, input: Rec
   }
 
   const notes = (input.notes || "").trim();
-  if (notes) {
-    const { error: notesError } = await supabase
-      .from("recipe_notes")
-      .upsert({ recipe_id: recipeId, owner_id: ownerId, notes }, { onConflict: "recipe_id" });
-    if (notesError) {
-      if (!isMissingRelationError(notesError, "recipe_notes")) {
-        throw notesError;
-      }
+  let personalTags: string[] = [];
+  let hasMetaRow = false;
+  const { data: metaRowData, error: metaRowError } = await supabase
+    .from("recipe_notes")
+    .select("*")
+    .eq("recipe_id", recipeId)
+    .eq("owner_id", ownerId)
+    .maybeSingle();
+
+  if (metaRowError) {
+    if (!isMissingRelationError(metaRowError, "recipe_notes")) {
+      throw metaRowError;
     }
   } else {
+    const metaRow = metaRowData as RecipeNoteRow | null;
+    hasMetaRow = Boolean(metaRow);
+    personalTags = normalizePersonalTags(metaRow?.personal_tags);
+  }
+
+  if (notes || personalTags.length > 0) {
+    const payloadWithTags = {
+      recipe_id: recipeId,
+      owner_id: ownerId,
+      notes,
+      personal_tags: personalTags,
+    };
+    let notesError: unknown = null;
+    ({ error: notesError } = await supabase
+      .from("recipe_notes")
+      .upsert(payloadWithTags, { onConflict: "recipe_id" }));
+
+    if (notesError && isMissingColumnError(notesError, "personal_tags")) {
+      ({ error: notesError } = await supabase
+        .from("recipe_notes")
+        .upsert(
+          { recipe_id: recipeId, owner_id: ownerId, notes },
+          { onConflict: "recipe_id" }
+        ));
+    }
+
+    if (notesError && !isMissingRelationError(notesError, "recipe_notes")) {
+      throw notesError;
+    }
+  } else if (hasMetaRow) {
     const { error: deleteNoteError } = await supabase
       .from("recipe_notes")
       .delete()
@@ -2196,7 +2270,73 @@ export const updateRecipe = async (ownerId: string, recipeId: string, input: Rec
     }
   }
 
-  return mapRow(data as RecipeRow, notes);
+  return mapRow(data as RecipeRow, notes, personalTags);
+};
+
+export const updateRecipePersonalTags = async (
+  ownerId: string,
+  recipeId: string,
+  personalTags: string[]
+): Promise<string[]> => {
+  const normalizedTags = normalizePersonalTags(personalTags);
+  const supabase = getSupabaseClient();
+
+  const { data: metaRowData, error: metaRowError } = await supabase
+    .from("recipe_notes")
+    .select("*")
+    .eq("recipe_id", recipeId)
+    .eq("owner_id", ownerId)
+    .maybeSingle();
+
+  if (metaRowError) {
+    if (isMissingRelationError(metaRowError, "recipe_notes")) {
+      return normalizedTags;
+    }
+    throw metaRowError;
+  }
+
+  const metaRow = metaRowData as RecipeNoteRow | null;
+  const existingNotes = String(metaRow?.notes || "").trim();
+
+  if (normalizedTags.length === 0 && !existingNotes) {
+    if (metaRow) {
+      const { error: deleteError } = await supabase
+        .from("recipe_notes")
+        .delete()
+        .eq("recipe_id", recipeId)
+        .eq("owner_id", ownerId);
+      if (deleteError && !isMissingRelationError(deleteError, "recipe_notes")) {
+        throw deleteError;
+      }
+    }
+    return [];
+  }
+
+  const payloadWithTags = {
+    recipe_id: recipeId,
+    owner_id: ownerId,
+    notes: existingNotes,
+    personal_tags: normalizedTags,
+  };
+  let upsertError: unknown = null;
+  ({ error: upsertError } = await supabase
+    .from("recipe_notes")
+    .upsert(payloadWithTags, { onConflict: "recipe_id" }));
+
+  if (upsertError && isMissingColumnError(upsertError, "personal_tags")) {
+    ({ error: upsertError } = await supabase
+      .from("recipe_notes")
+      .upsert(
+        { recipe_id: recipeId, owner_id: ownerId, notes: existingNotes },
+        { onConflict: "recipe_id" }
+      ));
+  }
+
+  if (upsertError && !isMissingRelationError(upsertError, "recipe_notes")) {
+    throw upsertError;
+  }
+
+  return normalizedTags;
 };
 
 export const deleteRecipe = async (ownerId: string, recipeId: string): Promise<void> => {
@@ -2270,6 +2410,7 @@ export const copyPublicRecipeToMine = async (ownerId: string, recipeId: string):
           instructions: payload.instructions || payload.description || "",
           ingredients: normalizeIngredients(payload.ingredients),
           notes: "",
+          personalTags: [],
           servings: payload.servings && payload.servings > 0 ? payload.servings : 2,
           image: payload.image || "",
           categories: normalizeStringArray(payload.categories),
@@ -2353,6 +2494,7 @@ export const copyPublicRecipeToMine = async (ownerId: string, recipeId: string):
         instructions: payload.instructions || payload.description || "",
         ingredients: normalizeIngredients(payload.ingredients),
         notes: "",
+        personalTags: [],
         servings: payload.servings && payload.servings > 0 ? payload.servings : 2,
         image: payload.image || "",
         categories: normalizeStringArray(payload.categories),

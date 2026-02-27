@@ -17,6 +17,7 @@ import {
   loadLocalRecipes,
   removeRecipeFromLocalCache,
   syncRecipesToLocalCache,
+  updateRecipePersonalTags,
   upsertRecipeInLocalCache,
   type RecipeModel,
   type RecipeLanguage,
@@ -52,6 +53,7 @@ const MENU_RANGE_STATE_KEY = "selectedMenuRange";
 const MENU_ADD_TO_MENU_PROMPT_KEY = "menuAddToMenuPromptEnabled";
 const ACTIVE_PRODUCTS_STORAGE_PREFIX = "activeProducts:";
 const PANTRY_STORAGE_KEY = "pantry";
+const PERSONAL_TAGS_HINT_SEEN_KEY = "recipes:personal-tags-hint-seen";
 
 const VISIBILITY_BADGE_META: Record<
   Exclude<RecipeVisibility, "private">,
@@ -77,6 +79,14 @@ function looksLikeUrl(value: string): boolean {
 
 function normalizeRecipeTitle(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function normalizePersonalTag(value: string): string {
+  return value.trim().replace(/\s+/g, " ");
+}
+
+function normalizePersonalTagKey(value: string): string {
+  return normalizePersonalTag(value).toLocaleLowerCase("ru-RU");
 }
 
 function normalizeRecipeLanguage(value: unknown): RecipeLanguage {
@@ -436,6 +446,11 @@ function RecipesPageContent() {
   const [openDislikeRecipeId, setOpenDislikeRecipeId] = useState<string | null>(null);
   const [selectedRecipeIds, setSelectedRecipeIds] = useState<Record<string, boolean>>({});
   const [publicAuthorProfiles, setPublicAuthorProfiles] = useState<Record<string, PublicAuthorProfile>>({});
+  const [selectedPersonalTagFilters, setSelectedPersonalTagFilters] = useState<string[]>([]);
+  const [personalTagEditorRecipeId, setPersonalTagEditorRecipeId] = useState<string | null>(null);
+  const [personalTagDraft, setPersonalTagDraft] = useState("");
+  const [savingPersonalTagsRecipeId, setSavingPersonalTagsRecipeId] = useState<string | null>(null);
+  const [showPersonalTagsHint, setShowPersonalTagsHint] = useState(false);
   const [isExportingRecipesPdf, setIsExportingRecipesPdf] = useState(false);
   const [profileGoal, setProfileGoal] = useState<ProfileGoal>("menu");
   const canUseAdvancedFilters = isPaidFeatureEnabled(planTier, "advanced_filters");
@@ -467,7 +482,17 @@ function RecipesPageContent() {
   useEffect(() => {
     if (viewMode === "mine") return;
     setSelectedRecipeIds({});
+    setSelectedPersonalTagFilters([]);
+    setPersonalTagEditorRecipeId(null);
+    setPersonalTagDraft("");
   }, [viewMode]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (viewMode !== "mine" || isLoading || recipes.length === 0) return;
+    if (localStorage.getItem(PERSONAL_TAGS_HINT_SEEN_KEY) === "1") return;
+    setShowPersonalTagsHint(true);
+  }, [isLoading, recipes.length, viewMode]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -850,6 +875,25 @@ function RecipesPageContent() {
     return map;
   }, [pantryProductNames, recipes]);
 
+  const personalTagFilterOptions = useMemo(() => {
+    if (viewMode !== "mine") return [] as Array<{ value: string; count: number }>;
+    const counts = new Map<string, { value: string; count: number }>();
+    recipes.forEach((recipe) => {
+      (recipe.personalTags || []).forEach((rawTag) => {
+        const tag = normalizePersonalTag(rawTag);
+        const key = normalizePersonalTagKey(tag);
+        if (!key) return;
+        const existing = counts.get(key);
+        if (existing) {
+          existing.count += 1;
+        } else {
+          counts.set(key, { value: tag, count: 1 });
+        }
+      });
+    });
+    return Array.from(counts.values()).sort((a, b) => b.count - a.count || a.value.localeCompare(b.value, "ru"));
+  }, [recipes, viewMode]);
+
   const filteredRecipes = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     const sortLocale = uiRecipeLanguage === "es" ? "es" : uiRecipeLanguage === "en" ? "en" : "ru";
@@ -868,6 +912,16 @@ function RecipesPageContent() {
       if (effectiveOnlyWithNotes && !item.notes?.trim()) return false;
       if (effectiveOnlyWithActiveProducts && (recipeActiveMatchMap.get(item.id)?.matchCount || 0) === 0) return false;
       if (effectiveOnlyFromPantry && !recipePantryCoverageMap.get(item.id)?.isFullyCovered) return false;
+      if (
+        viewMode === "mine" &&
+        selectedPersonalTagFilters.length > 0
+      ) {
+        const itemTagKeys = new Set((item.personalTags || []).map((tag) => normalizePersonalTagKey(tag)));
+        const passesPersonalTags = selectedPersonalTagFilters.every((tag) =>
+          itemTagKeys.has(normalizePersonalTagKey(tag))
+        );
+        if (!passesPersonalTags) return false;
+      }
       if (viewMode === "public" && (recipePreferenceMatchMap.get(item.id)?.allergyCount || 0) > 0) return false;
       if (!query) return true;
 
@@ -951,6 +1005,7 @@ function RecipesPageContent() {
     recipePantryCoverageMap,
     recipes,
     searchQuery,
+    selectedPersonalTagFilters,
     uiRecipeLanguage,
     viewMode,
   ]);
@@ -1355,6 +1410,77 @@ function RecipesPageContent() {
     }
   };
 
+  const markPersonalTagsHintSeen = () => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem(PERSONAL_TAGS_HINT_SEEN_KEY, "1");
+    }
+    setShowPersonalTagsHint(false);
+  };
+
+  const savePersonalTagsForRecipe = async (recipe: RecipeModel, nextTagsRaw: string[]) => {
+    const nextTags = Array.from(
+      new Set(
+        nextTagsRaw
+          .map((item) => normalizePersonalTag(item))
+          .filter((item) => item.length > 0)
+      )
+    );
+
+    setSavingPersonalTagsRecipeId(recipe.id);
+    try {
+      let savedTags = nextTags;
+      const canUseSupabaseMeta =
+        isSupabaseConfigured() &&
+        Boolean(currentUserId) &&
+        recipe.ownerId === currentUserId;
+
+      if (canUseSupabaseMeta) {
+        savedTags = await updateRecipePersonalTags(currentUserId as string, recipe.id, nextTags);
+      }
+
+      const applyUpdate = (item: RecipeModel): RecipeModel =>
+        item.id === recipe.id ? { ...item, personalTags: savedTags } : item;
+
+      setRecipes((prev) => prev.map(applyUpdate));
+
+      const localSnapshot = findRecipeInLocalCacheById(recipe.id);
+      if (localSnapshot) {
+        upsertRecipeInLocalCache({ ...localSnapshot, personalTags: savedTags });
+      } else {
+        upsertRecipeInLocalCache({ ...recipe, personalTags: savedTags });
+      }
+    } catch (error) {
+      const text = error instanceof Error ? error.message : t("recipes.personalTags.saveFailed");
+      setActionMessage(text);
+    } finally {
+      setSavingPersonalTagsRecipeId(null);
+    }
+  };
+
+  const handleSavePersonalTag = async (recipe: RecipeModel) => {
+    const nextTag = normalizePersonalTag(personalTagDraft);
+    if (!nextTag) return;
+    const current = recipe.personalTags || [];
+    const currentKeys = new Set(current.map((item) => normalizePersonalTagKey(item)));
+    const key = normalizePersonalTagKey(nextTag);
+    if (currentKeys.has(key)) {
+      setPersonalTagDraft("");
+      setPersonalTagEditorRecipeId(null);
+      markPersonalTagsHintSeen();
+      return;
+    }
+    await savePersonalTagsForRecipe(recipe, [...current, nextTag]);
+    setPersonalTagDraft("");
+    setPersonalTagEditorRecipeId(null);
+    markPersonalTagsHintSeen();
+  };
+
+  const handleRemovePersonalTag = async (recipe: RecipeModel, tagToRemove: string) => {
+    const removeKey = normalizePersonalTagKey(tagToRemove);
+    const next = (recipe.personalTags || []).filter((item) => normalizePersonalTagKey(item) !== removeKey);
+    await savePersonalTagsForRecipe(recipe, next);
+  };
+
   const accountNameView = currentUserName || t("recipes.account.guestName");
   const accountEmailView = currentUserEmail || t("recipes.account.tapToLogin");
   const accountInitial = accountNameView.charAt(0).toUpperCase() || "G";
@@ -1365,6 +1491,7 @@ function RecipesPageContent() {
     effectiveOnlyWithNotes ||
     effectiveOnlyWithActiveProducts ||
     effectiveOnlyFromPantry ||
+    (viewMode === "mine" && selectedPersonalTagFilters.length > 0) ||
     searchQuery.trim().length > 0;
   const showBlockingLoading = isLoading && recipes.length === 0;
   const isEmptyState = !isLoading && !hasAnyRecipes;
@@ -1618,6 +1745,55 @@ function RecipesPageContent() {
         </div>
       )}
 
+      {viewMode === "mine" && showPersonalTagsHint ? (
+        <div
+          className="card"
+          style={{
+            marginTop: "-4px",
+            marginBottom: "12px",
+            padding: "10px 12px",
+            background: "var(--background-secondary)",
+          }}
+        >
+          <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+            <span className="muted">
+              {t("recipes.personalTags.hintText")} {t("recipes.personalTags.hintArrow")}
+            </span>
+            <button type="button" className="btn" onClick={markPersonalTagsHintSeen}>
+              {t("recipes.personalTags.hintDone")}
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {viewMode === "mine" && personalTagFilterOptions.length > 0 ? (
+        <div className="recipes-filters-chips" style={{ marginTop: "-4px", marginBottom: "12px" }}>
+          <span className="muted" style={{ alignSelf: "center" }}>{t("recipes.personalTags.filterLabel")}</span>
+          {personalTagFilterOptions.map((item) => {
+            const active = selectedPersonalTagFilters.some(
+              (tag) => normalizePersonalTagKey(tag) === normalizePersonalTagKey(item.value)
+            );
+            return (
+              <button
+                key={item.value}
+                type="button"
+                className={`btn ${active ? "btn-primary" : ""}`.trim()}
+                onClick={() => {
+                  setSelectedPersonalTagFilters((prev) => {
+                    const key = normalizePersonalTagKey(item.value);
+                    const exists = prev.some((tag) => normalizePersonalTagKey(tag) === key);
+                    if (exists) return prev.filter((tag) => normalizePersonalTagKey(tag) !== key);
+                    return [...prev, item.value];
+                  });
+                }}
+              >
+                {item.value} ({item.count})
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+
       {hasAnyRecipes ? (
         <>
           <div className="recipes-filters-quick">
@@ -1714,6 +1890,7 @@ function RecipesPageContent() {
                     setOnlyWithActiveProducts(false);
                     setOnlyFromPantry(false);
                     setSelectedTags([]);
+                    setSelectedPersonalTagFilters([]);
                     setSearchQuery("");
                   }}
                 >
@@ -1883,6 +2060,7 @@ function RecipesPageContent() {
                   setOnlyWithActiveProducts(false);
                   setOnlyFromPantry(false);
                   setSelectedTags([]);
+                  setSelectedPersonalTagFilters([]);
                   setSearchQuery("");
                 }}
               >
@@ -2171,6 +2349,101 @@ function RecipesPageContent() {
                         </p>
                       ) : null;
                     })()}
+
+                    {isMineCard ? (
+                      <div style={{ marginTop: "10px", display: "grid", gap: "8px" }}>
+                        <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
+                          <strong>📝 {t("recipes.personalTags.noteLabel")}:</strong>{" "}
+                          {recipe.notes?.trim() ? recipe.notes.trim() : t("recipes.personalTags.noteEmpty")}
+                        </div>
+
+                        <div>
+                          <div style={{ fontSize: "12px", color: "var(--text-secondary)", marginBottom: "6px" }}>
+                            <strong>🏷 {t("recipes.personalTags.myTagsLabel")}:</strong>
+                          </div>
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+                            {(recipe.personalTags || []).map((tag) => (
+                              <span
+                                key={`${recipe.id}-${tag}`}
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: "4px",
+                                  border: "1px solid var(--border-default)",
+                                  borderRadius: "999px",
+                                  padding: "2px 8px",
+                                  fontSize: "12px",
+                                  background: "var(--background-secondary)",
+                                }}
+                              >
+                                {tag}
+                                <button
+                                  type="button"
+                                  className="btn"
+                                  style={{ padding: "0 4px", minHeight: "auto", lineHeight: 1 }}
+                                  aria-label={t("recipes.personalTags.removeTagAria", { tag })}
+                                  onClick={() => {
+                                    void handleRemovePersonalTag(recipe, tag);
+                                  }}
+                                  disabled={savingPersonalTagsRecipeId === recipe.id}
+                                >
+                                  ×
+                                </button>
+                              </span>
+                            ))}
+                            <button
+                              type="button"
+                              className={`btn ${showPersonalTagsHint ? "btn-primary" : ""}`.trim()}
+                              onClick={() => {
+                                setPersonalTagEditorRecipeId(recipe.id);
+                                setPersonalTagDraft("");
+                                markPersonalTagsHintSeen();
+                              }}
+                            >
+                              {t("recipes.personalTags.addTag")}
+                            </button>
+                          </div>
+                          {personalTagEditorRecipeId === recipe.id ? (
+                            <div style={{ marginTop: "8px", display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                              <input
+                                className="input"
+                                type="text"
+                                value={personalTagDraft}
+                                onChange={(event) => setPersonalTagDraft(event.target.value)}
+                                placeholder={t("recipes.personalTags.addPlaceholder")}
+                                style={{ maxWidth: "240px" }}
+                                onKeyDown={(event) => {
+                                  if (event.key === "Enter") {
+                                    event.preventDefault();
+                                    void handleSavePersonalTag(recipe);
+                                  }
+                                }}
+                              />
+                              <button
+                                type="button"
+                                className="btn btn-primary"
+                                onClick={() => {
+                                  void handleSavePersonalTag(recipe);
+                                }}
+                                disabled={savingPersonalTagsRecipeId === recipe.id}
+                              >
+                                {t("recipes.personalTags.addAction")}
+                              </button>
+                              <button
+                                type="button"
+                                className="btn"
+                                onClick={() => {
+                                  setPersonalTagEditorRecipeId(null);
+                                  setPersonalTagDraft("");
+                                }}
+                              >
+                                {t("recipes.personalTags.cancel")}
+                              </button>
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+                    ) : null}
 
                     <div style={{ marginTop: "10px", display: "flex", gap: "8px", flexWrap: "wrap" }}>
                       <button

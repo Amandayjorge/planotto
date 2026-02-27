@@ -61,8 +61,12 @@ create table if not exists public.recipe_notes (
   recipe_id uuid primary key references public.recipes(id) on delete cascade,
   owner_id uuid not null references auth.users(id) on delete cascade,
   notes text null,
+  personal_tags text[] not null default '{}',
   updated_at timestamptz not null default now()
 );
+
+alter table public.recipe_notes
+  add column if not exists personal_tags text[] not null default '{}';
 
 create index if not exists recipe_notes_owner_id_idx on public.recipe_notes(owner_id);
 

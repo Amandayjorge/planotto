@@ -659,6 +659,21 @@
       "confirm": "Sí",
       "later": "Después"
     },
+    "personalTags": {
+      "hintText": "Agrega etiquetas personales para encontrar rapido tus recetas.",
+      "hintArrow": "Usa el boton + Anadir etiqueta abajo.",
+      "hintDone": "Entendido",
+      "filterLabel": "Filtro por mis etiquetas:",
+      "noteLabel": "Nota personal",
+      "noteEmpty": "ninguna",
+      "myTagsLabel": "Mis etiquetas",
+      "addTag": "+ Anadir etiqueta",
+      "addPlaceholder": "Por ejemplo: cena",
+      "addAction": "Anadir",
+      "cancel": "Cancelar",
+      "removeTagAria": "Quitar etiqueta {{tag}}",
+      "saveFailed": "No se pudieron guardar las etiquetas personales."
+    },
     "guestReminder": {
       "text": "Ya añadiste varias recetas. Crea cuenta para no perderlas.",
       "createAccount": "Crear cuenta",
