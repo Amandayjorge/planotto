@@ -2495,60 +2495,78 @@ function RecipesPageContent() {
                             ))}
                             <button
                               type="button"
-                              className={`btn ${showPersonalTagsHint ? "btn-primary" : ""}`.trim()}
+                              className="btn"
+                              aria-label={t("recipes.personalTags.addTag")}
+                              title={t("recipes.personalTags.addTag")}
+                              style={{
+                                minHeight: "24px",
+                                lineHeight: 1.1,
+                                borderRadius: "999px",
+                                padding: "2px 9px",
+                                fontSize: "14px",
+                                fontWeight: 700,
+                                color: showPersonalTagsHint ? "var(--accent-primary)" : "var(--text-secondary)",
+                                borderColor: showPersonalTagsHint
+                                  ? "color-mix(in srgb, var(--accent-primary) 58%, var(--border-default) 42%)"
+                                  : "var(--border-default)",
+                                background: "var(--background-primary)",
+                              }}
                               onClick={() => {
                                 setPersonalTagEditorRecipeId(recipe.id);
                                 setPersonalTagDraft("");
                                 markPersonalTagsHintSeen();
                               }}
+                              disabled={savingPersonalTagsRecipeId === recipe.id}
                             >
-                              {t("recipes.personalTags.addTag")}
+                              +
                             </button>
                           </div>
                           {personalTagEditorRecipeId === recipe.id ? (
-                            <div style={{ marginTop: "8px", display: "flex", gap: "6px", flexWrap: "wrap" }}>
-                              <input
-                                className="input"
-                                type="text"
-                                value={personalTagDraft}
-                              onChange={(event) => setPersonalTagDraft(event.target.value)}
-                              placeholder={t("recipes.personalTags.addPlaceholder")}
-                              style={{ maxWidth: "240px" }}
-                              onKeyDown={(event) => {
-                                if (event.key === "Enter") {
+                            <div style={{ marginTop: "8px", display: "grid", gap: "6px" }}>
+                              <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                                <input
+                                  className="input"
+                                  type="text"
+                                  value={personalTagDraft}
+                                  onChange={(event) => setPersonalTagDraft(event.target.value)}
+                                  placeholder={t("recipes.personalTags.addPlaceholder")}
+                                  style={{ maxWidth: "240px" }}
+                                  onKeyDown={(event) => {
+                                    if (event.key === "Enter") {
                                     event.preventDefault();
                                     void handleSavePersonalTag(recipe);
-                                  }
-                                }}
-                              />
-                              <button
-                                type="button"
-                                className="btn btn-primary"
-                                onClick={() => {
-                                  void handleSavePersonalTag(recipe);
-                                }}
-                                disabled={savingPersonalTagsRecipeId === recipe.id}
-                              >
-                                {t("recipes.personalTags.addAction")}
-                              </button>
-                              <button
-                                type="button"
-                                className="btn"
-                                onClick={() => {
-                                  setPersonalTagEditorRecipeId(null);
-                                  setPersonalTagDraft("");
-                                }}
-                              >
-                                {t("recipes.personalTags.cancel")}
-                              </button>
+                                    }
+                                  }}
+                                />
+                                <button
+                                  type="button"
+                                  className="btn btn-primary"
+                                  onClick={() => {
+                                    void handleSavePersonalTag(recipe);
+                                  }}
+                                  disabled={savingPersonalTagsRecipeId === recipe.id}
+                                >
+                                  {t("recipes.personalTags.addAction")}
+                                </button>
+                                <button
+                                  type="button"
+                                  className="btn"
+                                  onClick={() => {
+                                    setPersonalTagEditorRecipeId(null);
+                                    setPersonalTagDraft("");
+                                  }}
+                                >
+                                  {t("recipes.personalTags.cancel")}
+                                </button>
+                              </div>
+                              <div className="muted" style={{ marginTop: "2px", fontSize: "12px" }}>
+                                {t("recipes.personalTags.bulkInputHint", {
+                                  max: PERSONAL_TAG_MAX_COUNT,
+                                  maxLength: PERSONAL_TAG_MAX_LENGTH,
+                                })}
+                              </div>
                             </div>
                           ) : null}
-                          <div className="muted" style={{ marginTop: "6px", fontSize: "12px" }}>
-                            {t("recipes.personalTags.bulkInputHint", {
-                              max: PERSONAL_TAG_MAX_COUNT,
-                              maxLength: PERSONAL_TAG_MAX_LENGTH,
-                            })}
-                          </div>
                         </div>
                       </div>
                     ) : null}
