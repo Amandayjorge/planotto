@@ -13,6 +13,7 @@ import {
   getCurrentUserId,
   getRecipeById,
   isRecipeHiddenByReport,
+  listMyRecipes,
   listRecipeAccessEmails,
   loadLocalRecipes,
   replaceRecipeAccessByEmail,
@@ -272,6 +273,7 @@ export default function RecipeDetailPage() {
   const [translationNotice, setTranslationNotice] = useState("");
   const [isCreatingTranslation, setIsCreatingTranslation] = useState(false);
   const [isExportingRecipePdf, setIsExportingRecipePdf] = useState(false);
+  const [alreadyInMine, setAlreadyInMine] = useState(false);
   const hasCoreInput = title.trim().length > 0 || ingredients.some((item) => item.name.trim().length > 0);
   const canUseAiTranslation = isPaidFeatureEnabled(planTier, "ai_translation");
   const canUseImageGeneration = isPaidFeatureEnabled(planTier, "image_generation");
@@ -397,6 +399,62 @@ export default function RecipeDetailPage() {
   useEffect(() => {
     loadRecipe();
   }, [recipeId, currentUserId, sharedTokenFromQuery, locale]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const checkAlreadyInMine = async () => {
+      if (!recipe) {
+        if (!cancelled) setAlreadyInMine(false);
+        return;
+      }
+
+      const isPublicNotOwned = recipe.visibility === "public" && (!currentUserId || recipe.ownerId !== currentUserId);
+      if (!isPublicNotOwned) {
+        if (!cancelled) setAlreadyInMine(false);
+        return;
+      }
+
+      const sourceTitleKey = normalizeRecipeTitle(recipe.title || "");
+      if (!sourceTitleKey) {
+        if (!cancelled) setAlreadyInMine(false);
+        return;
+      }
+
+      const existsLocal = loadLocalRecipes().some(
+        (item) =>
+          item.id !== recipe.id &&
+          normalizeRecipeTitle(item.title || "") === sourceTitleKey
+      );
+      if (existsLocal) {
+        if (!cancelled) setAlreadyInMine(true);
+        return;
+      }
+
+      if (!isSupabaseConfigured() || !currentUserId) {
+        if (!cancelled) setAlreadyInMine(false);
+        return;
+      }
+
+      try {
+        const mineRecipes = await listMyRecipes(currentUserId);
+        const existsInMine = mineRecipes.some(
+          (item) =>
+            item.id !== recipe.id &&
+            normalizeRecipeTitle(item.title || "") === sourceTitleKey
+        );
+        if (!cancelled) setAlreadyInMine(existsInMine);
+      } catch {
+        if (!cancelled) setAlreadyInMine(false);
+      }
+    };
+
+    void checkAlreadyInMine();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [recipe, currentUserId]);
 
   const addIngredient = () => {
     setIngredients((prev) => [
@@ -1171,8 +1229,10 @@ export default function RecipeDetailPage() {
   const displayInstructions = activeTranslation?.instructions || recipe.instructions || "";
   const recipeLinkView = looksLikeLink(displayDescription) ? normalizeLink(displayDescription) : "";
   const cookingText = displayInstructions || (recipeLinkView ? "" : displayDescription || "");
-  const showCopyButton = recipe.visibility === "public" && (!currentUserId || recipe.ownerId !== currentUserId);
-  const showReportButton = recipe.visibility === "public" && (!currentUserId || recipe.ownerId !== currentUserId);
+  const showPublicViewerActions = recipe.visibility === "public" && (!currentUserId || recipe.ownerId !== currentUserId);
+  const showCopyButton = showPublicViewerActions && !alreadyInMine;
+  const showAlreadyMineButton = showPublicViewerActions && alreadyInMine;
+  const showReportButton = showPublicViewerActions;
   const canChangeVisibility = Boolean(recipe.ownerId && currentUserId && recipe.ownerId === currentUserId);
   const recipeImage = resolveRecipeImage(recipe);
   const isMissingTranslation = !recipe.translations?.[contentLanguage] && contentLanguage !== baseLanguage;
@@ -1242,6 +1302,10 @@ export default function RecipeDetailPage() {
 
         {showCopyButton && (
           <button className="btn btn-primary" onClick={copyToMine}>{t("recipes.card.addToMine")}</button>
+        )}
+
+        {showAlreadyMineButton && (
+          <button className="btn" disabled>{t("recipes.card.alreadyMine")}</button>
         )}
 
         {showReportButton && !isEditing && (
