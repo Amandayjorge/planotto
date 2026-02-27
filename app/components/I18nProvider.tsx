@@ -44,11 +44,7 @@ const persistLocale = (locale: Locale) => {
 };
 
 export function I18nProvider({ children }: { children: ReactNode }) {
-  const [locale, setLocaleState] = useState<Locale>(() => {
-    if (typeof window === "undefined") return DEFAULT_LOCALE;
-    const stored = window.localStorage.getItem(LOCALE_STORAGE_KEY);
-    return isLocale(stored) ? stored : DEFAULT_LOCALE;
-  });
+  const [locale, setLocaleState] = useState<Locale>(DEFAULT_LOCALE);
 
   const setLocale = useCallback((nextLocale: Locale) => {
     setLocaleState(nextLocale);
@@ -58,6 +54,14 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     persistLocale(locale);
   }, [locale]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const stored = window.localStorage.getItem(LOCALE_STORAGE_KEY);
+    if (!isLocale(stored)) return;
+    setLocaleState((current) => (current === stored ? current : stored));
+    persistLocale(stored);
+  }, []);
 
   useEffect(() => {
     if (!isSupabaseConfigured()) return;
