@@ -927,6 +927,7 @@
       "recipeImport": "Recipe import by URL/photo is available in Pro plan.",
       "imageGeneration": "AI image generation is available in Pro plan.",
       "advancedFilters": "Advanced filters are available in Pro plan.",
+      "avatarFrames": "Avatar frames are available in Pro plan.",
       "pdfExport": "PDF export is available in Pro plan.",
       "pdfExportShort": "PDF is available in Pro."
     },

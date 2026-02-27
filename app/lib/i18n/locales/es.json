@@ -927,6 +927,7 @@
       "recipeImport": "La importacion por enlace/foto esta disponible en el plan Pro.",
       "imageGeneration": "La generacion de imagen con IA esta disponible en el plan Pro.",
       "advancedFilters": "Los filtros avanzados estan disponibles en el plan Pro.",
+      "avatarFrames": "Los marcos de avatar estan disponibles en el plan Pro.",
       "pdfExport": "La exportación a PDF está disponible en el plan Pro.",
       "pdfExportShort": "El PDF está disponible en Pro."
     },
