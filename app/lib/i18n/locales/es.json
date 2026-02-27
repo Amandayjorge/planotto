@@ -491,7 +491,11 @@
       "deleteMenu": "Eliminar menú",
       "addMenu": "+ Añadir menú",
       "periodTitle": "Período de planificación",
-      "periodPresetLabel": "Duración del período"
+      "periodPresetLabel": "Duración del período",
+      "planningDaysTitle": "Días para planificar",
+      "planningDaysPresetLabel": "Selección por días",
+      "planningDaysSelected": "Días seleccionados: {{count}} de {{total}}",
+      "planningDaysHelp": "Puedes elegir un preset o activar/desactivar días manualmente."
     },
     "goalHints": {
       "planning": "Objetivo: planificar menú. Elige período y añade platos con el botón +."

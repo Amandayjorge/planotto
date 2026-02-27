@@ -57,6 +57,7 @@ const DEFAULT_MENU_NAME_FALLBACK = "Main";
 const SYSTEM_MENU_NAME_ALIASES = new Set(["main", "основное", "principal"]);
 const MENU_SHOPPING_MERGE_KEY_PREFIX = "menuShoppingMerge";
 const MENU_ADD_TO_MENU_PROMPT_KEY = "menuAddToMenuPromptEnabled";
+const MENU_PLANNING_DAYS_KEY_PREFIX = "menuPlanningDays";
 const DAY_STRUCTURE_MODE_KEY = "menuDayStructureMode";
 const MEAL_STRUCTURE_SETTINGS_KEY = "menuMealStructureSettings";
 const MEAL_STRUCTURE_DEFAULT_SETTINGS_KEY = "menuMealStructureDefaults";
@@ -65,6 +66,7 @@ type MealType = (typeof DEFAULT_DAY_MEAL_KEYS)[number];
 const MEAL_TYPE_INDEX: Record<MealType, number> = { breakfast: 0, lunch: 1, dinner: 2 };
 const RECIPE_CATEGORY_FILTER_ALL = "__all__";
 type DayStructureMode = "list" | "meals";
+type PlanDaysPreference = "all" | "weekdays" | "weekends";
 
 const normalizeMealAlias = (value: string): string =>
   value
@@ -547,6 +549,48 @@ const buildDayKeys = (startRaw: string, endRaw: string): string[] => {
     list.push(formatDate(d));
   }
   return list;
+};
+
+const normalizePlanDaysPreference = (value: unknown): PlanDaysPreference => {
+  if (value === "weekdays") return "weekdays";
+  if (value === "weekends") return "weekends";
+  return "all";
+};
+
+const isWeekendDayKey = (dayKey: string): boolean => {
+  const date = parseDateSafe(dayKey);
+  if (!date) return false;
+  const day = date.getDay();
+  return day === 0 || day === 6;
+};
+
+const buildPlanningDaysByPreset = (dayKeys: string[], preset: PlanDaysPreference): string[] => {
+  if (preset === "weekdays") {
+    const weekdays = dayKeys.filter((dayKey) => !isWeekendDayKey(dayKey));
+    return weekdays.length > 0 ? weekdays : [...dayKeys];
+  }
+  if (preset === "weekends") {
+    const weekends = dayKeys.filter((dayKey) => isWeekendDayKey(dayKey));
+    return weekends.length > 0 ? weekends : [...dayKeys];
+  }
+  return [...dayKeys];
+};
+
+const normalizePlanningDayKeys = (value: unknown, dayKeys: string[]): string[] => {
+  if (!Array.isArray(value)) return [];
+  const allowed = new Set(dayKeys);
+  const selected = new Set<string>();
+  for (const raw of value) {
+    if (typeof raw === "string" && allowed.has(raw)) {
+      selected.add(raw);
+    }
+  }
+  return dayKeys.filter((dayKey) => selected.has(dayKey));
+};
+
+const areDayKeyListsEqual = (left: string[], right: string[]): boolean => {
+  if (left.length !== right.length) return false;
+  return left.every((dayKey, index) => dayKey === right[index]);
 };
 
 const getRangeDisplay = (startRaw: string, endRaw: string, locale?: string): string => {
@@ -1207,6 +1251,7 @@ function MenuPageContent() {
   const [mergeShoppingWithAllMenus, setMergeShoppingWithAllMenus] = useState(false);
   const [showAddRecipePromptInRecipes, setShowAddRecipePromptInRecipes] = useState(true);
   const [profileGoal, setProfileGoal] = useState<ProfileGoal>("menu");
+  const [profilePlanDaysPreference, setProfilePlanDaysPreference] = useState<PlanDaysPreference>("all");
   const [showMealSettingsDialog, setShowMealSettingsDialog] = useState(false);
   const [newMealSlotName, setNewMealSlotName] = useState("");
   const [saveMealSlotsAsDefault, setSaveMealSlotsAsDefault] = useState(false);
@@ -1218,6 +1263,7 @@ function MenuPageContent() {
   const [weekStart, setWeekStart] = useState<string>(() => initialRangeStart);
   const [periodEnd, setPeriodEnd] = useState<string>(() => initialRangeEnd);
   const [periodPreset, setPeriodPreset] = useState<PeriodPreset>("7d");
+  const [planningDayKeys, setPlanningDayKeys] = useState<string[]>([]);
   const [customStartInput, setCustomStartInput] = useState<string>(() => initialRangeStart);
   const [customEndInput, setCustomEndInput] = useState<string>(() => initialRangeEnd);
 
@@ -1325,6 +1371,7 @@ function MenuPageContent() {
 
   const rangeKey = `${weekStart}__${periodEnd}`;
   const periodDays = getRangeLengthDays(weekStart, periodEnd);
+  const planningDaysStorageKey = `${MENU_PLANNING_DAYS_KEY_PREFIX}:${rangeKey}`;
   const dayKeys = useMemo(() => buildDayKeys(weekStart, periodEnd), [weekStart, periodEnd]);
   const dayEntries = useMemo(
     () =>
@@ -1341,6 +1388,17 @@ function MenuPageContent() {
         .filter((entry): entry is { dateKey: string; dayLabel: string; displayDate: string } => Boolean(entry)),
     [dayKeys, locale]
   );
+  const defaultPlanningDayKeys = useMemo(
+    () => buildPlanningDaysByPreset(dayKeys, profilePlanDaysPreference),
+    [dayKeys, profilePlanDaysPreference]
+  );
+  const visibleDayEntries = useMemo(() => {
+    const selected = new Set(planningDayKeys);
+    const filtered = dayEntries.filter((entry) => selected.has(entry.dateKey));
+    return filtered.length > 0 ? filtered : dayEntries;
+  }, [dayEntries, planningDayKeys]);
+  const visibleDayKeys = useMemo(() => visibleDayEntries.map((entry) => entry.dateKey), [visibleDayEntries]);
+  const visibleDayCount = visibleDayEntries.length;
   const activeLocale = resolveIntlLocale(locale);
   const getMenuDisplayName = useCallback(
     (rawName: string): string => {
@@ -1703,6 +1761,37 @@ function MenuPageContent() {
     }
   };
 
+  const applyPlanningDaysPreset = useCallback(
+    (preset: PlanDaysPreference) => {
+      setPlanningDayKeys(buildPlanningDaysByPreset(dayKeys, preset));
+    },
+    [dayKeys]
+  );
+
+  const togglePlanningDay = useCallback(
+    (dayKey: string) => {
+      setPlanningDayKeys((prev) => {
+        const hasDay = prev.includes(dayKey);
+        if (hasDay) {
+          const next = prev.filter((key) => key !== dayKey);
+          if (next.length === 0) return prev;
+          return dayKeys.filter((key) => next.includes(key));
+        }
+        const nextSet = new Set(prev);
+        nextSet.add(dayKey);
+        return dayKeys.filter((key) => nextSet.has(key));
+      });
+    },
+    [dayKeys]
+  );
+
+  const isPlanningPresetActive = useCallback(
+    (preset: PlanDaysPreference): boolean => {
+      return areDayKeyListsEqual(planningDayKeys, buildPlanningDaysByPreset(dayKeys, preset));
+    },
+    [dayKeys, planningDayKeys]
+  );
+
   const shiftPeriod = (direction: -1 | 1) => {
     const parsedStart = parseDateSafe(weekStart);
     const parsedEnd = parseDateSafe(periodEnd);
@@ -1963,7 +2052,7 @@ function MenuPageContent() {
 
       const data = await getMenuSuggestion({
         peopleCount,
-        days: Math.max(1, periodDays),
+        days: Math.max(1, visibleDayCount || periodDays),
         constraints: composedConstraints,
         newDishPercent: 40,
         recipes: recipes.map((recipe) => recipe.title).slice(0, 120),
@@ -1983,7 +2072,7 @@ function MenuPageContent() {
         })
       );
     }
-  }, [activeProducts, cellPeopleCount, pantry.length, periodDays, recipes, t]);
+  }, [activeProducts, cellPeopleCount, pantry.length, periodDays, recipes, t, visibleDayCount]);
 
   const ensureArray = (items: MenuItem | MenuItem[] | undefined): MenuItem[] => {
     if (!items) return [];
@@ -2277,6 +2366,59 @@ function MenuPageContent() {
       isMounted = false;
     };
   }, []);
+
+  useEffect(() => {
+    let isCancelled = false;
+    if (!authResolved) return () => { isCancelled = true; };
+    if (!currentUserId || !isSupabaseConfigured()) {
+      setProfilePlanDaysPreference("all");
+      return () => {
+        isCancelled = true;
+      };
+    }
+
+    const supabase = getSupabaseClient();
+    supabase.auth.getUser()
+      .then(({ data, error }) => {
+        if (isCancelled || error) return;
+        const metadata = (data.user?.user_metadata || {}) as Record<string, unknown>;
+        const preference = normalizePlanDaysPreference(resolveUserMetaValue(metadata, "plan_days", "all"));
+        setProfilePlanDaysPreference(preference);
+      })
+      .catch(() => {
+        if (!isCancelled) {
+          setProfilePlanDaysPreference("all");
+        }
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [authResolved, currentUserId]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const stored = window.localStorage.getItem(planningDaysStorageKey);
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        const normalized = normalizePlanningDayKeys(parsed, dayKeys);
+        if (normalized.length > 0) {
+          setPlanningDayKeys(normalized);
+          return;
+        }
+      } catch {
+        // ignore broken selected planning days
+      }
+    }
+    setPlanningDayKeys(defaultPlanningDayKeys);
+  }, [dayKeys, defaultPlanningDayKeys, planningDaysStorageKey]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (planningDayKeys.length === 0) return;
+    window.localStorage.setItem(planningDaysStorageKey, JSON.stringify(planningDayKeys));
+  }, [planningDayKeys, planningDaysStorageKey]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -2614,11 +2756,12 @@ function MenuPageContent() {
 
     const todayKey = formatDate(new Date());
     const tomorrowKey = formatDate(addDays(new Date(), 1));
-    const selectedDay = dayKeys.includes(tomorrowKey)
+    const candidateDayKeys = visibleDayKeys.length > 0 ? visibleDayKeys : dayKeys;
+    const selectedDay = candidateDayKeys.includes(tomorrowKey)
       ? tomorrowKey
-      : dayKeys.includes(todayKey)
+      : candidateDayKeys.includes(todayKey)
         ? todayKey
-        : dayKeys[0];
+        : candidateDayKeys[0];
     if (!selectedDay) return;
 
     const preferredMealType = resolvePreferredMealTypeForRecipe(selectedRecipe, mealFromQuery);
@@ -2643,7 +2786,7 @@ function MenuPageContent() {
     });
 
     router.replace("/menu");
-  }, [activeLocale, dayKeys, defaultDayMeals, getAllMealsForDay, hasLoaded, locale, recipes, router, searchParams, t]);
+  }, [activeLocale, dayKeys, defaultDayMeals, getAllMealsForDay, hasLoaded, locale, recipes, router, searchParams, t, visibleDayKeys]);
 
   const handleSelectMenuProfile = (menuId: string) => {
     if (!menuId || menuId === activeMenuId) return;
@@ -2768,7 +2911,7 @@ function MenuPageContent() {
     (template: DemoMenuTemplate): Record<string, MenuItem[]> => {
       const nextMealData: Record<string, MenuItem[]> = {};
 
-      dayKeys.forEach((dayKey, dayIndex) => {
+      visibleDayKeys.forEach((dayKey, dayIndex) => {
         const dayMeals = getDayMeals(dayKey);
         (["breakfast", "lunch", "dinner"] as const).forEach((mealType) => {
           const options = template.meals[mealType];
@@ -2792,7 +2935,7 @@ function MenuPageContent() {
 
       return nextMealData;
     },
-    [dayKeys, defaultDayMeals, getDayMeals]
+    [defaultDayMeals, getDayMeals, visibleDayKeys]
   );
 
   const applyDemoMenuTemplate = (templateId: DemoMenuTemplateId) => {
@@ -3446,7 +3589,7 @@ function MenuPageContent() {
               className="move-dialog-select"
             >
               <option value="">{t("menu.moveDialog.choose")}</option>
-              {dayEntries.map((dayEntry) => (
+              {visibleDayEntries.map((dayEntry) => (
                 <option key={dayEntry.dateKey} value={dayEntry.dateKey}>
                   {dayEntry.dayLabel} {dayEntry.displayDate}
                 </option>
@@ -3812,7 +3955,7 @@ function MenuPageContent() {
       defaultMenuName ||
       t("menu.fallback.defaultMenuName");
 
-    const days = dayEntries.map((dayEntry) => {
+    const days = visibleDayEntries.map((dayEntry) => {
       const meals = getDayMeals(dayEntry.dateKey).map((meal) => {
         const cellKey = getCellKey(dayEntry.dateKey, meal);
         const dishes = (mealData[cellKey] || [])
@@ -3856,7 +3999,7 @@ function MenuPageContent() {
       defaultMenuName ||
       t("menu.fallback.defaultMenuName");
 
-    const days = dayEntries.map((dayEntry) => {
+    const days = visibleDayEntries.map((dayEntry) => {
       const meals = getDayMeals(dayEntry.dateKey).map((meal) => {
         const cellKey = getCellKey(dayEntry.dateKey, meal);
         const dishes = (mealData[cellKey] || [])
@@ -3872,7 +4015,7 @@ function MenuPageContent() {
     });
 
     const recipesUsageMap = new Map<string, { recipe: Recipe; usedIn: Set<string> }>();
-    dayEntries.forEach((dayEntry) => {
+    visibleDayEntries.forEach((dayEntry) => {
       const dayKeyLabel = `${dayEntry.dayLabel} ${dayEntry.displayDate}`.trim();
       getDayMeals(dayEntry.dateKey).forEach((meal) => {
         const cellKey = getCellKey(dayEntry.dateKey, meal);
@@ -4272,7 +4415,7 @@ function MenuPageContent() {
       )}
 
       <div className="menu-board">
-        {dayEntries.map((dayEntry) => {
+        {visibleDayEntries.map((dayEntry) => {
           const dayMeals = getDayMeals(dayEntry.dateKey);
           const allDayMeals = getAllMealsForDay(dayEntry.dateKey);
           const dayListEntries = getDayListEntries(dayEntry.dateKey);
@@ -4524,6 +4667,65 @@ function MenuPageContent() {
                   </div>
                 </div>
               ) : null}
+            </div>
+
+            <div
+              style={{
+                marginTop: "10px",
+                border: "1px solid var(--border-default)",
+                borderRadius: "10px",
+                padding: "10px",
+                display: "grid",
+                gap: "8px",
+              }}
+            >
+              <strong style={{ fontSize: "14px" }}>{t("menu.settings.planningDaysTitle")}</strong>
+              <span className="muted" style={{ fontSize: "13px" }}>
+                {t("menu.settings.planningDaysSelected", { count: planningDayKeys.length, total: dayKeys.length })}
+              </span>
+              <span style={{ fontSize: "13px" }}>{t("menu.settings.planningDaysPresetLabel")}</span>
+              <div
+                role="group"
+                aria-label={t("menu.settings.planningDaysPresetLabel")}
+                style={{
+                  display: "inline-flex",
+                  border: "1px solid var(--border-default)",
+                  borderRadius: "999px",
+                  padding: "2px",
+                  width: "fit-content",
+                }}
+              >
+                {(["weekdays", "weekends", "all"] as const).map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    className={isPlanningPresetActive(preset) ? "btn btn-primary" : "btn"}
+                    style={{ padding: "4px 10px", fontSize: "12px", minHeight: "30px" }}
+                    onClick={() => applyPlanningDaysPreset(preset)}
+                  >
+                    {t(`auth.options.planDays.${preset}`)}
+                  </button>
+                ))}
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+                {dayEntries.map((dayEntry) => {
+                  const isSelected = planningDayKeys.includes(dayEntry.dateKey);
+                  return (
+                    <button
+                      key={dayEntry.dateKey}
+                      type="button"
+                      className={isSelected ? "btn btn-primary" : "btn"}
+                      style={{ padding: "4px 10px", fontSize: "12px", minHeight: "30px" }}
+                      onClick={() => togglePlanningDay(dayEntry.dateKey)}
+                    >
+                      {dayEntry.dayLabel} {dayEntry.displayDate}
+                    </button>
+                  );
+                })}
+              </div>
+              <span className="muted" style={{ fontSize: "12px" }}>
+                {t("menu.settings.planningDaysHelp")}
+              </span>
             </div>
 
             <label style={{ marginTop: "10px", display: "inline-flex", alignItems: "center", gap: "8px" }}>

@@ -491,7 +491,11 @@
       "deleteMenu": "Удалить меню",
       "addMenu": "+ Добавить меню",
       "periodTitle": "Период планирования",
-      "periodPresetLabel": "Длительность периода"
+      "periodPresetLabel": "Длительность периода",
+      "planningDaysTitle": "Дни для планирования",
+      "planningDaysPresetLabel": "Выбор по дням",
+      "planningDaysSelected": "Выбрано дней: {{count}} из {{total}}",
+      "planningDaysHelp": "Можно выбрать шаблон или вручную включать/выключать отдельные дни."
     },
     "goalHints": {
       "planning": "Цель: планировать меню. Выберите период и добавляйте блюда кнопкой +."

@@ -491,7 +491,11 @@
       "deleteMenu": "Delete menu",
       "addMenu": "+ Add menu",
       "periodTitle": "Planning period",
-      "periodPresetLabel": "Period length"
+      "periodPresetLabel": "Period length",
+      "planningDaysTitle": "Days to plan",
+      "planningDaysPresetLabel": "Default by days",
+      "planningDaysSelected": "{{count}} of {{total}} days selected",
+      "planningDaysHelp": "You can switch presets or toggle specific days manually."
     },
     "goalHints": {
       "planning": "Goal: menu planning. Select period and add dishes with the + button."
