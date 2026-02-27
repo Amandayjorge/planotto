@@ -390,7 +390,6 @@ function RecipesPageContent() {
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<SortOption>("newest");
   const [onlyWithPhoto, setOnlyWithPhoto] = useState(false);
-  const [onlyWithoutPhoto, setOnlyWithoutPhoto] = useState(false);
   const [onlyWithNotes, setOnlyWithNotes] = useState(false);
   const [onlyWithActiveProducts, setOnlyWithActiveProducts] = useState(false);
   const [onlyFromPantry, setOnlyFromPantry] = useState(false);
@@ -422,7 +421,6 @@ function RecipesPageContent() {
   const canUsePdfExport = isPaidFeatureEnabled(planTier, "pdf_export");
   const effectiveSelectedTags = canUseAdvancedFilters ? selectedTags : [];
   const effectiveOnlyWithPhoto = canUseAdvancedFilters ? onlyWithPhoto : false;
-  const effectiveOnlyWithoutPhoto = canUseAdvancedFilters ? onlyWithoutPhoto : false;
   const effectiveOnlyWithNotes = canUseAdvancedFilters ? onlyWithNotes : false;
   const effectiveOnlyWithActiveProducts = canUseAdvancedFilters ? onlyWithActiveProducts : false;
   const effectiveOnlyFromPantry = canUseAdvancedFilters ? onlyFromPantry : false;
@@ -439,7 +437,6 @@ function RecipesPageContent() {
       setSortBy("newest");
     }
     setOnlyWithPhoto(false);
-    setOnlyWithoutPhoto(false);
     setOnlyWithNotes(false);
     setOnlyWithActiveProducts(false);
     setOnlyFromPantry(false);
@@ -837,7 +834,6 @@ function RecipesPageContent() {
       if (!passesTags) return false;
       const hasPhoto = Boolean(resolveRecipeCardImage(item));
       if (effectiveOnlyWithPhoto && !hasPhoto) return false;
-      if (effectiveOnlyWithoutPhoto && hasPhoto) return false;
       if (effectiveOnlyWithNotes && !item.notes?.trim()) return false;
       if (effectiveOnlyWithActiveProducts && (recipeActiveMatchMap.get(item.id)?.matchCount || 0) === 0) return false;
       if (effectiveOnlyFromPantry && !recipePantryCoverageMap.get(item.id)?.isFullyCovered) return false;
@@ -917,7 +913,6 @@ function RecipesPageContent() {
     effectiveOnlyWithActiveProducts,
     effectiveOnlyWithNotes,
     effectiveOnlyWithPhoto,
-    effectiveOnlyWithoutPhoto,
     effectiveSelectedTags,
     effectiveSortBy,
     recipeActiveMatchMap,
@@ -1290,7 +1285,6 @@ function RecipesPageContent() {
   const hasActiveFilters =
     effectiveSelectedTags.length > 0 ||
     effectiveOnlyWithPhoto ||
-    effectiveOnlyWithoutPhoto ||
     effectiveOnlyWithNotes ||
     effectiveOnlyWithActiveProducts ||
     effectiveOnlyFromPantry ||
@@ -1564,20 +1558,9 @@ function RecipesPageContent() {
                 className={`btn ${onlyWithPhoto ? "btn-primary" : ""}`}
                 onClick={() => {
                   setOnlyWithPhoto((prev) => !prev);
-                  setOnlyWithoutPhoto(false);
                 }}
               >
                 {t("recipes.filters.withPhoto")}
-              </button>
-              <button
-                type="button"
-                className={`btn ${onlyWithoutPhoto ? "btn-primary" : ""}`}
-                onClick={() => {
-                  setOnlyWithoutPhoto((prev) => !prev);
-                  setOnlyWithPhoto(false);
-                }}
-              >
-                {t("recipes.filters.withoutPhoto")}
               </button>
               <button
                 type="button"
@@ -1618,7 +1601,6 @@ function RecipesPageContent() {
                   className="btn"
                   onClick={() => {
                     setOnlyWithPhoto(false);
-                    setOnlyWithoutPhoto(false);
                     setOnlyWithNotes(false);
                     setOnlyWithActiveProducts(false);
                     setOnlyFromPantry(false);
@@ -1804,7 +1786,6 @@ function RecipesPageContent() {
                 className="btn"
                 onClick={() => {
                   setOnlyWithPhoto(false);
-                  setOnlyWithoutPhoto(false);
                   setOnlyWithNotes(false);
                   setOnlyWithActiveProducts(false);
                   setOnlyFromPantry(false);
