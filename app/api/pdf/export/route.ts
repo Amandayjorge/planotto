@@ -174,10 +174,7 @@ const getBaseDoc = (content: unknown[]): Record<string, unknown> => ({
     coverTitle: { fontSize: 28, bold: true, alignment: "center", margin: [0, 260, 0, 0] },
   },
   footer: (currentPage: number, pageCount: number) => ({
-    columns: [
-      { text: "Создано в Planotto", alignment: "left" },
-      { text: `Стр. ${currentPage} / ${pageCount}`, alignment: "right" },
-    ],
+    columns: [{ text: `Стр. ${currentPage} / ${pageCount}`, alignment: "right" }],
     margin: [42, 0, 42, 16],
     fontSize: 8,
     color: "#666666",
