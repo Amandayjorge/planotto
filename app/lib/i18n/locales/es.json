@@ -659,7 +659,7 @@
       "addToMineHint": "El boton \"Anadir a las mias\" esta en la pestana \"Biblioteca de recetas\"."
     },
     "addToMenuPrompt": {
-      "title": "¿Añadir al menú?",
+      "title": "Receta añadida. ¿Añadir al menú?",
       "confirm": "Sí",
       "later": "Después"
     },

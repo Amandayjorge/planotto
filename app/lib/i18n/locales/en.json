@@ -659,7 +659,7 @@
       "addToMineHint": "The \"Add to mine\" button is available in the \"Recipe library\" tab."
     },
     "addToMenuPrompt": {
-      "title": "Add to menu?",
+      "title": "Recipe added. Add to menu?",
       "confirm": "Yes",
       "later": "Later"
     },
