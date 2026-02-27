@@ -1744,24 +1744,30 @@ function RecipesPageContent() {
           ) : null}
         </div>
       ) : null}
-      {viewMode === "mine" ? (
-        <div
-          className="card"
-          style={{
-            marginTop: "-4px",
-            marginBottom: "12px",
-            padding: "10px 12px",
-            background: "var(--background-secondary)",
-          }}
-        >
-          <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
-            <span className="muted">{t("recipes.actions.addToMineHint")}</span>
-            <button type="button" className="btn" onClick={() => setViewMode("public")}>
-              {t("recipes.actions.goToPublic")}
-            </button>
-          </div>
+      <div
+        className="card"
+        style={{
+          marginTop: "-4px",
+          marginBottom: "12px",
+          padding: "10px 12px",
+          background: "var(--background-secondary)",
+        }}
+      >
+        <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+          <span className="muted">
+            {viewMode === "mine"
+              ? t("recipes.tabHints.mine")
+              : t("recipes.tabHints.public")}
+          </span>
+          <button
+            type="button"
+            className="btn"
+            onClick={() => setViewMode(viewMode === "mine" ? "public" : "mine")}
+          >
+            {viewMode === "mine" ? t("recipes.actions.goToPublic") : t("recipes.actions.goToMine")}
+          </button>
         </div>
-      ) : null}
+      </div>
 
       {profileGoal !== "menu" ? (
         <div

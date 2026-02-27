@@ -622,6 +622,10 @@
       "mine": "Mine",
       "public": "Recipe library"
     },
+    "tabHints": {
+      "mine": "Mine: your recipes, personal tags, and personal notes.",
+      "public": "Library: public recipes. Use \"Add to mine\" to copy a recipe."
+    },
     "sort": {
       "newest": "Newest",
       "oldest": "Oldest",

@@ -622,6 +622,10 @@
       "mine": "Mías",
       "public": "Biblioteca de recetas"
     },
+    "tabHints": {
+      "mine": "Mias: tus recetas, tus etiquetas personales y tus notas.",
+      "public": "Biblioteca: recetas publicas. Usa \"Anadir a las mias\" para copiar una receta."
+    },
     "sort": {
       "newest": "Nuevas",
       "oldest": "Antiguas",
