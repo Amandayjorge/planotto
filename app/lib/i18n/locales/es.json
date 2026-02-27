@@ -476,12 +476,22 @@
     "meals": {
       "breakfast": "Desayuno",
       "lunch": "Comida",
-      "dinner": "Cena"
+      "dinner": "Cena",
+      "snack": "Snack"
     },
     "settings": {
       "title": "Ajustes del menú",
       "dayStructure": "Estructura del día",
       "configureMeals": "Configurar comidas",
+      "mealsPerDayTitle": "Comidas por día",
+      "mealsPerDayCurrent": "Desde perfil: {{value}}",
+      "twoMealsChoiceLabel": "Para 1-2 comidas, mostrar",
+      "applyMealsPreset": "Aplicar a este menú",
+      "twoMealsOptions": {
+        "breakfastLunch": "Desayuno + Comida",
+        "lunchDinner": "Comida + Cena",
+        "breakfastDinner": "Desayuno + Cena"
+      },
       "mergeMenusForShopping": "Unificar todos los menús en una lista de compras",
       "showAddRecipePrompt": "Mostrar sugerencia para añadir receta al menú",
       "activeProducts": "Productos activos",

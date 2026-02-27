@@ -476,12 +476,22 @@
     "meals": {
       "breakfast": "Завтрак",
       "lunch": "Обед",
-      "dinner": "Ужин"
+      "dinner": "Ужин",
+      "snack": "Перекус"
     },
     "settings": {
       "title": "Настройки меню",
       "dayStructure": "Структура дня",
       "configureMeals": "Настроить приемы",
+      "mealsPerDayTitle": "Приемов пищи в день",
+      "mealsPerDayCurrent": "Из анкеты: {{value}}",
+      "twoMealsChoiceLabel": "Для режима 1-2 показывать",
+      "applyMealsPreset": "Применить к этому меню",
+      "twoMealsOptions": {
+        "breakfastLunch": "Завтрак + Обед",
+        "lunchDinner": "Обед + Ужин",
+        "breakfastDinner": "Завтрак + Ужин"
+      },
       "mergeMenusForShopping": "Объединять все меню в один список покупок",
       "showAddRecipePrompt": "Показывать предложение добавить рецепт в меню",
       "activeProducts": "Активные продукты",

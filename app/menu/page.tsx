@@ -58,15 +58,19 @@ const SYSTEM_MENU_NAME_ALIASES = new Set(["main", "основное", "principal
 const MENU_SHOPPING_MERGE_KEY_PREFIX = "menuShoppingMerge";
 const MENU_ADD_TO_MENU_PROMPT_KEY = "menuAddToMenuPromptEnabled";
 const MENU_PLANNING_DAYS_KEY_PREFIX = "menuPlanningDays";
+const MENU_TWO_MEALS_MODE_KEY = "menuTwoMealsMode";
 const DAY_STRUCTURE_MODE_KEY = "menuDayStructureMode";
 const MEAL_STRUCTURE_SETTINGS_KEY = "menuMealStructureSettings";
 const MEAL_STRUCTURE_DEFAULT_SETTINGS_KEY = "menuMealStructureDefaults";
 const DEFAULT_DAY_MEAL_KEYS = ["breakfast", "lunch", "dinner"] as const;
+const DEFAULT_SNACK_MEAL_ID = "default-snack";
 type MealType = (typeof DEFAULT_DAY_MEAL_KEYS)[number];
 const MEAL_TYPE_INDEX: Record<MealType, number> = { breakfast: 0, lunch: 1, dinner: 2 };
 const RECIPE_CATEGORY_FILTER_ALL = "__all__";
 type DayStructureMode = "list" | "meals";
 type PlanDaysPreference = "all" | "weekdays" | "weekends";
+type MealsPerDayPreference = "1-2" | "3" | "4+" | "variable";
+type TwoMealsMode = "breakfast_lunch" | "lunch_dinner" | "breakfast_dinner";
 
 const normalizeMealAlias = (value: string): string =>
   value
@@ -95,9 +99,14 @@ const resolveDefaultMealTypeByName = (value: string): MealType | null => {
 
 const localizeDefaultMealSlots = (
   slots: MealSlotSetting[],
-  defaultMealLabels: readonly string[]
+  defaultMealLabels: readonly string[],
+  snackLabel: string
 ): MealSlotSetting[] =>
   slots.map((slot) => {
+    if (slot.id === DEFAULT_SNACK_MEAL_ID) {
+      if (slot.name === snackLabel) return slot;
+      return { ...slot, name: snackLabel };
+    }
     if (!slot.id.startsWith("default-")) return slot;
     const rawIndex = Number(slot.id.slice("default-".length));
     if (!Number.isInteger(rawIndex) || rawIndex < 0 || rawIndex >= DEFAULT_DAY_MEAL_KEYS.length) {
@@ -126,6 +135,61 @@ const createDefaultMealSlots = (defaultMealLabels: readonly string[]): MealSlotS
     visible: true,
     order: index,
   }));
+
+const normalizeMealsPerDayPreference = (value: unknown): MealsPerDayPreference => {
+  if (value === "1-2") return "1-2";
+  if (value === "4+") return "4+";
+  if (value === "variable") return "variable";
+  return "3";
+};
+
+const normalizeTwoMealsMode = (value: unknown): TwoMealsMode => {
+  if (value === "lunch_dinner") return "lunch_dinner";
+  if (value === "breakfast_dinner") return "breakfast_dinner";
+  return "breakfast_lunch";
+};
+
+const buildMealSlotsByMealsPerDay = (
+  defaultMealLabels: readonly string[],
+  snackLabel: string,
+  mealsPerDay: MealsPerDayPreference,
+  twoMealsMode: TwoMealsMode
+): MealSlotSetting[] => {
+  const coreSlots = createDefaultMealSlots(defaultMealLabels);
+  const snackSlot: MealSlotSetting = {
+    id: DEFAULT_SNACK_MEAL_ID,
+    name: snackLabel,
+    visible: false,
+    order: coreSlots.length,
+  };
+  const slots = [...coreSlots, snackSlot];
+
+  if (mealsPerDay === "variable") {
+    return slots.map((slot, index) => ({ ...slot, visible: true, order: index }));
+  }
+  if (mealsPerDay === "4+") {
+    return slots.map((slot, index) => ({ ...slot, visible: true, order: index }));
+  }
+  if (mealsPerDay === "1-2") {
+    const visibleIds =
+      twoMealsMode === "lunch_dinner"
+        ? new Set(["default-1", "default-2"])
+        : twoMealsMode === "breakfast_dinner"
+          ? new Set(["default-0", "default-2"])
+          : new Set(["default-0", "default-1"]);
+    return slots.map((slot, index) => ({
+      ...slot,
+      visible: visibleIds.has(slot.id),
+      order: index,
+    }));
+  }
+
+  return slots.map((slot, index) => ({
+    ...slot,
+    visible: slot.id !== DEFAULT_SNACK_MEAL_ID,
+    order: index,
+  }));
+};
 
 const normalizeMealSlotName = (value: string): string => value.trim().replace(/\s+/g, " ");
 const normalizeMenuProfileName = (value: string): string => value.trim().replace(/\s+/g, " ");
@@ -177,26 +241,34 @@ const parseMealSlots = (raw: string | null): MealSlotSetting[] | null => {
   }
 };
 
-const loadDefaultMealSlotsFromStorage = (defaultMealLabels: readonly string[]): MealSlotSetting[] => {
+const loadDefaultMealSlotsFromStorage = (
+  defaultMealLabels: readonly string[],
+  snackLabel: string,
+  mealsPerDay: MealsPerDayPreference,
+  twoMealsMode: TwoMealsMode
+): MealSlotSetting[] => {
   if (typeof window === "undefined") return createDefaultMealSlots(defaultMealLabels);
   const defaults = parseMealSlots(window.localStorage.getItem(MEAL_STRUCTURE_DEFAULT_SETTINGS_KEY));
-  if (defaults) return localizeDefaultMealSlots(defaults, defaultMealLabels);
+  if (defaults) return localizeDefaultMealSlots(defaults, defaultMealLabels, snackLabel);
 
   // Backward compatibility with old single-key storage.
   const legacy = parseMealSlots(window.localStorage.getItem(MEAL_STRUCTURE_SETTINGS_KEY));
-  if (legacy) return localizeDefaultMealSlots(legacy, defaultMealLabels);
+  if (legacy) return localizeDefaultMealSlots(legacy, defaultMealLabels, snackLabel);
 
-  return createDefaultMealSlots(defaultMealLabels);
+  return buildMealSlotsByMealsPerDay(defaultMealLabels, snackLabel, mealsPerDay, twoMealsMode);
 };
 
 const loadMealSlotsFromStorage = (
   rangeKey: string,
-  defaultMealLabels: readonly string[]
+  defaultMealLabels: readonly string[],
+  snackLabel: string,
+  mealsPerDay: MealsPerDayPreference,
+  twoMealsMode: TwoMealsMode
 ): MealSlotSetting[] => {
   if (typeof window === "undefined") return createDefaultMealSlots(defaultMealLabels);
   const byRange = parseMealSlots(window.localStorage.getItem(`${MEAL_STRUCTURE_SETTINGS_KEY}:${rangeKey}`));
-  if (byRange) return localizeDefaultMealSlots(byRange, defaultMealLabels);
-  return loadDefaultMealSlotsFromStorage(defaultMealLabels);
+  if (byRange) return localizeDefaultMealSlots(byRange, defaultMealLabels, snackLabel);
+  return loadDefaultMealSlotsFromStorage(defaultMealLabels, snackLabel, mealsPerDay, twoMealsMode);
 };
 
 const splitCellKey = (cellKey: string): { dayKey: string; mealLabel: string } | null => {
@@ -1204,6 +1276,9 @@ function MenuPageContent() {
     () => [t("menu.meals.breakfast"), t("menu.meals.lunch"), t("menu.meals.dinner")],
     [t]
   );
+  const snackMealLabel = t("menu.meals.snack");
+  const initialMealsPerDayPreference: MealsPerDayPreference = "3";
+  const initialTwoMealsMode: TwoMealsMode = "breakfast_lunch";
   const initialRangeStart = formatDate(getMonday(new Date()));
   const initialRangeEnd = formatDate(addDays(getMonday(new Date()), 6));
   const initialMealRangeKey = `${initialRangeStart}__${initialRangeEnd}`;
@@ -1213,8 +1288,20 @@ function MenuPageContent() {
     const raw = window.localStorage.getItem(DAY_STRUCTURE_MODE_KEY);
     return raw === "meals" ? "meals" : "list";
   });
+  const [profileMealsPerDayPreference, setProfileMealsPerDayPreference] =
+    useState<MealsPerDayPreference>(initialMealsPerDayPreference);
+  const [twoMealsMode, setTwoMealsMode] = useState<TwoMealsMode>(() => {
+    if (typeof window === "undefined") return initialTwoMealsMode;
+    return normalizeTwoMealsMode(window.localStorage.getItem(MENU_TWO_MEALS_MODE_KEY));
+  });
   const [mealSlots, setMealSlots] = useState<MealSlotSetting[]>(() =>
-    loadMealSlotsFromStorage(initialMealRangeKey, defaultDayMeals)
+    loadMealSlotsFromStorage(
+      initialMealRangeKey,
+      defaultDayMeals,
+      snackMealLabel,
+      initialMealsPerDayPreference,
+      initialTwoMealsMode
+    )
   );
   const [mealSlotsHydrated, setMealSlotsHydrated] = useState(false);
 
@@ -1310,6 +1397,11 @@ function MenuPageContent() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+    localStorage.setItem(MENU_TWO_MEALS_MODE_KEY, twoMealsMode);
+  }, [twoMealsMode]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
     const refreshProfileGoal = () => setProfileGoal(readProfileGoalFromStorage());
     refreshProfileGoal();
     window.addEventListener("storage", refreshProfileGoal);
@@ -1322,9 +1414,17 @@ function MenuPageContent() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    setMealSlots(loadMealSlotsFromStorage(mealSlotsRangeKey, defaultDayMeals));
+    setMealSlots(
+      loadMealSlotsFromStorage(
+        mealSlotsRangeKey,
+        defaultDayMeals,
+        snackMealLabel,
+        profileMealsPerDayPreference,
+        twoMealsMode
+      )
+    );
     setMealSlotsHydrated(true);
-  }, [defaultDayMeals, mealSlotsRangeKey]);
+  }, [defaultDayMeals, mealSlotsRangeKey, profileMealsPerDayPreference, snackMealLabel, twoMealsMode]);
 
   useEffect(() => {
     if (typeof window === "undefined" || !mealSlotsHydrated) return;
@@ -1790,6 +1890,19 @@ function MenuPageContent() {
       return areDayKeyListsEqual(planningDayKeys, buildPlanningDaysByPreset(dayKeys, preset));
     },
     [dayKeys, planningDayKeys]
+  );
+
+  const applyMealsPerDayPreset = useCallback(
+    (mealsPerDay: MealsPerDayPreference, selectedTwoMealsMode: TwoMealsMode = twoMealsMode) => {
+      const nextSlots = buildMealSlotsByMealsPerDay(
+        defaultDayMeals,
+        snackMealLabel,
+        mealsPerDay,
+        selectedTwoMealsMode
+      );
+      setMealSlots(nextSlots);
+    },
+    [defaultDayMeals, snackMealLabel, twoMealsMode]
   );
 
   const shiftPeriod = (direction: -1 | 1) => {
@@ -2383,11 +2496,14 @@ function MenuPageContent() {
         if (isCancelled || error) return;
         const metadata = (data.user?.user_metadata || {}) as Record<string, unknown>;
         const preference = normalizePlanDaysPreference(resolveUserMetaValue(metadata, "plan_days", "all"));
+        const mealsPerDay = normalizeMealsPerDayPreference(resolveUserMetaValue(metadata, "meals_per_day", "3"));
         setProfilePlanDaysPreference(preference);
+        setProfileMealsPerDayPreference(mealsPerDay);
       })
       .catch(() => {
         if (!isCancelled) {
           setProfilePlanDaysPreference("all");
+          setProfileMealsPerDayPreference("3");
         }
       });
 
@@ -4597,6 +4713,50 @@ function MenuPageContent() {
                 <button type="button" className="btn" onClick={() => setShowMealSettingsDialog(true)}>
                   {t("menu.settings.configureMeals")}
                 </button>
+              </div>
+              <div
+                style={{
+                  marginTop: "6px",
+                  borderTop: "1px solid var(--border-default)",
+                  paddingTop: "8px",
+                  display: "grid",
+                  gap: "8px",
+                }}
+              >
+                <strong style={{ fontSize: "13px" }}>{t("menu.settings.mealsPerDayTitle")}</strong>
+                <span className="muted" style={{ fontSize: "13px" }}>
+                  {t("menu.settings.mealsPerDayCurrent", {
+                    value: t(`auth.options.mealsPerDay.${profileMealsPerDayPreference}`),
+                  })}
+                </span>
+                {profileMealsPerDayPreference === "1-2" ? (
+                  <label style={{ display: "grid", gap: "6px", fontSize: "13px" }}>
+                    <span>{t("menu.settings.twoMealsChoiceLabel")}</span>
+                    <select
+                      className="menu-dialog__select"
+                      value={twoMealsMode}
+                      onChange={(e) => {
+                        const nextMode = normalizeTwoMealsMode(e.target.value);
+                        setTwoMealsMode(nextMode);
+                        applyMealsPerDayPreset("1-2", nextMode);
+                      }}
+                      style={{ maxWidth: "240px" }}
+                    >
+                      <option value="breakfast_lunch">{t("menu.settings.twoMealsOptions.breakfastLunch")}</option>
+                      <option value="lunch_dinner">{t("menu.settings.twoMealsOptions.lunchDinner")}</option>
+                      <option value="breakfast_dinner">{t("menu.settings.twoMealsOptions.breakfastDinner")}</option>
+                    </select>
+                  </label>
+                ) : null}
+                <div>
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={() => applyMealsPerDayPreset(profileMealsPerDayPreference)}
+                  >
+                    {t("menu.settings.applyMealsPreset")}
+                  </button>
+                </div>
               </div>
             </div>
 

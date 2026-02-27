@@ -476,12 +476,22 @@
     "meals": {
       "breakfast": "Breakfast",
       "lunch": "Lunch",
-      "dinner": "Dinner"
+      "dinner": "Dinner",
+      "snack": "Snack"
     },
     "settings": {
       "title": "Menu settings",
       "dayStructure": "Day structure",
       "configureMeals": "Configure meals",
+      "mealsPerDayTitle": "Meals per day",
+      "mealsPerDayCurrent": "From profile: {{value}}",
+      "twoMealsChoiceLabel": "For 1-2 meals, show sections",
+      "applyMealsPreset": "Apply to this menu",
+      "twoMealsOptions": {
+        "breakfastLunch": "Breakfast + Lunch",
+        "lunchDinner": "Lunch + Dinner",
+        "breakfastDinner": "Breakfast + Dinner"
+      },
       "mergeMenusForShopping": "Merge all menus into one shopping list",
       "showAddRecipePrompt": "Show prompt to add recipe to menu",
       "activeProducts": "Active products",
