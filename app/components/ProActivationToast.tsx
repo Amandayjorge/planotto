@@ -46,6 +46,7 @@ export default function ProActivationToast() {
   return (
     <div className="pro-activation-toast" role="status" aria-live="polite">
       <div className="pro-activation-toast__title">{t("subscription.proActivated.title")}</div>
+      <p className="pro-activation-toast__status">{t("subscription.proActivated.status")}</p>
       <ul className="pro-activation-toast__list">
         <li>{t("subscription.proActivated.items.aiTranslation")}</li>
         <li>{t("subscription.proActivated.items.photoImport")}</li>
@@ -53,7 +54,7 @@ export default function ProActivationToast() {
       </ul>
       <button
         type="button"
-        className="btn btn-primary"
+        className="btn btn-primary pro-activation-toast__action"
         onClick={() => setIsVisible(false)}
       >
         {t("subscription.proActivated.actions.ok")}

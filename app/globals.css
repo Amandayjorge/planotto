@@ -262,39 +262,52 @@ body {
 
 .pro-activation-toast {
   position: fixed;
-  right: 16px;
-  top: 92px;
+  right: 14px;
+  bottom: 16px;
   z-index: 20000;
-  width: min(420px, calc(100vw - 32px));
+  width: min(340px, calc(100vw - 24px));
   background: var(--card-bg);
   border: 1px solid var(--card-border);
-  border-radius: 14px;
-  box-shadow: var(--card-shadow);
-  padding: 14px;
+  border-radius: 12px;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.14);
+  padding: 12px;
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
 .pro-activation-toast__title {
-  font-size: 20px;
+  font-size: 16px;
   font-weight: 700;
   color: var(--text-primary);
 }
 
+.pro-activation-toast__status {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.35;
+  color: var(--text-secondary);
+}
+
 .pro-activation-toast__list {
   margin: 0;
-  padding-left: 18px;
+  padding-left: 16px;
+  font-size: 13px;
+  line-height: 1.35;
   color: var(--text-secondary);
   display: grid;
   gap: 4px;
 }
 
+.pro-activation-toast__action {
+  justify-self: start;
+}
+
 @media (max-width: 860px) {
   .pro-activation-toast {
-    right: 12px;
-    left: 12px;
+    right: 10px;
+    left: 10px;
     width: auto;
-    top: 76px;
+    bottom: calc(env(safe-area-inset-bottom) + 70px);
   }
 }
 

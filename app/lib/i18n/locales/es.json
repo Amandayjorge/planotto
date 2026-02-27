@@ -960,14 +960,15 @@
   },
   "subscription": {
     "proActivated": {
-      "title": "🎉 Activaste Pro",
+      "title": "Pro activado",
+      "status": "Pago confirmado. Funciones Pro desbloqueadas.",
       "items": {
-        "aiTranslation": "La traducción con IA está disponible",
-        "photoImport": "La importación por foto está disponible",
-        "multipleMenus": "Varios menús están disponibles"
+        "aiTranslation": "Traducción con IA",
+        "photoImport": "Importación por foto",
+        "multipleMenus": "Varios menús"
       },
       "actions": {
-        "ok": "Entendido"
+        "ok": "Continuar"
       }
     },
     "locks": {
