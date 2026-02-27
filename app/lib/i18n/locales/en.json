@@ -573,16 +573,16 @@
       "firstRecipeAria": "First recipe",
       "title": "Choose a starter recipe",
       "description": "To build a menu, add one recipe.",
-      "chooseReady": "Choose from starter recipes",
+      "chooseReady": "Choose from recipe library",
       "addOwn": "Add your own recipe"
     },
     "subtitle": {
-      "public": "Starter examples: choose a recipe and copy it to your library.",
+      "public": "Recipe library: choose a recipe and copy it to your recipes.",
       "mine": "Your recipes: store, edit and use for menu planning."
     },
     "tabs": {
       "mine": "Mine",
-      "public": "Starter examples"
+      "public": "Recipe library"
     },
     "sort": {
       "newest": "Newest",
@@ -613,8 +613,8 @@
       "addRecipe": "+ Add recipe",
       "clearMine": "Clear my recipes",
       "goToMine": "Go to my recipes",
-      "goToPublic": "Open examples",
-      "addToMineHint": "The \"Add to mine\" button is available in the \"Starter examples\" tab."
+      "goToPublic": "Open recipe library",
+      "addToMineHint": "The \"Add to mine\" button is available in the \"Recipe library\" tab."
     },
     "guestReminder": {
       "text": "You already added several recipes. Create an account to keep them safe.",

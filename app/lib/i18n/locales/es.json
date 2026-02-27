@@ -573,16 +573,16 @@
       "firstRecipeAria": "Primera receta",
       "title": "Elige receta para empezar",
       "description": "Para crear menú, añade una receta.",
-      "chooseReady": "Elegir de recetas listas",
+      "chooseReady": "Elegir de la biblioteca de recetas",
       "addOwn": "Añadir tu receta"
     },
     "subtitle": {
-      "public": "Ejemplos para empezar: elige una receta y copia a tu biblioteca.",
+      "public": "Biblioteca de recetas: elige una receta y copiala a tus recetas.",
       "mine": "Tus recetas: guarda, edita y usa para planificar menú."
     },
     "tabs": {
       "mine": "Mías",
-      "public": "Ejemplos"
+      "public": "Biblioteca de recetas"
     },
     "sort": {
       "newest": "Nuevas",
@@ -613,8 +613,8 @@
       "addRecipe": "+ Añadir receta",
       "clearMine": "Limpiar mis recetas",
       "goToMine": "Ir a mis recetas",
-      "goToPublic": "Abrir ejemplos",
-      "addToMineHint": "El botón \"Añadir a las mías\" está en la pestaña \"Ejemplos\"."
+      "goToPublic": "Abrir biblioteca de recetas",
+      "addToMineHint": "El boton \"Anadir a las mias\" esta en la pestana \"Biblioteca de recetas\"."
     },
     "guestReminder": {
       "text": "Ya añadiste varias recetas. Crea cuenta para no perderlas.",
