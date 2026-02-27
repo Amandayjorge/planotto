@@ -668,10 +668,15 @@
       "noteEmpty": "ninguna",
       "myTagsLabel": "Mis etiquetas",
       "addTag": "+ Anadir etiqueta",
-      "addPlaceholder": "Por ejemplo: cena",
+      "addPlaceholder": "Por ejemplo: cena, rapido, invitados",
       "addAction": "Anadir",
       "cancel": "Cancelar",
       "removeTagAria": "Quitar etiqueta {{tag}}",
+      "moveLeftAria": "Mover etiqueta {{tag}} a la izquierda",
+      "moveRightAria": "Mover etiqueta {{tag}} a la derecha",
+      "bulkInputHint": "Puedes anadir varias etiquetas separadas por coma. Maximo: {{max}} etiquetas, hasta {{maxLength}} caracteres cada una.",
+      "limitCount": "Puedes guardar hasta {{max}} etiquetas personales por receta.",
+      "limitLength": "Una etiqueta es demasiado larga. Maximo {{max}} caracteres.",
       "saveFailed": "No se pudieron guardar las etiquetas personales."
     },
     "guestReminder": {

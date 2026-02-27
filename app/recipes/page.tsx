@@ -54,6 +54,8 @@ const MENU_ADD_TO_MENU_PROMPT_KEY = "menuAddToMenuPromptEnabled";
 const ACTIVE_PRODUCTS_STORAGE_PREFIX = "activeProducts:";
 const PANTRY_STORAGE_KEY = "pantry";
 const PERSONAL_TAGS_HINT_SEEN_KEY = "recipes:personal-tags-hint-seen";
+const PERSONAL_TAG_MAX_LENGTH = 32;
+const PERSONAL_TAG_MAX_COUNT = 12;
 
 const VISIBILITY_BADGE_META: Record<
   Exclude<RecipeVisibility, "private">,
@@ -87,6 +89,22 @@ function normalizePersonalTag(value: string): string {
 
 function normalizePersonalTagKey(value: string): string {
   return normalizePersonalTag(value).toLocaleLowerCase("ru-RU");
+}
+
+function parsePersonalTagsInput(raw: string): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  raw
+    .split(/[,\n;]+/g)
+    .map((item) => normalizePersonalTag(item))
+    .filter(Boolean)
+    .forEach((tag) => {
+      const key = normalizePersonalTagKey(tag);
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      result.push(tag);
+    });
+  return result;
 }
 
 function normalizeRecipeLanguage(value: unknown): RecipeLanguage {
@@ -1458,18 +1476,32 @@ function RecipesPageContent() {
   };
 
   const handleSavePersonalTag = async (recipe: RecipeModel) => {
-    const nextTag = normalizePersonalTag(personalTagDraft);
-    if (!nextTag) return;
+    const parsed = parsePersonalTagsInput(personalTagDraft);
+    if (parsed.length === 0) return;
+
+    const tooLong = parsed.find((tag) => tag.length > PERSONAL_TAG_MAX_LENGTH);
+    if (tooLong) {
+      setActionMessage(t("recipes.personalTags.limitLength", { max: PERSONAL_TAG_MAX_LENGTH }));
+      return;
+    }
+
     const current = recipe.personalTags || [];
     const currentKeys = new Set(current.map((item) => normalizePersonalTagKey(item)));
-    const key = normalizePersonalTagKey(nextTag);
-    if (currentKeys.has(key)) {
+    const toAdd = parsed.filter((tag) => !currentKeys.has(normalizePersonalTagKey(tag)));
+    if (toAdd.length === 0) {
       setPersonalTagDraft("");
       setPersonalTagEditorRecipeId(null);
       markPersonalTagsHintSeen();
       return;
     }
-    await savePersonalTagsForRecipe(recipe, [...current, nextTag]);
+
+    if (current.length + toAdd.length > PERSONAL_TAG_MAX_COUNT) {
+      setActionMessage(t("recipes.personalTags.limitCount", { max: PERSONAL_TAG_MAX_COUNT }));
+      return;
+    }
+
+    await savePersonalTagsForRecipe(recipe, [...current, ...toAdd]);
+    setActionMessage("");
     setPersonalTagDraft("");
     setPersonalTagEditorRecipeId(null);
     markPersonalTagsHintSeen();
@@ -1478,6 +1510,24 @@ function RecipesPageContent() {
   const handleRemovePersonalTag = async (recipe: RecipeModel, tagToRemove: string) => {
     const removeKey = normalizePersonalTagKey(tagToRemove);
     const next = (recipe.personalTags || []).filter((item) => normalizePersonalTagKey(item) !== removeKey);
+    await savePersonalTagsForRecipe(recipe, next);
+  };
+
+  const handleMovePersonalTag = async (
+    recipe: RecipeModel,
+    tag: string,
+    direction: "left" | "right"
+  ) => {
+    const current = [...(recipe.personalTags || [])];
+    const targetKey = normalizePersonalTagKey(tag);
+    const index = current.findIndex((item) => normalizePersonalTagKey(item) === targetKey);
+    if (index < 0) return;
+
+    const swapIndex = direction === "left" ? index - 1 : index + 1;
+    if (swapIndex < 0 || swapIndex >= current.length) return;
+
+    const next = [...current];
+    [next[index], next[swapIndex]] = [next[swapIndex], next[index]];
     await savePersonalTagsForRecipe(recipe, next);
   };
 
@@ -2360,9 +2410,13 @@ function RecipesPageContent() {
                         <div>
                           <div style={{ fontSize: "12px", color: "var(--text-secondary)", marginBottom: "6px" }}>
                             <strong>🏷 {t("recipes.personalTags.myTagsLabel")}:</strong>
+                            {" "}
+                            <span>
+                              ({(recipe.personalTags || []).length}/{PERSONAL_TAG_MAX_COUNT})
+                            </span>
                           </div>
                           <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
-                            {(recipe.personalTags || []).map((tag) => (
+                            {(recipe.personalTags || []).map((tag, index, list) => (
                               <span
                                 key={`${recipe.id}-${tag}`}
                                 style={{
@@ -2377,6 +2431,30 @@ function RecipesPageContent() {
                                 }}
                               >
                                 {tag}
+                                <button
+                                  type="button"
+                                  className="btn"
+                                  style={{ padding: "0 4px", minHeight: "auto", lineHeight: 1 }}
+                                  aria-label={t("recipes.personalTags.moveLeftAria", { tag })}
+                                  onClick={() => {
+                                    void handleMovePersonalTag(recipe, tag, "left");
+                                  }}
+                                  disabled={savingPersonalTagsRecipeId === recipe.id || index === 0}
+                                >
+                                  ‹
+                                </button>
+                                <button
+                                  type="button"
+                                  className="btn"
+                                  style={{ padding: "0 4px", minHeight: "auto", lineHeight: 1 }}
+                                  aria-label={t("recipes.personalTags.moveRightAria", { tag })}
+                                  onClick={() => {
+                                    void handleMovePersonalTag(recipe, tag, "right");
+                                  }}
+                                  disabled={savingPersonalTagsRecipeId === recipe.id || index === list.length - 1}
+                                >
+                                  ›
+                                </button>
                                 <button
                                   type="button"
                                   className="btn"
@@ -2409,11 +2487,11 @@ function RecipesPageContent() {
                                 className="input"
                                 type="text"
                                 value={personalTagDraft}
-                                onChange={(event) => setPersonalTagDraft(event.target.value)}
-                                placeholder={t("recipes.personalTags.addPlaceholder")}
-                                style={{ maxWidth: "240px" }}
-                                onKeyDown={(event) => {
-                                  if (event.key === "Enter") {
+                              onChange={(event) => setPersonalTagDraft(event.target.value)}
+                              placeholder={t("recipes.personalTags.addPlaceholder")}
+                              style={{ maxWidth: "240px" }}
+                              onKeyDown={(event) => {
+                                if (event.key === "Enter") {
                                     event.preventDefault();
                                     void handleSavePersonalTag(recipe);
                                   }
@@ -2441,6 +2519,12 @@ function RecipesPageContent() {
                               </button>
                             </div>
                           ) : null}
+                          <div className="muted" style={{ marginTop: "6px", fontSize: "12px" }}>
+                            {t("recipes.personalTags.bulkInputHint", {
+                              max: PERSONAL_TAG_MAX_COUNT,
+                              maxLength: PERSONAL_TAG_MAX_LENGTH,
+                            })}
+                          </div>
                         </div>
                       </div>
                     ) : null}

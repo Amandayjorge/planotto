@@ -668,10 +668,15 @@
       "noteEmpty": "none",
       "myTagsLabel": "My tags",
       "addTag": "+ Add tag",
-      "addPlaceholder": "For example: dinner",
+      "addPlaceholder": "For example: dinner, quick, guests",
       "addAction": "Add",
       "cancel": "Cancel",
       "removeTagAria": "Remove tag {{tag}}",
+      "moveLeftAria": "Move tag {{tag}} left",
+      "moveRightAria": "Move tag {{tag}} right",
+      "bulkInputHint": "You can add several tags separated by comma. Max: {{max}} tags, up to {{maxLength}} chars each.",
+      "limitCount": "You can keep up to {{max}} personal tags per recipe.",
+      "limitLength": "One tag is too long. Max length is {{max}} characters.",
       "saveFailed": "Failed to save personal tags."
     },
     "guestReminder": {
