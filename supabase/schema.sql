@@ -608,6 +608,10 @@ create table if not exists public.user_profiles (
   ui_language text not null default 'ru' check (ui_language in ('ru', 'en', 'es')),
   plan_tier text not null default 'free' check (plan_tier in ('free', 'pro')),
   subscription_status text not null default 'inactive' check (subscription_status in ('inactive', 'trial', 'active', 'past_due', 'canceled')),
+  stripe_customer_id text null,
+  stripe_subscription_id text null,
+  stripe_price_id text null,
+  stripe_current_period_end timestamptz null,
   is_blocked boolean not null default false,
   is_test_access boolean not null default false,
   pro_expires_at timestamptz null,
@@ -625,6 +629,18 @@ create index if not exists user_profiles_subscription_status_idx
   on public.user_profiles(subscription_status);
 
 alter table public.user_profiles add column if not exists avatar_url text null;
+alter table public.user_profiles add column if not exists stripe_customer_id text null;
+alter table public.user_profiles add column if not exists stripe_subscription_id text null;
+alter table public.user_profiles add column if not exists stripe_price_id text null;
+alter table public.user_profiles add column if not exists stripe_current_period_end timestamptz null;
+
+create unique index if not exists user_profiles_stripe_customer_id_unique_idx
+  on public.user_profiles(stripe_customer_id)
+  where stripe_customer_id is not null;
+
+create unique index if not exists user_profiles_stripe_subscription_id_unique_idx
+  on public.user_profiles(stripe_subscription_id)
+  where stripe_subscription_id is not null;
 
 create or replace function public.is_admin()
 returns boolean

@@ -968,6 +968,37 @@
     }
   },
   "subscription": {
+    "manage": {
+      "title": "Gestión de suscripción",
+      "loading": "Cargando estado de suscripción...",
+      "currentPlan": "Plan actual",
+      "currentStatus": "Estado",
+      "proUntil": "Pro hasta",
+      "noDate": "—",
+      "activatePro": "Activar Pro",
+      "manage": "Gestionar suscripción",
+      "processing": "Redirigiendo...",
+      "unavailable": "Los pagos aún no están configurados en este entorno.",
+      "plan": {
+        "free": "Free",
+        "pro": "Pro"
+      },
+      "statuses": {
+        "inactive": "inactiva",
+        "trial": "prueba",
+        "active": "activa",
+        "past_due": "pago pendiente",
+        "canceled": "cancelada"
+      },
+      "messages": {
+        "signInRequired": "Primero inicia sesión.",
+        "statusLoadError": "No se pudo cargar el estado de suscripción.",
+        "checkoutError": "No se pudo iniciar el pago.",
+        "portalError": "No se pudo abrir la gestión de suscripción.",
+        "checkoutSuccess": "Suscripción activada. Revisa el estado abajo.",
+        "checkoutCanceled": "El proceso de pago fue cancelado."
+      }
+    },
     "proActivated": {
       "title": "Pro activado",
       "status": "Pago confirmado. Funciones Pro desbloqueadas.",

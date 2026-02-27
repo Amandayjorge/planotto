@@ -968,6 +968,37 @@
     }
   },
   "subscription": {
+    "manage": {
+      "title": "Subscription management",
+      "loading": "Loading subscription status...",
+      "currentPlan": "Current plan",
+      "currentStatus": "Status",
+      "proUntil": "Pro until",
+      "noDate": "—",
+      "activatePro": "Activate Pro",
+      "manage": "Manage subscription",
+      "processing": "Redirecting...",
+      "unavailable": "Payments are not configured in this environment yet.",
+      "plan": {
+        "free": "Free",
+        "pro": "Pro"
+      },
+      "statuses": {
+        "inactive": "inactive",
+        "trial": "trial",
+        "active": "active",
+        "past_due": "past due",
+        "canceled": "canceled"
+      },
+      "messages": {
+        "signInRequired": "Please sign in first.",
+        "statusLoadError": "Failed to load subscription status.",
+        "checkoutError": "Failed to start checkout.",
+        "portalError": "Failed to open subscription management.",
+        "checkoutSuccess": "Subscription is activated. Check the status below.",
+        "checkoutCanceled": "Subscription checkout was canceled."
+      }
+    },
     "proActivated": {
       "title": "Pro activated",
       "status": "Payment confirmed. Pro features unlocked.",

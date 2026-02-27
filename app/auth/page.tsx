@@ -1,13 +1,13 @@
 ﻿"use client";
 
-import { useEffect, useMemo, useState, type ChangeEvent, type Dispatch, type SetStateAction } from "react";
+import { useCallback, useEffect, useMemo, useState, type ChangeEvent, type Dispatch, type SetStateAction } from "react";
 import { useRouter } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
 import { SUPABASE_UNAVAILABLE_MESSAGE, getSupabaseClient, isSupabaseConfigured } from "../lib/supabaseClient";
 import { ensureCurrentUserProfile } from "../lib/adminSupabase";
 import { useI18n } from "../components/I18nProvider";
 import { isLocale } from "../lib/i18n";
-import { isPaidFeatureEnabled } from "../lib/subscription";
+import { cachePlanTier, isPaidFeatureEnabled, normalizePlanTier, type PlanTier } from "../lib/subscription";
 import { usePlanTier } from "../lib/usePlanTier";
 import ProductAutocompleteInput from "../components/ProductAutocompleteInput";
 import { appendProductSuggestions, loadProductSuggestions } from "../lib/productSuggestions";
@@ -20,6 +20,8 @@ import {
 } from "../lib/profileGoal";
 
 type Mode = "signin" | "signup";
+type BillingStatusValue = "inactive" | "trial" | "active" | "past_due" | "canceled";
+type BillingAction = "checkout" | "portal" | null;
 const AVATAR_PRESETS = [
   "/avatar/presets/m.png",
   "/avatar/presets/w.png",
@@ -91,6 +93,31 @@ const resolveUserMetaValue = (user: User | null | undefined, key: string, fallba
   return fallback;
 };
 
+const normalizeBillingStatus = (value: unknown): BillingStatusValue => {
+  const status = String(value || "").trim().toLowerCase();
+  if (
+    status === "inactive" ||
+    status === "trial" ||
+    status === "active" ||
+    status === "past_due" ||
+    status === "canceled"
+  ) {
+    return status;
+  }
+  return "inactive";
+};
+
+const formatIsoDate = (value: string, locale: string): string => {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleDateString(locale || "ru", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+};
+
 export default function AuthPage() {
   const router = useRouter();
   const { locale, locales, setLocale, t } = useI18n();
@@ -114,6 +141,13 @@ export default function AuthPage() {
   const [productSuggestions, setProductSuggestions] = useState<string[]>(() => loadProductSuggestions());
   const [loading, setLoading] = useState(false);
   const [profileSaving, setProfileSaving] = useState(false);
+  const [billingLoading, setBillingLoading] = useState(false);
+  const [billingAction, setBillingAction] = useState<BillingAction>(null);
+  const [billingPlanTier, setBillingPlanTier] = useState<PlanTier>("free");
+  const [billingStatus, setBillingStatus] = useState<BillingStatusValue>("inactive");
+  const [proExpiresAt, setProExpiresAt] = useState("");
+  const [hasStripeCustomer, setHasStripeCustomer] = useState(false);
+  const [billingConfigured, setBillingConfigured] = useState(false);
   const [message, setMessage] = useState("");
   const canUseAvatarFrames = isPaidFeatureEnabled(planTier, "avatar_frames");
 
@@ -178,6 +212,140 @@ export default function AuthPage() {
     if (!profileFrame) return;
     setProfileFrame("");
   }, [canUseAvatarFrames, profileFrame]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const query = new URLSearchParams(window.location.search);
+    const billingResult = String(query.get("billing") || "").trim().toLowerCase();
+    if (billingResult === "success") {
+      setMessage(t("subscription.manage.messages.checkoutSuccess"));
+    } else if (billingResult === "cancel") {
+      setMessage(t("subscription.manage.messages.checkoutCanceled"));
+    }
+  }, [t]);
+
+  const getAuthToken = useCallback(async (): Promise<string> => {
+    if (!isSupabaseConfigured()) {
+      throw new Error(SUPABASE_UNAVAILABLE_MESSAGE);
+    }
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.auth.getSession();
+    if (error) throw error;
+    const token = String(data.session?.access_token || "").trim();
+    if (!token) {
+      throw new Error(t("subscription.manage.messages.signInRequired"));
+    }
+    return token;
+  }, [t]);
+
+  const refreshBillingState = useCallback(async () => {
+    if (!userEmail) {
+      setBillingPlanTier("free");
+      setBillingStatus("inactive");
+      setProExpiresAt("");
+      setHasStripeCustomer(false);
+      setBillingConfigured(false);
+      return;
+    }
+
+    setBillingLoading(true);
+    try {
+      const token = await getAuthToken();
+      const response = await fetch("/api/billing/status", {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      const payload = (await response.json()) as {
+        error?: string;
+        planTier?: unknown;
+        subscriptionStatus?: unknown;
+        proExpiresAt?: unknown;
+        hasStripeCustomer?: unknown;
+        billingConfigured?: unknown;
+      };
+      if (!response.ok) {
+        throw new Error(String(payload.error || t("subscription.manage.messages.statusLoadError")));
+      }
+
+      setBillingPlanTier(normalizePlanTier(payload.planTier));
+      cachePlanTier(normalizePlanTier(payload.planTier));
+      setBillingStatus(normalizeBillingStatus(payload.subscriptionStatus));
+      setProExpiresAt(String(payload.proExpiresAt || ""));
+      setHasStripeCustomer(Boolean(payload.hasStripeCustomer));
+      setBillingConfigured(Boolean(payload.billingConfigured));
+    } catch {
+      setBillingPlanTier(normalizePlanTier(planTier));
+      setBillingStatus("inactive");
+      setProExpiresAt("");
+      setHasStripeCustomer(false);
+      setBillingConfigured(false);
+    } finally {
+      setBillingLoading(false);
+    }
+  }, [getAuthToken, planTier, t, userEmail]);
+
+  useEffect(() => {
+    void refreshBillingState();
+  }, [refreshBillingState]);
+
+  const handleStartCheckout = async () => {
+    setBillingAction("checkout");
+    setMessage("");
+    try {
+      const token = await getAuthToken();
+      const response = await fetch("/api/billing/checkout", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          successPath: "/auth?billing=success",
+          cancelPath: "/auth?billing=cancel",
+        }),
+      });
+      const payload = (await response.json()) as { error?: string; url?: string };
+      if (!response.ok || !payload.url) {
+        throw new Error(String(payload.error || t("subscription.manage.messages.checkoutError")));
+      }
+      window.location.href = payload.url;
+    } catch (error) {
+      const text = error instanceof Error ? error.message : t("subscription.manage.messages.checkoutError");
+      setMessage(text);
+    } finally {
+      setBillingAction(null);
+    }
+  };
+
+  const handleOpenBillingPortal = async () => {
+    setBillingAction("portal");
+    setMessage("");
+    try {
+      const token = await getAuthToken();
+      const response = await fetch("/api/billing/portal", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          returnPath: "/auth",
+        }),
+      });
+      const payload = (await response.json()) as { error?: string; url?: string };
+      if (!response.ok || !payload.url) {
+        throw new Error(String(payload.error || t("subscription.manage.messages.portalError")));
+      }
+      window.location.href = payload.url;
+    } catch (error) {
+      const text = error instanceof Error ? error.message : t("subscription.manage.messages.portalError");
+      setMessage(text);
+    } finally {
+      setBillingAction(null);
+    }
+  };
 
   const handleSubmit = async () => {
     if (!isSupabaseConfigured()) {
@@ -278,6 +446,10 @@ export default function AuthPage() {
     setProfileName("");
     setProfileAvatar("");
     setProfileFrame("");
+    setBillingPlanTier("free");
+    setBillingStatus("inactive");
+    setProExpiresAt("");
+    setHasStripeCustomer(false);
   };
 
   const addListItem = (
@@ -307,6 +479,17 @@ export default function AuthPage() {
     const base = profileName.trim() || (userEmail || "").split("@")[0] || "G";
     return base.charAt(0).toUpperCase();
   }, [profileName, userEmail]);
+
+  const effectiveBillingPlanTier = normalizePlanTier(billingPlanTier || planTier);
+  const billingPlanLabel =
+    effectiveBillingPlanTier === "pro"
+      ? t("subscription.manage.plan.pro")
+      : t("subscription.manage.plan.free");
+  const billingStatusLabel = t(`subscription.manage.statuses.${billingStatus}`);
+  const proExpiresAtLabel = formatIsoDate(proExpiresAt, locale);
+  const canOpenBillingPortal = billingConfigured && hasStripeCustomer;
+  const canActivatePro = billingConfigured && effectiveBillingPlanTier !== "pro";
+  const canManageSubscription = billingConfigured && effectiveBillingPlanTier === "pro" && canOpenBillingPortal;
 
   return (
     <section className="card" style={{ maxWidth: "560px", margin: "0 auto" }}>
@@ -379,6 +562,72 @@ export default function AuthPage() {
                 {profileName.trim() || t("auth.profile.noName")}
               </div>
               <div className="muted">{userEmail}</div>
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: "grid",
+              gap: "8px",
+              padding: "12px",
+              border: "1px solid var(--border-default)",
+              borderRadius: "12px",
+              background: "var(--background-primary)",
+            }}
+          >
+            <div style={{ fontSize: "15px", fontWeight: 700, color: "var(--text-primary)" }}>
+              {t("subscription.manage.title")}
+            </div>
+            {billingLoading ? (
+              <div className="muted">{t("subscription.manage.loading")}</div>
+            ) : (
+              <>
+                <div style={{ fontSize: "14px", color: "var(--text-secondary)" }}>
+                  {t("subscription.manage.currentPlan")}: <strong>{billingPlanLabel}</strong>
+                </div>
+                <div style={{ fontSize: "14px", color: "var(--text-secondary)" }}>
+                  {t("subscription.manage.currentStatus")}: <strong>{billingStatusLabel}</strong>
+                </div>
+                <div style={{ fontSize: "14px", color: "var(--text-secondary)" }}>
+                  {t("subscription.manage.proUntil")}:{" "}
+                  <strong>{proExpiresAtLabel || t("subscription.manage.noDate")}</strong>
+                </div>
+              </>
+            )}
+
+            {!billingConfigured ? (
+              <div className="muted">{t("subscription.manage.unavailable")}</div>
+            ) : null}
+
+            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+              {canActivatePro ? (
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={() => {
+                    void handleStartCheckout();
+                  }}
+                  disabled={billingAction === "checkout"}
+                >
+                  {billingAction === "checkout"
+                    ? t("subscription.manage.processing")
+                    : t("subscription.manage.activatePro")}
+                </button>
+              ) : null}
+              {canManageSubscription ? (
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => {
+                    void handleOpenBillingPortal();
+                  }}
+                  disabled={billingAction === "portal"}
+                >
+                  {billingAction === "portal"
+                    ? t("subscription.manage.processing")
+                    : t("subscription.manage.manage")}
+                </button>
+              ) : null}
             </div>
           </div>
 

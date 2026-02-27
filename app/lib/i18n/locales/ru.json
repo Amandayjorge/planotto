@@ -968,6 +968,37 @@
     }
   },
   "subscription": {
+    "manage": {
+      "title": "Управление подпиской",
+      "loading": "Загрузка статуса подписки...",
+      "currentPlan": "Текущий тариф",
+      "currentStatus": "Статус",
+      "proUntil": "Pro до",
+      "noDate": "—",
+      "activatePro": "Активировать Pro",
+      "manage": "Управление подпиской",
+      "processing": "Переходим...",
+      "unavailable": "Платежи пока не настроены в этом окружении.",
+      "plan": {
+        "free": "Free",
+        "pro": "Pro"
+      },
+      "statuses": {
+        "inactive": "неактивна",
+        "trial": "тестовый доступ",
+        "active": "активна",
+        "past_due": "есть задолженность",
+        "canceled": "отменена"
+      },
+      "messages": {
+        "signInRequired": "Нужно войти в аккаунт.",
+        "statusLoadError": "Не удалось загрузить статус подписки.",
+        "checkoutError": "Не удалось начать оформление подписки.",
+        "portalError": "Не удалось открыть управление подпиской.",
+        "checkoutSuccess": "Подписка активирована. Проверьте статус ниже.",
+        "checkoutCanceled": "Оформление подписки отменено."
+      }
+    },
     "proActivated": {
       "title": "Pro активирован",
       "status": "Оплата подтверждена. Функции Pro открыты.",
