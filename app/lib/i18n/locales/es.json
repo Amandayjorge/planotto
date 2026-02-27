@@ -683,6 +683,9 @@
       "sourcePublicAdded": "De ejemplos • ya está en mis recetas",
       "sourcePublic": "De ejemplos",
       "sourceMine": "Mi receta",
+      "authorLabel": "Autor",
+      "authorUnknown": "Autor desconocido",
+      "planottoAuthor": "Planotto",
       "matchTooltip": "Coincide con activos: {{names}}{{extra}}",
       "dislikeTooltip": "Contiene productos de “no me gusta”: {{names}}{{extra}}",
       "alreadyMine": "Ya en mis recetas",
@@ -699,6 +702,18 @@
       "publicTitle": "Receta pública: visible para otros usuarios",
       "linkTitle": "Receta disponible solo por enlace directo",
       "invitedTitle": "Receta disponible solo para invitados"
+    },
+    "authors": {
+      "loading": "Cargando la pagina del autor...",
+      "title": "Autor",
+      "notFound": "Autor no encontrado.",
+      "loadFailed": "No se pudo cargar la pagina del autor.",
+      "backToRecipes": "Volver a recetas",
+      "avatarAlt": "Avatar del autor",
+      "recipesCount": "Recetas: {{count}}",
+      "publicRecipesTitle": "Recetas publicas",
+      "noPublicRecipes": "Este autor aun no tiene recetas publicas.",
+      "openRecipe": "Abrir receta"
     },
     "new": {
       "title": "Nueva receta",

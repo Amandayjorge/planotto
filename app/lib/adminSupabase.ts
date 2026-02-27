@@ -159,16 +159,37 @@ export const ensureCurrentUserProfile = async (): Promise<void> => {
   const { data, error } = await supabase.auth.getUser();
   if (error || !data.user) return;
 
+  const metadata = (data.user.user_metadata || {}) as Record<string, unknown>;
   const userLanguage = toLanguage(
-    ((data.user.user_metadata || {}) as Record<string, unknown>).ui_language,
+    metadata.ui_language,
     "ru"
   );
+  const rawAvatar = metadata.avatar_url ?? metadata.picture;
+  const avatarUrl = typeof rawAvatar === "string" && rawAvatar.trim() ? rawAvatar.trim() : null;
 
-  await supabase.rpc("upsert_my_profile", {
+  const basePayload = {
     p_email: data.user.email || null,
     p_display_name: resolveUserName(data.user),
     p_ui_language: userLanguage,
+  };
+  const { error: upsertError } = await supabase.rpc("upsert_my_profile", {
+    ...basePayload,
+    p_avatar_url: avatarUrl,
   });
+  if (!upsertError) return;
+
+  const code = String((upsertError as { code?: unknown }).code || "");
+  const message = String((upsertError as { message?: unknown }).message || "").toLowerCase();
+  const canFallbackToLegacySignature =
+    code === "42883"
+    || (message.includes("upsert_my_profile") && message.includes("function") && message.includes("does not exist"));
+
+  if (!canFallbackToLegacySignature) {
+    throw upsertError;
+  }
+
+  const { error: fallbackError } = await supabase.rpc("upsert_my_profile", basePayload);
+  if (fallbackError) throw fallbackError;
 };
 
 export const isCurrentUserAdmin = async (): Promise<boolean> => {
@@ -484,4 +505,3 @@ export const grantTestProAccess = async (userId: string, days = 14): Promise<voi
     proExpiresAt: expirationDate.toISOString(),
   });
 };
-

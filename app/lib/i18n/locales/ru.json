@@ -683,6 +683,9 @@
       "sourcePublicAdded": "Из примеров • уже в моих рецептах",
       "sourcePublic": "Из примеров",
       "sourceMine": "Мой рецепт",
+      "authorLabel": "Автор",
+      "authorUnknown": "Неизвестный автор",
+      "planottoAuthor": "Planotto",
       "matchTooltip": "Совпадает с активными: {{names}}{{extra}}",
       "dislikeTooltip": "В рецепте есть из «не люблю»: {{names}}{{extra}}",
       "alreadyMine": "Уже в моих",
@@ -699,6 +702,18 @@
       "publicTitle": "Публичный рецепт: доступен другим пользователям",
       "linkTitle": "Рецепт доступен только по прямой ссылке",
       "invitedTitle": "Рецепт доступен только приглашенным пользователям"
+    },
+    "authors": {
+      "loading": "Загрузка страницы автора...",
+      "title": "Автор",
+      "notFound": "Автор не найден.",
+      "loadFailed": "Не удалось загрузить страницу автора.",
+      "backToRecipes": "Назад к рецептам",
+      "avatarAlt": "Аватар автора",
+      "recipesCount": "Рецептов: {{count}}",
+      "publicRecipesTitle": "Публичные рецепты",
+      "noPublicRecipes": "У этого автора пока нет публичных рецептов.",
+      "openRecipe": "Открыть рецепт"
     },
     "new": {
       "title": "Новый рецепт",

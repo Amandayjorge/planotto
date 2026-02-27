@@ -600,6 +600,7 @@ create table if not exists public.user_profiles (
   user_id uuid primary key references auth.users(id) on delete cascade,
   email text not null,
   display_name text null,
+  avatar_url text null,
   ui_language text not null default 'ru' check (ui_language in ('ru', 'en', 'es')),
   plan_tier text not null default 'free' check (plan_tier in ('free', 'pro')),
   subscription_status text not null default 'inactive' check (subscription_status in ('inactive', 'trial', 'active', 'past_due', 'canceled')),
@@ -618,6 +619,8 @@ create index if not exists user_profiles_plan_tier_idx
 
 create index if not exists user_profiles_subscription_status_idx
   on public.user_profiles(subscription_status);
+
+alter table public.user_profiles add column if not exists avatar_url text null;
 
 create or replace function public.is_admin()
 returns boolean
@@ -647,7 +650,8 @@ grant execute on function public.is_admin() to authenticated;
 create or replace function public.upsert_my_profile(
   p_email text default null,
   p_display_name text default null,
-  p_ui_language text default 'ru'
+  p_ui_language text default 'ru',
+  p_avatar_url text default null
 )
 returns public.user_profiles
 language plpgsql
@@ -659,6 +663,7 @@ declare
   v_email text;
   v_display_name text;
   v_ui_language text;
+  v_avatar_url text;
   v_row public.user_profiles;
 begin
   v_user_id := auth.uid();
@@ -677,6 +682,7 @@ begin
   end if;
 
   v_display_name := nullif(trim(coalesce(p_display_name, '')), '');
+  v_avatar_url := nullif(trim(coalesce(p_avatar_url, '')), '');
   v_ui_language := case
     when p_ui_language in ('ru', 'en', 'es') then p_ui_language
     else 'ru'
@@ -686,17 +692,20 @@ begin
     user_id,
     email,
     display_name,
+    avatar_url,
     ui_language
   ) values (
     v_user_id,
     v_email,
     v_display_name,
+    v_avatar_url,
     v_ui_language
   )
   on conflict (user_id) do update
   set
     email = excluded.email,
     display_name = coalesce(excluded.display_name, public.user_profiles.display_name),
+    avatar_url = excluded.avatar_url,
     ui_language = excluded.ui_language,
     updated_at = now()
   returning * into v_row;
@@ -705,7 +714,61 @@ begin
 end;
 $$;
 
-grant execute on function public.upsert_my_profile(text, text, text) to authenticated;
+grant execute on function public.upsert_my_profile(text, text, text, text) to authenticated;
+
+create or replace function public.list_public_author_profiles(p_user_ids uuid[])
+returns table (
+  user_id uuid,
+  display_name text,
+  avatar_url text,
+  recipe_count integer
+)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  with target as (
+    select distinct unnest(coalesce(p_user_ids, array[]::uuid[])) as user_id
+  ),
+  public_recipe_counts as (
+    select r.owner_id as user_id, count(*)::integer as recipe_count
+    from public.recipes r
+    where r.visibility = 'public'
+    group by r.owner_id
+  )
+  select
+    t.user_id,
+    coalesce(
+      nullif(trim(p.display_name), ''),
+      nullif(trim(split_part(coalesce(p.email, ''), '@', 1)), ''),
+      'Planotto'
+    ) as display_name,
+    nullif(trim(coalesce(p.avatar_url, '')), '') as avatar_url,
+    c.recipe_count
+  from target t
+  join public_recipe_counts c on c.user_id = t.user_id
+  left join public.user_profiles p on p.user_id = t.user_id;
+$$;
+
+grant execute on function public.list_public_author_profiles(uuid[]) to anon, authenticated;
+
+create or replace function public.get_public_author_profile(p_user_id uuid)
+returns table (
+  user_id uuid,
+  display_name text,
+  avatar_url text,
+  recipe_count integer
+)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select * from public.list_public_author_profiles(array[p_user_id]::uuid[]);
+$$;
+
+grant execute on function public.get_public_author_profile(uuid) to anon, authenticated;
 
 create or replace function public.admin_merge_ingredients(
   p_source_id text,

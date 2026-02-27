@@ -683,6 +683,9 @@
       "sourcePublicAdded": "From examples • already in my recipes",
       "sourcePublic": "From examples",
       "sourceMine": "My recipe",
+      "authorLabel": "Author",
+      "authorUnknown": "Unknown author",
+      "planottoAuthor": "Planotto",
       "matchTooltip": "Matches active products: {{names}}{{extra}}",
       "dislikeTooltip": "Recipe contains “dislike” products: {{names}}{{extra}}",
       "alreadyMine": "Already mine",
@@ -699,6 +702,18 @@
       "publicTitle": "Public recipe: available for other users",
       "linkTitle": "Recipe available only by direct link",
       "invitedTitle": "Recipe available only for invited users"
+    },
+    "authors": {
+      "loading": "Loading author page...",
+      "title": "Author",
+      "notFound": "Author not found.",
+      "loadFailed": "Failed to load author page.",
+      "backToRecipes": "Back to recipes",
+      "avatarAlt": "Author avatar",
+      "recipesCount": "Recipes: {{count}}",
+      "publicRecipesTitle": "Public recipes",
+      "noPublicRecipes": "This author has no public recipes yet.",
+      "openRecipe": "Open recipe"
     },
     "new": {
       "title": "New recipe",

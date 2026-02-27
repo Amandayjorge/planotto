@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
 import {
@@ -9,6 +10,8 @@ import {
   deleteAllMyRecipes,
   getCurrentUserId,
   importLocalRecipesIfNeeded,
+  listPublicAuthorProfiles,
+  type PublicAuthorProfile,
   listSeedTemplateRecipes,
   listMyRecipes,
   loadLocalRecipes,
@@ -78,6 +81,13 @@ function normalizeRecipeTitle(value: string): string {
 
 function normalizeRecipeLanguage(value: unknown): RecipeLanguage {
   return value === "ru" || value === "en" || value === "es" ? value : "ru";
+}
+
+const UUID_LIKE_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function isUuidLike(value: string): boolean {
+  return UUID_LIKE_PATTERN.test(value.trim());
 }
 
 function resolveRecipeLanguageFromLocale(locale: string): RecipeLanguage {
@@ -425,6 +435,7 @@ function RecipesPageContent() {
   const [openActiveMatchesRecipeId, setOpenActiveMatchesRecipeId] = useState<string | null>(null);
   const [openDislikeRecipeId, setOpenDislikeRecipeId] = useState<string | null>(null);
   const [selectedRecipeIds, setSelectedRecipeIds] = useState<Record<string, boolean>>({});
+  const [publicAuthorProfiles, setPublicAuthorProfiles] = useState<Record<string, PublicAuthorProfile>>({});
   const [isExportingRecipesPdf, setIsExportingRecipesPdf] = useState(false);
   const [profileGoal, setProfileGoal] = useState<ProfileGoal>("menu");
   const canUseAdvancedFilters = isPaidFeatureEnabled(planTier, "advanced_filters");
@@ -943,6 +954,40 @@ function RecipesPageContent() {
     uiRecipeLanguage,
     viewMode,
   ]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const publicOwnerIds = Array.from(
+      new Set(
+        recipes
+          .filter((recipe) => recipe.visibility === "public")
+          .map((recipe) => String(recipe.ownerId || "").trim())
+          .filter((ownerId) => ownerId.length > 0 && ownerId !== "system" && isUuidLike(ownerId))
+      )
+    );
+
+    if (publicOwnerIds.length === 0) {
+      setPublicAuthorProfiles({});
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    listPublicAuthorProfiles(publicOwnerIds)
+      .then((profiles) => {
+        if (cancelled) return;
+        setPublicAuthorProfiles(profiles);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setPublicAuthorProfiles({});
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [recipes]);
 
   const selectedMineRecipes = useMemo(
     () => filteredRecipes.filter((recipe) => Boolean(selectedRecipeIds[recipe.id])),
@@ -1867,6 +1912,12 @@ function RecipesPageContent() {
             const addedNow = Boolean(justAddedRecipeTitles[recipeTitleKey]);
             const addDone = duplicateExists || addedNow;
             const isAdding = pendingCopyRecipeId === recipe.id;
+            const isPublicRecipe = recipe.visibility === "public";
+            const authorProfile = isPublicRecipe ? publicAuthorProfiles[recipe.ownerId] : undefined;
+            const authorName =
+              (authorProfile?.displayName || "").trim() ||
+              (recipe.ownerId === "system" ? t("recipes.card.planottoAuthor") : t("recipes.card.authorUnknown"));
+            const canOpenAuthorPage = isPublicRecipe && (recipe.ownerId === "system" || isUuidLike(recipe.ownerId || ""));
             const sourceLabel = isPublicSourceRecipe
               ? addDone
                 ? t("recipes.card.sourcePublicAdded")
@@ -1961,6 +2012,21 @@ function RecipesPageContent() {
                         <h3 style={{ margin: 0 }}>{recipeCardTitle}</h3>
                         <div style={{ marginTop: "4px", fontSize: "12px", color: "var(--text-tertiary)", display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
                           <span>{sourceLabel}</span>
+                          {isPublicRecipe ? (
+                            <span>
+                              {t("recipes.card.authorLabel")}:{" "}
+                              {canOpenAuthorPage ? (
+                                <Link
+                                  href={`/authors/${encodeURIComponent(recipe.ownerId || "system")}`}
+                                  className="recipes-card__author-link"
+                                >
+                                  {authorName}
+                                </Link>
+                              ) : (
+                                <span>{authorName}</span>
+                              )}
+                            </span>
+                          ) : null}
                           {viewMode === "mine" && recipe.visibility !== "private" ? (
                             (() => {
                               const meta = VISIBILITY_BADGE_META[recipe.visibility as Exclude<RecipeVisibility, "private">];

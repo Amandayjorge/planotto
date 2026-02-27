@@ -78,6 +78,13 @@ export interface RecipeUpsertInput {
   shareToken?: string;
 }
 
+export interface PublicAuthorProfile {
+  userId: string;
+  displayName: string;
+  avatarUrl?: string;
+  recipeCount: number;
+}
+
 interface RecipeRow {
   id: string;
   owner_id: string | null;
@@ -120,6 +127,13 @@ interface RecipeTranslationRow {
   instructions: string | null;
   is_auto_generated: boolean | null;
   updated_at: string | null;
+}
+
+interface PublicAuthorProfileRow {
+  user_id: string | null;
+  display_name: string | null;
+  avatar_url: string | null;
+  recipe_count: number | null;
 }
 
 interface PostgrestLikeError {
@@ -1151,6 +1165,11 @@ const normalizeRecipeLanguage = (value: unknown): RecipeLanguage => {
   return "ru";
 };
 
+const UUID_LIKE_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+const isUuidLike = (value: string): boolean => UUID_LIKE_PATTERN.test(value.trim());
+
 const normalizeRecipeTranslation = (
   language: RecipeLanguage,
   value: unknown
@@ -1771,6 +1790,94 @@ export const listPublicRecipes = async (): Promise<RecipeModel[]> => {
   const extraTemplates = seedTemplates.filter((item) => !knownTitles.has(item.title.trim().toLowerCase()));
 
   return [...extraTemplates, ...dbPublic];
+};
+
+const mapPublicAuthorProfileRow = (row: PublicAuthorProfileRow): PublicAuthorProfile | null => {
+  const userId = String(row.user_id || "").trim();
+  if (!userId) return null;
+  return {
+    userId,
+    displayName: String(row.display_name || "").trim() || "Planotto",
+    avatarUrl: String(row.avatar_url || "").trim() || undefined,
+    recipeCount: Math.max(0, Number(row.recipe_count || 0)),
+  };
+};
+
+export const listPublicAuthorProfiles = async (
+  userIds: string[]
+): Promise<Record<string, PublicAuthorProfile>> => {
+  const normalizedIds = Array.from(
+    new Set(
+      userIds
+        .map((item) => String(item || "").trim())
+        .filter((item) => item.length > 0 && item !== "system" && isUuidLike(item))
+    )
+  );
+  const result: Record<string, PublicAuthorProfile> = {};
+  if (normalizedIds.length === 0) return result;
+
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase.rpc("list_public_author_profiles", {
+    p_user_ids: normalizedIds,
+  });
+
+  if (error) {
+    if (isMissingFunctionError(error, "list_public_author_profiles")) return result;
+    throw error;
+  }
+
+  const rows = Array.isArray(data) ? (data as PublicAuthorProfileRow[]) : [];
+  rows.forEach((row) => {
+    const mapped = mapPublicAuthorProfileRow(row);
+    if (!mapped) return;
+    result[mapped.userId] = mapped;
+  });
+  return result;
+};
+
+export const getPublicAuthorProfile = async (authorId: string): Promise<PublicAuthorProfile | null> => {
+  const normalizedAuthorId = String(authorId || "").trim();
+  if (!normalizedAuthorId) return null;
+  if (normalizedAuthorId === "system") {
+    const publicSeedCount = listSeedTemplateRecipes().filter((item) => item.visibility === "public").length;
+    return {
+      userId: "system",
+      displayName: "Planotto",
+      recipeCount: publicSeedCount,
+      avatarUrl: "/mascot/otto-bubble.png",
+    };
+  }
+  if (!isUuidLike(normalizedAuthorId)) return null;
+
+  const profiles = await listPublicAuthorProfiles([normalizedAuthorId]);
+  return profiles[normalizedAuthorId] || null;
+};
+
+export const listPublicRecipesByAuthor = async (authorId: string): Promise<RecipeModel[]> => {
+  const normalizedAuthorId = String(authorId || "").trim();
+  if (!normalizedAuthorId) return [];
+  if (normalizedAuthorId === "system") {
+    return listSeedTemplateRecipes().filter((item) => item.visibility === "public");
+  }
+  if (!isUuidLike(normalizedAuthorId)) return [];
+
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase
+    .from("recipes")
+    .select(RECIPE_COLUMNS)
+    .eq("visibility", "public")
+    .eq("owner_id", normalizedAuthorId)
+    .order("updated_at", { ascending: false });
+
+  if (error) {
+    if (isMissingRelationError(error, "recipes")) return [];
+    throw error;
+  }
+
+  const hidden = new Set(getReportedRecipeIds());
+  return ((data || []) as RecipeRow[])
+    .map((row) => mapRow(row))
+    .filter((row) => !hidden.has(row.id));
 };
 
 export const getRecipeById = async (

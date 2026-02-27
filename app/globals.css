@@ -3966,6 +3966,16 @@ body {
   cursor: not-allowed;
 }
 
+.recipes-card__author-link {
+  color: var(--accent-primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.recipes-card__author-link:hover {
+  color: color-mix(in srgb, var(--accent-primary) 82%, var(--text-primary) 18%);
+}
+
 .recipes-add-to-menu-banner {
   position: fixed;
   left: 50%;
