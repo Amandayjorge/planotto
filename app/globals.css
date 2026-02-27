@@ -3053,6 +3053,35 @@ body {
   line-height: 1.1;
 }
 
+.menu-toolbar-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.menu-toolbar-selector {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 260px;
+  min-width: 0;
+}
+
+.menu-toolbar-selector__input {
+  flex: 1 1 220px;
+  min-width: 140px;
+  max-width: 100%;
+}
+
+.menu-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .menu-first-onboarding {
   position: fixed;
   inset: 0;
@@ -3530,6 +3559,14 @@ body {
     min-width: 112px;
   }
 
+  .menu-toolbar-selector {
+    flex: 1 1 100%;
+  }
+
+  .menu-toolbar-actions {
+    width: 100%;
+  }
+
   .menu-inline-onboarding-hint {
     flex-direction: column;
     align-items: flex-start;
@@ -3559,6 +3596,15 @@ body {
 }
 
 @media (max-width: 580px) {
+  .week-navigation--compact {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .week-range-compact {
+    min-width: 0;
+  }
+
   .shopping-list__header,
   .shopping-list__controls,
   .shopping-list__progress,

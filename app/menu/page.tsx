@@ -4463,49 +4463,52 @@ function MenuPageContent() {
 
       <div className="card" style={{ marginBottom: "10px", padding: "8px 10px" }}>
         <div style={{ display: "grid", gap: "4px" }}>
-          <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "nowrap" }}>
-            <strong style={{ fontSize: "15px", whiteSpace: "nowrap" }}>{t("menu.selector.label")}</strong>
-            <select
-              className="input"
-              style={{ minWidth: "120px", maxWidth: "280px", flex: "1 1 auto" }}
-              value={activeMenuId}
-              onChange={(e) => handleSelectMenuProfile(e.target.value)}
-              title={t("menu.selector.aria")}
-              aria-label={t("menu.selector.aria")}
-            >
-              {menuProfiles.map((menu) => (
-                <option key={menu.id} value={menu.id}>
-                  {getMenuDisplayName(menu.name)}
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              className="btn"
-              style={{ whiteSpace: "nowrap", padding: "6px 10px" }}
-              onClick={() => setIsCreateMenuDialogOpen(true)}
-              title={additionalMenusLocked ? t("subscription.locks.multipleMenus") : undefined}
-            >
-              {t("menu.templates.newMenu")}
-            </button>
-            <button
-              type="button"
-              className="btn"
-              style={{ whiteSpace: "nowrap", padding: "6px 10px" }}
-              onClick={() => setShowMenuTemplatesPanel((prev) => !prev)}
-            >
-              {t("menu.templates.button")}
-            </button>
-            <button
-              type="button"
-              className="btn"
-              style={{ minWidth: "36px", padding: "6px 10px" }}
-              title={t("menu.settings.title")}
-              aria-label={t("menu.settings.title")}
-              onClick={() => setShowMenuSettingsDialog(true)}
-            >
-              ⚙
-            </button>
+          <div className="menu-toolbar-main">
+            <div className="menu-toolbar-selector">
+              <strong style={{ fontSize: "15px" }}>{t("menu.selector.label")}</strong>
+              <select
+                className="input menu-toolbar-selector__input"
+                value={activeMenuId}
+                onChange={(e) => handleSelectMenuProfile(e.target.value)}
+                title={t("menu.selector.aria")}
+                aria-label={t("menu.selector.aria")}
+              >
+                {menuProfiles.map((menu) => (
+                  <option key={menu.id} value={menu.id}>
+                    {getMenuDisplayName(menu.name)}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="menu-toolbar-actions">
+              <button
+                type="button"
+                className="btn"
+                style={{ whiteSpace: "nowrap", padding: "6px 10px" }}
+                onClick={() => setIsCreateMenuDialogOpen(true)}
+                title={additionalMenusLocked ? t("subscription.locks.multipleMenus") : undefined}
+              >
+                {t("menu.templates.newMenu")}
+              </button>
+              <button
+                type="button"
+                className="btn"
+                style={{ whiteSpace: "nowrap", padding: "6px 10px" }}
+                onClick={() => setShowMenuTemplatesPanel((prev) => !prev)}
+              >
+                {t("menu.templates.button")}
+              </button>
+              <button
+                type="button"
+                className="btn"
+                style={{ minWidth: "36px", padding: "6px 10px" }}
+                title={t("menu.settings.title")}
+                aria-label={t("menu.settings.title")}
+                onClick={() => setShowMenuSettingsDialog(true)}
+              >
+                ⚙
+              </button>
+            </div>
           </div>
           <div style={{ display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" }}>
             <span className="muted" style={{ fontSize: "12px" }}>
