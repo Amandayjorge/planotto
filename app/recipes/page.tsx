@@ -24,6 +24,7 @@ import { usePlanTier } from "../lib/usePlanTier";
 import { isPaidFeatureEnabled } from "../lib/subscription";
 import { RECIPE_TAGS, localizeRecipeTag, normalizeRecipeTags } from "../lib/recipeTags";
 import { useI18n } from "../components/I18nProvider";
+import { usePlanottoConfirm } from "../components/usePlanottoConfirm";
 import { downloadPdfExport } from "../lib/pdfExportClient";
 import { resolveRecipeImageForCard } from "../lib/recipeImageCatalog";
 import { readProfileGoalFromStorage, type ProfileGoal } from "../lib/profileGoal";
@@ -386,6 +387,7 @@ function resolveUserFrame(user: User | null | undefined): string | null {
 
 function RecipesPageContent() {
   const { locale, t } = useI18n();
+  const { confirm, confirmDialog } = usePlanottoConfirm();
   const { planTier } = usePlanTier();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -1121,7 +1123,7 @@ function RecipesPageContent() {
       const warning = listed
         ? t("recipes.messages.allergyWarningMany", { listed })
         : t("recipes.messages.allergyWarningOne");
-      const confirmed = confirm(warning);
+      const confirmed = await confirm({ message: warning });
       if (!confirmed) return;
     }
     setPendingCopyRecipeId(recipeId);
@@ -1234,7 +1236,10 @@ function RecipesPageContent() {
   };
 
   const handleClearAllRecipes = async () => {
-    const ok = confirm(t("recipes.messages.clearAllConfirm"));
+    const ok = await confirm({
+      message: t("recipes.messages.clearAllConfirm"),
+      tone: "danger",
+    });
     if (!ok) return;
 
     setIsLoading(true);
@@ -1280,11 +1285,12 @@ function RecipesPageContent() {
 
   const handleDeleteRecipe = async (recipe: RecipeModel) => {
     const localized = getRecipeLocalizedContent(recipe, uiRecipeLanguage);
-    const ok = confirm(
-      t("recipes.messages.deleteOneConfirm", {
+    const ok = await confirm({
+      message: t("recipes.messages.deleteOneConfirm", {
         title: localized.title || recipe.title || t("menu.fallback.recipeTitle"),
-      })
-    );
+      }),
+      tone: "danger",
+    });
     if (!ok) return;
 
     try {
@@ -2130,6 +2136,8 @@ function RecipesPageContent() {
         </div>
       )}
       </div>
+
+      {confirmDialog}
 
       {addToMenuPromptRecipeId ? (
         <div className="recipes-add-to-menu-banner" role="status" aria-live="polite">

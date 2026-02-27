@@ -30,6 +30,7 @@ import {
   upsertRecipeInLocalCache,
 } from "../../lib/recipesSupabase";
 import { useI18n } from "../../components/I18nProvider";
+import { usePlanottoConfirm } from "../../components/usePlanottoConfirm";
 import { findIngredientIdByName, getIngredientNameById } from "../../lib/ingredientDictionary";
 import {
   DEFAULT_UNIT_ID,
@@ -225,6 +226,7 @@ const resolveRecipeImage = (recipe: RecipeModel): string => {
 export default function RecipeDetailPage() {
   const router = useRouter();
   const { locale, t } = useI18n();
+  const { confirm, confirmDialog } = usePlanottoConfirm();
   const { planTier } = usePlanTier();
   const unitOptions = getUnitOptions(locale);
   const params = useParams();
@@ -751,7 +753,11 @@ export default function RecipeDetailPage() {
     if (!recipe) return;
     const localizedTitle =
       getRecipeTranslation(recipe, contentLanguage)?.title || recipe.title || t("menu.fallback.recipeTitle");
-    if (!confirm(t("recipes.messages.deleteOneConfirm", { title: localizedTitle }))) return;
+    const shouldDelete = await confirm({
+      message: t("recipes.messages.deleteOneConfirm", { title: localizedTitle }),
+      tone: "danger",
+    });
+    if (!shouldDelete) return;
 
     try {
       if (!isSupabaseConfigured() || !recipe.ownerId) {
@@ -1828,6 +1834,7 @@ export default function RecipeDetailPage() {
           )}
         </div>
       )}
+      {confirmDialog}
     </div>
   );
 }

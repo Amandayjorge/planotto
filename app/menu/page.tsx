@@ -23,6 +23,7 @@ import {
   upsertMineWeekMenu,
 } from "../lib/weeklyMenusSupabase";
 import { useI18n } from "../components/I18nProvider";
+import { usePlanottoConfirm } from "../components/usePlanottoConfirm";
 import { usePlanTier } from "../lib/usePlanTier";
 import { isPaidFeatureEnabled } from "../lib/subscription";
 import { downloadPdfExport, type PdfRecipePayload } from "../lib/pdfExportClient";
@@ -1277,6 +1278,7 @@ AddEditDialog.displayName = "AddEditDialog";
 
 function MenuPageContent() {
   const { locale, t } = useI18n();
+  const { confirm, confirmDialog } = usePlanottoConfirm();
   const { planTier } = usePlanTier();
   const defaultMenuName = t("menu.fallback.defaultMenuName");
   const defaultDayMeals = useMemo(
@@ -3083,7 +3085,7 @@ function MenuPageContent() {
     [defaultDayMeals, getDayMeals, visibleDayKeys]
   );
 
-  const applyDemoMenuTemplate = (templateId: DemoMenuTemplateId) => {
+  const applyDemoMenuTemplate = async (templateId: DemoMenuTemplateId) => {
     const template = demoMenuTemplates.find((item) => item.id === templateId);
     if (!template) return;
 
@@ -3091,8 +3093,8 @@ function MenuPageContent() {
     const templateMenuName = buildUniqueMenuName(template.title);
     const replaceActiveMenu = !canUseMultipleMenus || (menuProfiles.length <= 1 && allMenusEmpty);
 
-    if (!allMenusEmpty && replaceActiveMenu && typeof window !== "undefined") {
-      const confirmed = window.confirm(t("menu.templates.replaceConfirm"));
+    if (!allMenusEmpty && replaceActiveMenu) {
+      const confirmed = await confirm({ message: t("menu.templates.replaceConfirm") });
       if (!confirmed) return;
     }
 
@@ -3586,14 +3588,18 @@ function MenuPageContent() {
     closeMoveDialog();
   };
 
-  const clearWeek = () => {
-    if (confirm(t("menu.confirm.clearCurrentMenu"))) {
-      setMealData({});
-      setCellPeopleCount({});
-      setCookedStatus({});
-      if (activeMenuId) {
-        persistMenuSnapshot({}, {}, {}, activeMenuId);
-      }
+  const clearWeek = async () => {
+    const confirmed = await confirm({
+      message: t("menu.confirm.clearCurrentMenu"),
+      tone: "danger",
+    });
+    if (!confirmed) return;
+
+    setMealData({});
+    setCellPeopleCount({});
+    setCookedStatus({});
+    if (activeMenuId) {
+      persistMenuSnapshot({}, {}, {}, activeMenuId);
     }
   };
 
@@ -5364,6 +5370,7 @@ function MenuPageContent() {
         </button>
       </div>
       </section>
+      {confirmDialog}
     </>
   );
 }

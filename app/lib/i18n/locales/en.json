@@ -17,6 +17,13 @@
       "logoAlt": "Planotto mascot"
     }
   },
+  "common": {
+    "confirmDialog": {
+      "title": "Confirm action",
+      "confirm": "Confirm",
+      "cancel": "Cancel"
+    }
+  },
   "home": {
     "title": "Meal and shopping planning service",
     "description": "Saves time and helps avoid unnecessary purchases.",

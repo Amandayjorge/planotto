@@ -17,6 +17,13 @@
       "logoAlt": "Mascota de Planotto"
     }
   },
+  "common": {
+    "confirmDialog": {
+      "title": "Confirmar acción",
+      "confirm": "Confirmar",
+      "cancel": "Cancelar"
+    }
+  },
   "home": {
     "title": "Servicio para planificar comidas y compras",
     "description": "Ahorra tiempo y ayuda a evitar compras innecesarias.",

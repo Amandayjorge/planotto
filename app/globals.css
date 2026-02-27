@@ -2365,6 +2365,32 @@ body {
   overflow-y: auto;
 }
 
+.planotto-confirm-dialog__title {
+  margin: 0 0 10px;
+  font-size: 24px;
+  line-height: 1.2;
+}
+
+.planotto-confirm-dialog__message {
+  margin: 0;
+  white-space: pre-wrap;
+  line-height: 1.5;
+}
+
+.planotto-confirm-dialog .menu-dialog__actions {
+  margin-top: 18px;
+}
+
+.planotto-confirm-dialog__confirm--danger {
+  background: #a95e4e;
+  border-color: #a95e4e;
+}
+
+.planotto-confirm-dialog__confirm--danger:hover:not(:disabled) {
+  background: #8f4f42;
+  border-color: #8f4f42;
+}
+
 /* Portal dropdown menu styles */
 .menu-grid__item-menu-portal {
   position: fixed;
