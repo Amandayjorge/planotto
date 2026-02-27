@@ -1697,11 +1697,6 @@ function RecipesPageContent() {
       <h1 className="h1" style={{ marginBottom: "20px" }}>
         {t("recipes.title")}
       </h1>
-      <p className="muted" style={{ marginTop: "-10px", marginBottom: "14px" }}>
-        {viewMode === "public"
-          ? t("recipes.subtitle.public")
-          : t("recipes.subtitle.mine")}
-      </p>
 
       <div style={{ marginBottom: "14px", display: "flex", gap: "8px", flexWrap: "wrap" }}>
         <button
@@ -1736,88 +1731,6 @@ function RecipesPageContent() {
             <span className="muted">
               {t("pdf.selectedCount", { count: selectedMineRecipes.length })}
             </span>
-          </div>
-          {!canUsePdfExport ? (
-            <p className="muted" style={{ marginTop: "8px", marginBottom: 0 }}>
-              {t("subscription.availableInPro")}
-            </p>
-          ) : null}
-        </div>
-      ) : null}
-      <div
-        className="card"
-        style={{
-          marginTop: "-4px",
-          marginBottom: "12px",
-          padding: "10px 12px",
-          background: "var(--background-secondary)",
-        }}
-      >
-        <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
-          <span className="muted">
-            {viewMode === "mine"
-              ? t("recipes.tabHints.mine")
-              : t("recipes.tabHints.public")}
-          </span>
-          <button
-            type="button"
-            className="btn"
-            onClick={() => setViewMode(viewMode === "mine" ? "public" : "mine")}
-          >
-            {viewMode === "mine" ? t("recipes.actions.goToPublic") : t("recipes.actions.goToMine")}
-          </button>
-        </div>
-      </div>
-
-      {profileGoal !== "menu" ? (
-        <div
-          className="card"
-          style={{
-            marginTop: "-4px",
-            marginBottom: "12px",
-            padding: "10px 12px",
-            background: "var(--background-secondary)",
-          }}
-        >
-          <span className="muted">
-            {profileGoal === "recipes"
-              ? t("recipes.goalHints.recipes")
-              : profileGoal === "shopping"
-                ? t("recipes.goalHints.shopping")
-                : t("recipes.goalHints.explore")}
-          </span>
-        </div>
-      ) : (
-        <div
-          className="card"
-          style={{
-            marginTop: "-4px",
-            marginBottom: "12px",
-            padding: "10px 12px",
-            background: "var(--background-secondary)",
-          }}
-        >
-          <span className="muted">{t("recipes.goalHints.menu")}</span>
-        </div>
-      )}
-
-      {viewMode === "mine" && showPersonalTagsHint ? (
-        <div
-          className="card"
-          style={{
-            marginTop: "-4px",
-            marginBottom: "12px",
-            padding: "10px 12px",
-            background: "var(--background-secondary)",
-          }}
-        >
-          <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
-            <span className="muted">
-              {t("recipes.personalTags.hintText")} {t("recipes.personalTags.hintArrow")}
-            </span>
-            <button type="button" className="btn" onClick={markPersonalTagsHintSeen}>
-              {t("recipes.personalTags.hintDone")}
-            </button>
           </div>
         </div>
       ) : null}
@@ -1954,11 +1867,7 @@ function RecipesPageContent() {
                 </button>
               )}
             </div>
-          ) : (
-            <p className="muted" style={{ marginTop: "8px" }}>
-              {t("subscription.locks.advancedFilters")}
-            </p>
-          )}
+          ) : null}
 
           {canUseAdvancedFilters && showAdvancedFilters ? (
             <div className="recipes-filters-advanced">
