@@ -720,7 +720,8 @@
       "matches": "Matches: {{count}}",
       "dislikeBadge": "⚪ dislike",
       "dislikeHint": "Recipe contains a product from dislike list.",
-      "servings": "Servings: {{count}}"
+      "servings": "Servings: {{count}}",
+      "cookedTimes": "🔥 Cooked {{count}} times"
     },
     "visibility": {
       "publicTitle": "Public recipe: available for other users",

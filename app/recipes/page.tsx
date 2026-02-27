@@ -2152,6 +2152,9 @@ function RecipesPageContent() {
               (authorProfile?.displayName || "").trim() ||
               (recipe.ownerId === "system" ? t("recipes.card.planottoAuthor") : t("recipes.card.authorUnknown"));
             const canOpenAuthorPage = isPublicRecipe && (recipe.ownerId === "system" || isUuidLike(recipe.ownerId || ""));
+            const timesCooked = Number(
+              (recipe as RecipeModel & { timesCooked?: number }).timesCooked || 0
+            );
             const sourceLabel = isPublicSourceRecipe
               ? addDone
                 ? t("recipes.card.sourcePublicAdded")
@@ -2364,9 +2367,24 @@ function RecipesPageContent() {
                           </div>
                         ) : null}
                       </div>
-                      <span style={{ fontSize: "13px", color: "var(--text-secondary)", flexShrink: 0 }}>
-                        {t("recipes.card.servings", { count: recipe.servings || 2 })}
-                      </span>
+                      <div
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          alignItems: "flex-end",
+                          gap: "4px",
+                          fontSize: "13px",
+                          color: "var(--text-secondary)",
+                          flexShrink: 0,
+                        }}
+                      >
+                        <span>{t("recipes.card.servings", { count: recipe.servings || 2 })}</span>
+                        {timesCooked > 0 ? (
+                          <span style={{ fontSize: "11px", color: "var(--text-tertiary)" }}>
+                            {t("recipes.card.cookedTimes", { count: timesCooked })}
+                          </span>
+                        ) : null}
+                      </div>
                       {isMineCard ? (
                         <label style={{ display: "inline-flex", alignItems: "center", gap: "6px", marginLeft: "8px", fontSize: "12px", color: "var(--text-secondary)" }}>
                           <input

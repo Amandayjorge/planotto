@@ -720,7 +720,8 @@
       "matches": "Coincidencias: {{count}}",
       "dislikeBadge": "⚪ no me gusta",
       "dislikeHint": "La receta contiene producto de la lista de “no me gusta”.",
-      "servings": "Porciones: {{count}}"
+      "servings": "Porciones: {{count}}",
+      "cookedTimes": "🔥 Cocinada {{count}} veces"
     },
     "visibility": {
       "publicTitle": "Receta pública: visible para otros usuarios",
