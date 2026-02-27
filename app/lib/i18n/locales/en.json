@@ -688,6 +688,10 @@
       "createAccount": "Create account",
       "later": "Later"
     },
+    "guestMode": {
+      "notice": "Some features are available after registration.",
+      "addToMineLocked": "Add to mine after sign up"
+    },
     "success": {
       "firstAddedAria": "First recipe added",
       "title": "Great! First recipe added.",
@@ -899,7 +903,10 @@
         "createButton": "Create translation ({{lang}})",
         "regenerateButton": "Regenerate translation ({{lang}})",
         "translateCta": "Translate",
+        "guestOnlyCta": "Translation after sign up",
         "proOnlyCta": "Translation available in Pro",
+        "guestLocked": "Translation is available after registration.",
+        "proLocked": "Available in Pro.",
         "createManualButton": "Create manual translation ({{lang}})",
         "exists": "Translation already exists.",
         "noTitle": "Cannot create translation without a title.",

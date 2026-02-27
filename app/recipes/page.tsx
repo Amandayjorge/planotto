@@ -719,7 +719,7 @@ function RecipesPageContent() {
     if (!queryFromUrl) return;
 
     setSearchQuery(queryFromUrl);
-    setViewMode("mine");
+    setViewMode(currentUserId ? "mine" : "public");
 
     const url = new URL(window.location.href);
     if (url.searchParams.has("q")) {
@@ -728,7 +728,7 @@ function RecipesPageContent() {
       const nextUrl = nextSearch ? `${url.pathname}?${nextSearch}` : url.pathname;
       window.history.replaceState({}, "", nextUrl);
     }
-  }, [searchParams]);
+  }, [currentUserId, searchParams]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -754,6 +754,12 @@ function RecipesPageContent() {
   useEffect(() => {
     refreshRecipes(viewMode, currentUserId);
   }, [viewMode, currentUserId]);
+
+  useEffect(() => {
+    if (currentUserId) return;
+    if (viewMode !== "mine") return;
+    setViewMode("public");
+  }, [currentUserId, viewMode]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1541,6 +1547,7 @@ function RecipesPageContent() {
   const accountNameView = currentUserName || t("recipes.account.guestName");
   const accountEmailView = currentUserEmail || t("recipes.account.tapToLogin");
   const accountInitial = accountNameView.charAt(0).toUpperCase() || "G";
+  const isGuest = !currentUserId;
   const hasAnyRecipes = recipes.length > 0;
   const hasActiveFilters =
     effectiveSelectedTags.length > 0 ||
@@ -1655,9 +1662,11 @@ function RecipesPageContent() {
           <button className="btn" onClick={() => router.push("/menu")}>
             {t("recipes.actions.backToMenu")}
           </button>
-          <button className="btn btn-add" onClick={handleCreateRecipe}>
-            {t("recipes.actions.addRecipe")}
-          </button>
+          {!isGuest ? (
+            <button className="btn btn-add" onClick={handleCreateRecipe}>
+              {t("recipes.actions.addRecipe")}
+            </button>
+          ) : null}
           {viewMode === "mine" && hasAnyRecipes ? (
             <button className="btn btn-danger" onClick={handleClearAllRecipes}>
               {t("recipes.actions.clearMine")}
@@ -1708,13 +1717,15 @@ function RecipesPageContent() {
       </h1>
 
       <div style={{ marginBottom: "14px", display: "flex", gap: "8px", flexWrap: "wrap" }}>
-        <button
-          type="button"
-          className={`btn ${viewMode === "mine" ? "btn-primary" : ""}`}
-          onClick={() => setViewMode("mine")}
-        >
-          {t("recipes.tabs.mine")}
-        </button>
+        {!isGuest ? (
+          <button
+            type="button"
+            className={`btn ${viewMode === "mine" ? "btn-primary" : ""}`}
+            onClick={() => setViewMode("mine")}
+          >
+            {t("recipes.tabs.mine")}
+          </button>
+        ) : null}
         <button
           type="button"
           className={`btn ${viewMode === "public" ? "btn-primary" : ""}`}
@@ -1723,6 +1734,16 @@ function RecipesPageContent() {
           {t("recipes.tabs.public")}
         </button>
       </div>
+      {isGuest ? (
+        <div className="card" style={{ marginTop: "-4px", marginBottom: "12px", padding: "10px 12px" }}>
+          <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+            <span className="muted">🔒 {t("recipes.guestMode.notice")}</span>
+            <button type="button" className="btn btn-primary" onClick={() => router.push("/auth")}>
+              {t("recipes.guestReminder.createAccount")}
+            </button>
+          </div>
+        </div>
+      ) : null}
       {viewMode === "mine" ? (
         <div className="card" style={{ marginTop: "-4px", marginBottom: "12px", padding: "10px 12px" }}>
           <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
@@ -2014,16 +2035,23 @@ function RecipesPageContent() {
             <div className="empty-state__title">{t("recipes.empty.title")}</div>
             <div className="empty-state__description">{t("recipes.empty.description")}</div>
             <div style={{ marginTop: "14px", display: "flex", gap: "8px", justifyContent: "center", flexWrap: "wrap" }}>
-              <button className="btn btn-primary" onClick={handleCreateRecipe}>
-                {t("recipes.empty.addFirst")}
+              <button
+                className="btn btn-primary"
+                onClick={isGuest ? () => router.push("/auth") : handleCreateRecipe}
+              >
+                {isGuest ? t("recipes.guestReminder.createAccount") : t("recipes.empty.addFirst")}
               </button>
               {viewMode === "mine" ? (
                 <button className="btn" onClick={() => setViewMode("public")}>
                   {t("recipes.onboarding.chooseReady")}
                 </button>
-              ) : (
+              ) : !isGuest ? (
                 <button className="btn" onClick={() => setViewMode("mine")}>
                   {t("recipes.actions.goToMine")}
+                </button>
+              ) : (
+                <button className="btn" onClick={() => router.push("/auth")}>
+                  {t("recipes.guestReminder.createAccount")}
                 </button>
               )}
             </div>
@@ -2067,6 +2095,7 @@ function RecipesPageContent() {
               viewMode === "public" &&
               existingMineTitleSet.has(normalizeRecipeTitle(getRecipeCanonicalTitle(recipe)));
             const isPublicSourceRecipe = viewMode === "public" && !isOwner;
+            const isGuestPublicViewer = isPublicSourceRecipe && !currentUserId;
             const recipeTitleKey = normalizeRecipeTitle(getRecipeCanonicalTitle(recipe));
             const existingMineRecipeId = isPublicSourceRecipe ? existingMineByTitle.get(recipeTitleKey) || null : null;
             const openTargetId = duplicateExists && existingMineRecipeId ? existingMineRecipeId : recipe.id;
@@ -2120,21 +2149,29 @@ function RecipesPageContent() {
                   })
                 : "";
             const mainActionLabel = isPublicSourceRecipe
-              ? addDone
-                ? t("recipes.card.alreadyMine")
-                : isAdding
-                ? t("recipes.card.adding")
-                : t("recipes.card.addToMine")
+              ? isGuestPublicViewer
+                ? t("recipes.card.open")
+                : addDone
+                  ? t("recipes.card.alreadyMine")
+                  : isAdding
+                    ? t("recipes.card.adding")
+                    : t("recipes.card.addToMine")
               : t("recipes.card.open");
-            const mainActionClassName = `btn ${isPublicSourceRecipe ? "btn-primary" : ""}`.trim();
+            const mainActionClassName = `btn ${isPublicSourceRecipe && !isGuestPublicViewer ? "btn-primary" : ""}`.trim();
             const menuTargetRecipeId = !isPublicSourceRecipe
               ? recipe.id
+              : isGuestPublicViewer
+                ? null
               : addDone
                 ? existingMineRecipeId
                 : null;
             const canQuickAddToMenu = profileGoal === "menu" && Boolean(menuTargetRecipeId);
             const handleMainAction = () => {
               if (isPublicSourceRecipe) {
+                if (isGuestPublicViewer) {
+                  router.push(`/recipes/${recipe.id}`);
+                  return;
+                }
                 if (addDone) {
                   return;
                 }
@@ -2502,13 +2539,18 @@ function RecipesPageContent() {
                       <button
                         className={mainActionClassName}
                         onClick={handleMainAction}
-                        disabled={isPublicSourceRecipe && (isAdding || addDone)}
+                        disabled={isPublicSourceRecipe && !isGuestPublicViewer && (isAdding || addDone)}
                       >
                         {mainActionLabel}
                       </button>
-                      {isPublicSourceRecipe ? (
+                      {isPublicSourceRecipe && !isGuestPublicViewer ? (
                         <button className="btn" onClick={() => router.push(`/recipes/${openTargetId}`)}>
                           {t("recipes.card.open")}
+                        </button>
+                      ) : null}
+                      {isGuestPublicViewer ? (
+                        <button className="btn" onClick={() => router.push("/auth")}>
+                          🔒 {t("recipes.guestMode.addToMineLocked")}
                         </button>
                       ) : null}
                       {canQuickAddToMenu ? (

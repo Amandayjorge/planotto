@@ -688,6 +688,10 @@
       "createAccount": "Crear cuenta",
       "later": "Después"
     },
+    "guestMode": {
+      "notice": "Algunas funciones están disponibles después del registro.",
+      "addToMineLocked": "Añadir a las mías tras registro"
+    },
     "success": {
       "firstAddedAria": "Primera receta añadida",
       "title": "¡Perfecto! Primera receta añadida.",
@@ -899,7 +903,10 @@
         "createButton": "Crear traducción ({{lang}})",
         "regenerateButton": "Regenerar traducción ({{lang}})",
         "translateCta": "Traducir",
+        "guestOnlyCta": "Traducción tras registro",
         "proOnlyCta": "Traducción disponible en Pro",
+        "guestLocked": "La traducción está disponible después del registro.",
+        "proLocked": "Disponible en Pro.",
         "createManualButton": "Crear traducción manual ({{lang}})",
         "exists": "La traducción ya existe.",
         "noTitle": "No se puede crear una traducción sin título.",
