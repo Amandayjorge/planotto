@@ -66,6 +66,7 @@
       "profileSaved": "Profile saved.",
       "profileSaveError": "Failed to save profile.",
       "invalidImage": "Please choose an image file.",
+      "imageTooLarge": "Photo is too large. Please choose a smaller image.",
       "signedOut": "You have signed out."
     },
     "language": {
@@ -81,6 +82,7 @@
       "removeAvatar": "Remove avatar",
       "frameTitle": "Frame",
       "noFrame": "No frame",
+      "selected": "Selected",
       "pickAvatar": "Choose avatar",
       "pickFrame": "Choose frame",
       "avatarAlt": "Avatar",
@@ -90,7 +92,7 @@
       "noName": "No name"
     },
     "preferences": {
-      "section": "Preferences (if they are actually used)",
+      "section": "Preferences",
       "infoAllergies": "Allergies and strict restrictions: these products will never be used in recommendations and auto-generated menus.",
       "infoDislikes": "Disliked products: these products will be suggested less often and marked in recommendations.",
       "dietType": "Diet type",

@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useCallback, useEffect, useMemo, useState, type ChangeEvent, type Dispatch, type SetStateAction } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type Dispatch, type SetStateAction } from "react";
 import { useRouter } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
 import { SUPABASE_UNAVAILABLE_MESSAGE, getSupabaseClient, isSupabaseConfigured } from "../lib/supabaseClient";
@@ -22,6 +22,10 @@ import {
 type Mode = "signin" | "signup";
 type BillingStatusValue = "inactive" | "trial" | "active" | "past_due" | "canceled";
 type BillingAction = "checkout" | "portal" | null;
+const MAX_AVATAR_UPLOAD_BYTES = 8 * 1024 * 1024;
+const MAX_AVATAR_DATA_URL_LENGTH = 900_000;
+const AVATAR_MAX_SIDE = 720;
+const AVATAR_JPEG_QUALITY = 0.82;
 const AVATAR_PRESETS = [
   "/avatar/presets/m.png",
   "/avatar/presets/w.png",
@@ -118,6 +122,54 @@ const formatIsoDate = (value: string, locale: string): string => {
   });
 };
 
+const readFileAsDataUrl = (file: File): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = typeof reader.result === "string" ? reader.result : "";
+      if (!result) {
+        reject(new Error("Failed to read image file."));
+        return;
+      }
+      resolve(result);
+    };
+    reader.onerror = () => reject(new Error("Failed to read image file."));
+    reader.readAsDataURL(file);
+  });
+
+const compressAvatarDataUrl = async (dataUrl: string): Promise<string> => {
+  if (typeof window === "undefined") return dataUrl;
+
+  return await new Promise((resolve) => {
+    const image = new window.Image();
+    image.onload = () => {
+      const width = image.naturalWidth || image.width;
+      const height = image.naturalHeight || image.height;
+      if (!width || !height) {
+        resolve(dataUrl);
+        return;
+      }
+
+      const ratio = Math.min(1, AVATAR_MAX_SIDE / Math.max(width, height));
+      const targetWidth = Math.max(1, Math.round(width * ratio));
+      const targetHeight = Math.max(1, Math.round(height * ratio));
+      const canvas = document.createElement("canvas");
+      canvas.width = targetWidth;
+      canvas.height = targetHeight;
+      const context = canvas.getContext("2d");
+      if (!context) {
+        resolve(dataUrl);
+        return;
+      }
+      context.drawImage(image, 0, 0, targetWidth, targetHeight);
+      const compressed = canvas.toDataURL("image/jpeg", AVATAR_JPEG_QUALITY);
+      resolve(compressed || dataUrl);
+    };
+    image.onerror = () => resolve(dataUrl);
+    image.src = dataUrl;
+  });
+};
+
 export default function AuthPage() {
   const router = useRouter();
   const { locale, locales, setLocale, t } = useI18n();
@@ -150,6 +202,7 @@ export default function AuthPage() {
   const [billingConfigured, setBillingConfigured] = useState(false);
   const [message, setMessage] = useState("");
   const canUseAvatarFrames = isPaidFeatureEnabled(planTier, "avatar_frames");
+  const avatarFileInputRef = useRef<HTMLInputElement | null>(null);
 
   const languageOptions = useMemo(
     () =>
@@ -422,19 +475,39 @@ export default function AuthPage() {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    if (!file.type.startsWith("image/")) {
-      setMessage(t("auth.messages.invalidImage"));
+    if (file.size > MAX_AVATAR_UPLOAD_BYTES) {
+      setMessage(t("auth.messages.imageTooLarge"));
+      event.target.value = "";
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = typeof reader.result === "string" ? reader.result : "";
-      if (!result) return;
-      setProfileAvatar(result);
-      setMessage("");
-    };
-    reader.readAsDataURL(file);
+    if (!file.type.startsWith("image/")) {
+      setMessage(t("auth.messages.invalidImage"));
+      event.target.value = "";
+      return;
+    }
+
+    void (async () => {
+      try {
+        const rawDataUrl = await readFileAsDataUrl(file);
+        const optimizedDataUrl = await compressAvatarDataUrl(rawDataUrl);
+        if (optimizedDataUrl.length > MAX_AVATAR_DATA_URL_LENGTH) {
+          setMessage(t("auth.messages.imageTooLarge"));
+          event.target.value = "";
+          return;
+        }
+        setProfileAvatar(optimizedDataUrl);
+        setMessage("");
+      } catch {
+        setMessage(t("auth.messages.invalidImage"));
+      } finally {
+        event.target.value = "";
+      }
+    })();
+  };
+
+  const handleUploadAvatarClick = () => {
+    avatarFileInputRef.current?.click();
   };
 
   const handleSignOut = async () => {
@@ -711,23 +784,46 @@ export default function AuthPage() {
                 </button>
               ))}
             </div>
+            <input
+              ref={avatarFileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleAvatarFileChange}
+              style={{ display: "none" }}
+            />
             <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-              <label className="btn" style={{ cursor: "pointer" }}>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={handleUploadAvatarClick}
+              >
                 {t("auth.profile.uploadPhoto")}
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleAvatarFileChange}
-                  style={{ display: "none" }}
-                />
-              </label>
-              <button type="button" className="btn" onClick={() => setProfileAvatar("")}>
+              </button>
+              <button
+                type="button"
+                onClick={() => setProfileAvatar("")}
+                disabled={!profileAvatar}
+                style={{
+                  border: "none",
+                  background: "transparent",
+                  color: "var(--text-tertiary)",
+                  fontSize: "13px",
+                  textDecoration: "underline",
+                  textUnderlineOffset: "2px",
+                  cursor: profileAvatar ? "pointer" : "default",
+                  opacity: profileAvatar ? 1 : 0.5,
+                  padding: "10px 2px",
+                }}
+              >
                 {t("auth.profile.removeAvatar")}
               </button>
             </div>
             <div style={{ fontSize: "14px", fontWeight: 600, color: "var(--text-primary)" }}>{t("auth.profile.frameTitle")}</div>
             {!canUseAvatarFrames ? (
-              <p className="muted" style={{ margin: "0" }}>
+              <p
+                className="muted"
+                style={{ margin: "0", fontSize: "12px", color: "var(--text-tertiary)" }}
+              >
                 {t("subscription.locks.avatarFrames")}
               </p>
             ) : null}
@@ -738,9 +834,26 @@ export default function AuthPage() {
                 onClick={() => setProfileFrame("")}
                 style={{
                   border: !effectiveProfileFrame ? "2px solid var(--accent-primary)" : "1px solid var(--border-default)",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "6px",
                 }}
               >
                 {t("auth.profile.noFrame")}
+                {!effectiveProfileFrame ? (
+                  <span
+                    style={{
+                      fontSize: "11px",
+                      color: "var(--accent-primary)",
+                      border: "1px solid color-mix(in srgb, var(--accent-primary) 45%, var(--border-default) 55%)",
+                      borderRadius: "999px",
+                      padding: "1px 6px",
+                      lineHeight: 1.2,
+                    }}
+                  >
+                    {t("auth.profile.selected")}
+                  </span>
+                ) : null}
               </button>
               {FRAME_PRESETS.map((src) => (
                 <button
@@ -752,12 +865,16 @@ export default function AuthPage() {
                   }}
                   disabled={!canUseAvatarFrames}
                   style={{
-                    border: effectiveProfileFrame === src ? "2px solid var(--accent-primary)" : "1px solid var(--border-default)",
+                    border:
+                      canUseAvatarFrames && effectiveProfileFrame === src
+                        ? "2px solid var(--accent-primary)"
+                        : "1px solid var(--border-default)",
                     borderRadius: "10px",
                     background: "var(--background-primary)",
                     padding: "4px",
                     cursor: canUseAvatarFrames ? "pointer" : "not-allowed",
-                    opacity: canUseAvatarFrames ? 1 : 0.5,
+                    opacity: canUseAvatarFrames ? 1 : 0.45,
+                    filter: canUseAvatarFrames ? "none" : "grayscale(100%)",
                     width: "86px",
                     height: "86px",
                   }}
