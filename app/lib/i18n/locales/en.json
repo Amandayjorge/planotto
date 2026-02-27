@@ -104,6 +104,7 @@
       "saveProfile": "Save profile",
       "savingProfile": "Saving...",
       "toRecipes": "Go to recipes",
+      "toMain": "Go to main screen",
       "signOut": "Sign out",
       "signInTab": "Sign in",
       "signUpTab": "Sign up",
@@ -243,6 +244,10 @@
     "hints": {
       "menuIngredientsAdded": "Menu ingredients are already added. You can mark purchased items.",
       "listUpdated": "List updated."
+    },
+    "goalHints": {
+      "quickStart": "If your goal is shopping, you can start without menu: add manual items first.",
+      "quickAction": "Quick list"
     },
     "guestReminder": {
       "strong": "Register to avoid losing your data.",
@@ -488,6 +493,9 @@
       "periodTitle": "Planning period",
       "periodPresetLabel": "Period length"
     },
+    "goalHints": {
+      "planning": "Goal: menu planning. Select period and add dishes with the + button."
+    },
     "mealsConfig": {
       "title": "Configure meals",
       "showMeal": "Show meal",
@@ -580,6 +588,12 @@
     "subtitle": {
       "public": "Recipe library: choose a recipe and copy it to your recipes.",
       "mine": "Your recipes: store, edit and use for menu planning."
+    },
+    "goalHints": {
+      "menu": "Goal: menu planning. Choose a recipe and add it directly to menu.",
+      "recipes": "Goal: recipes. Use filters and search to build your library faster.",
+      "shopping": "Your main screen is Shopping. You can collect recipes here and add them to menu later.",
+      "explore": "Explore mode: browse recipes without pressure."
     },
     "tabs": {
       "mine": "Mine",

@@ -104,6 +104,7 @@
       "saveProfile": "Guardar perfil",
       "savingProfile": "Guardando...",
       "toRecipes": "A recetas",
+      "toMain": "Ir a pantalla principal",
       "signOut": "Cerrar sesión",
       "signInTab": "Entrar",
       "signUpTab": "Registro",
@@ -243,6 +244,10 @@
     "hints": {
       "menuIngredientsAdded": "Los ingredientes del menú ya están añadidos. Puedes marcar productos comprados.",
       "listUpdated": "Lista actualizada."
+    },
+    "goalHints": {
+      "quickStart": "Si tu objetivo es compras, puedes empezar sin menú: añade posiciones manualmente.",
+      "quickAction": "Lista rápida"
     },
     "guestReminder": {
       "strong": "Regístrate para no perder tus datos.",
@@ -488,6 +493,9 @@
       "periodTitle": "Período de planificación",
       "periodPresetLabel": "Duración del período"
     },
+    "goalHints": {
+      "planning": "Objetivo: planificar menú. Elige período y añade platos con el botón +."
+    },
     "mealsConfig": {
       "title": "Configurar comidas",
       "showMeal": "Mostrar comida",
@@ -580,6 +588,12 @@
     "subtitle": {
       "public": "Biblioteca de recetas: elige una receta y copiala a tus recetas.",
       "mine": "Tus recetas: guarda, edita y usa para planificar menú."
+    },
+    "goalHints": {
+      "menu": "Objetivo: planificar menú. Elige receta y añádela directamente al menú.",
+      "recipes": "Objetivo: recetas. Usa filtros y búsqueda para crear tu biblioteca más rápido.",
+      "shopping": "Tu pantalla principal es Compras. Aquí puedes juntar recetas y añadirlas al menú después.",
+      "explore": "Modo explorar: revisa recetas sin presión."
     },
     "tabs": {
       "mine": "Mías",

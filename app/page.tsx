@@ -1,9 +1,14 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useI18n } from "./components/I18nProvider";
+import {
+  getPrimaryRouteByProfileGoal,
+  readProfileGoalFromStorage,
+  type ProfileGoal,
+} from "./lib/profileGoal";
 
 const RECIPES_STORAGE_KEY = "recipes";
 const MENU_STORAGE_PREFIX = "weeklyMenu:";
@@ -89,6 +94,7 @@ const hasStartedPlanning = (): boolean => {
 
 export default function Home() {
   const { t } = useI18n();
+  const [profileGoal, setProfileGoal] = useState<ProfileGoal>("menu");
   const startedPlanning = useSyncExternalStore(
     (onStoreChange) => {
       if (typeof window === "undefined") return () => undefined;
@@ -116,7 +122,21 @@ export default function Home() {
     () => false
   );
 
-  const primaryCtaHref = startedPlanning ? "/menu" : "/menu?first=1";
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const refreshProfileGoal = () => setProfileGoal(readProfileGoalFromStorage());
+    refreshProfileGoal();
+    window.addEventListener("storage", refreshProfileGoal);
+    window.addEventListener("focus", refreshProfileGoal);
+    return () => {
+      window.removeEventListener("storage", refreshProfileGoal);
+      window.removeEventListener("focus", refreshProfileGoal);
+    };
+  }, []);
+
+  const primaryGoalRoute = getPrimaryRouteByProfileGoal(profileGoal);
+  const primaryCtaHref =
+    startedPlanning ? primaryGoalRoute : profileGoal === "menu" ? "/menu?first=1" : primaryGoalRoute;
   const primaryCtaText = startedPlanning
     ? t("home.cta.continue")
     : t("home.cta.start");

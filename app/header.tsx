@@ -5,6 +5,10 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useI18n } from "./components/I18nProvider";
+import {
+  getPrimaryRouteByProfileGoal,
+  readProfileGoalFromStorage,
+} from "./lib/profileGoal";
 
 const SHOPPING_HIGHLIGHT_KEY = "planottoHighlightShoppingNav";
 const NAV_ITEMS = [
@@ -21,6 +25,7 @@ export default function Header() {
   const { t } = useI18n();
   const [highlightShopping, setHighlightShopping] = useState(false);
   const [mobileMenuOpenedForPath, setMobileMenuOpenedForPath] = useState<string | null>(null);
+  const [brandHref, setBrandHref] = useState("/menu");
   const isMobileMenuOpen = mobileMenuOpenedForPath === pathname;
 
   const closeMobileMenu = () => {
@@ -42,6 +47,20 @@ export default function Header() {
 
     return () => {
       window.removeEventListener("planotto:highlight-shopping", updateHighlight as EventListener);
+    };
+  }, []);
+
+  useEffect(() => {
+    const refreshBrandHref = () => {
+      setBrandHref(getPrimaryRouteByProfileGoal(readProfileGoalFromStorage()));
+    };
+
+    refreshBrandHref();
+    window.addEventListener("storage", refreshBrandHref);
+    window.addEventListener("focus", refreshBrandHref);
+    return () => {
+      window.removeEventListener("storage", refreshBrandHref);
+      window.removeEventListener("focus", refreshBrandHref);
     };
   }, []);
 
@@ -73,7 +92,7 @@ export default function Header() {
   return (
     <header className="header">
       <div className="container header__inner">
-        <Link className="brand header-mascot" href="/">
+        <Link className="brand header-mascot" href={brandHref}>
           <Image
             src={mascotSrc}
             alt={t("header.aria.logoAlt")}

@@ -11,6 +11,13 @@ import { isPaidFeatureEnabled } from "../lib/subscription";
 import { usePlanTier } from "../lib/usePlanTier";
 import ProductAutocompleteInput from "../components/ProductAutocompleteInput";
 import { appendProductSuggestions, loadProductSuggestions } from "../lib/productSuggestions";
+import {
+  clearProfileGoalFromStorage,
+  getPrimaryRouteByProfileGoal,
+  normalizeProfileGoal,
+  saveProfileGoalToStorage,
+  type ProfileGoal,
+} from "../lib/profileGoal";
 
 type Mode = "signin" | "signup";
 const AVATAR_PRESETS = [
@@ -25,7 +32,7 @@ const FRAME_PRESETS = [
   "/avatar/frames/thumbs/2.png",
   "/avatar/frames/thumbs/5.png",
 ];
-const PROFILE_GOAL_OPTIONS = ["menu", "recipes", "shopping", "explore"] as const;
+const PROFILE_GOAL_OPTIONS: ProfileGoal[] = ["menu", "recipes", "shopping", "explore"];
 const PROFILE_MEALS_OPTIONS = ["1-2", "3", "4+", "variable"] as const;
 const PROFILE_PLAN_DAYS_OPTIONS = ["all", "weekdays", "weekends"] as const;
 const PROFILE_DIET_OPTIONS = ["none", "vegetarian", "vegan", "gluten_free", "lactose_free", "pp"] as const;
@@ -95,7 +102,7 @@ export default function AuthPage() {
   const [profileName, setProfileName] = useState("");
   const [profileAvatar, setProfileAvatar] = useState("");
   const [profileFrame, setProfileFrame] = useState("");
-  const [profileGoal, setProfileGoal] = useState("menu");
+  const [profileGoal, setProfileGoal] = useState<ProfileGoal>("menu");
   const [profilePeopleCount, setProfilePeopleCount] = useState("2");
   const [profileMealsPerDay, setProfileMealsPerDay] = useState("3");
   const [profilePlanDays, setProfilePlanDays] = useState("all");
@@ -130,7 +137,9 @@ export default function AuthPage() {
       setProfileFrame(resolveUserFrame(data.user));
       const userLocale = resolveUserMetaValue(data.user, "ui_language", "");
       if (isLocale(userLocale)) setLocale(userLocale);
-      setProfileGoal(resolveUserMetaValue(data.user, "goal", "menu"));
+      const nextGoal = normalizeProfileGoal(resolveUserMetaValue(data.user, "goal", "menu"));
+      setProfileGoal(nextGoal);
+      saveProfileGoalToStorage(nextGoal);
       setProfilePeopleCount(resolveUserMetaValue(data.user, "people_count_default", "2"));
       setProfileMealsPerDay(resolveUserMetaValue(data.user, "meals_per_day", "3"));
       setProfilePlanDays(resolveUserMetaValue(data.user, "plan_days", "all"));
@@ -147,7 +156,9 @@ export default function AuthPage() {
       setProfileFrame(resolveUserFrame(session?.user));
       const userLocale = resolveUserMetaValue(session?.user, "ui_language", "");
       if (isLocale(userLocale)) setLocale(userLocale);
-      setProfileGoal(resolveUserMetaValue(session?.user, "goal", "menu"));
+      const nextGoal = normalizeProfileGoal(resolveUserMetaValue(session?.user, "goal", "menu"));
+      setProfileGoal(nextGoal);
+      saveProfileGoalToStorage(nextGoal);
       setProfilePeopleCount(resolveUserMetaValue(session?.user, "people_count_default", "2"));
       setProfileMealsPerDay(resolveUserMetaValue(session?.user, "meals_per_day", "3"));
       setProfilePlanDays(resolveUserMetaValue(session?.user, "plan_days", "all"));
@@ -184,10 +195,12 @@ export default function AuthPage() {
 
     try {
       if (mode === "signin") {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
+        const signedInGoal = normalizeProfileGoal(resolveUserMetaValue(data.user || data.session?.user, "goal", profileGoal));
+        saveProfileGoalToStorage(signedInGoal);
         setMessage(t("auth.messages.signedIn"));
-        router.push("/recipes");
+        router.push(getPrimaryRouteByProfileGoal(signedInGoal));
       } else {
         const { error } = await supabase.auth.signUp({ email, password });
         if (error) throw error;
@@ -227,6 +240,7 @@ export default function AuthPage() {
 
       if (error) throw error;
       await ensureCurrentUserProfile();
+      saveProfileGoalToStorage(profileGoal);
       setMessage(t("auth.messages.profileSaved"));
     } catch (error) {
       const text = error instanceof Error ? error.message : t("auth.messages.profileSaveError");
@@ -259,6 +273,7 @@ export default function AuthPage() {
     if (!isSupabaseConfigured()) return;
     const supabase = getSupabaseClient();
     await supabase.auth.signOut();
+    clearProfileGoalFromStorage();
     setMessage(t("auth.messages.signedOut"));
     setProfileName("");
     setProfileAvatar("");
@@ -286,6 +301,7 @@ export default function AuthPage() {
   };
 
   const effectiveProfileFrame = canUseAvatarFrames ? profileFrame : "";
+  const primaryRoute = getPrimaryRouteByProfileGoal(profileGoal);
 
   const previewInitial = useMemo(() => {
     const base = profileName.trim() || (userEmail || "").split("@")[0] || "G";
@@ -639,7 +655,11 @@ export default function AuthPage() {
             </div>
             <label style={{ display: "grid", gap: "6px" }}>
               {t("auth.serviceUsage.goal")}
-              <select className="input" value={profileGoal} onChange={(e) => setProfileGoal(e.target.value)}>
+              <select
+                className="input"
+                value={profileGoal}
+                onChange={(e) => setProfileGoal(normalizeProfileGoal(e.target.value))}
+              >
                 {PROFILE_GOAL_OPTIONS.map((value) => (
                   <option key={value} value={value}>
                     {t(`auth.options.goal.${value}`)}
@@ -673,8 +693,8 @@ export default function AuthPage() {
             <button type="button" className="btn btn-primary" onClick={handleSaveProfile} disabled={profileSaving}>
               {profileSaving ? t("auth.actions.savingProfile") : t("auth.actions.saveProfile")}
             </button>
-            <button type="button" className="btn" onClick={() => router.push("/recipes")} style={{ opacity: 0.95 }}>
-              {t("auth.actions.toRecipes")}
+            <button type="button" className="btn" onClick={() => router.push(primaryRoute)} style={{ opacity: 0.95 }}>
+              {t("auth.actions.toMain")}
             </button>
             <button
               type="button"
@@ -747,7 +767,7 @@ export default function AuthPage() {
                   ? t("auth.actions.signIn")
                   : t("auth.actions.signUp")}
             </button>
-            <button type="button" className="btn" onClick={() => router.push("/recipes")}>
+            <button type="button" className="btn" onClick={() => router.push(primaryRoute)}>
               {t("auth.actions.back")}
             </button>
           </div>

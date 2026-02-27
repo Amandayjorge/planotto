@@ -26,6 +26,7 @@ import { RECIPE_TAGS, localizeRecipeTag, normalizeRecipeTags } from "../lib/reci
 import { useI18n } from "../components/I18nProvider";
 import { downloadPdfExport } from "../lib/pdfExportClient";
 import { resolveRecipeImageForCard } from "../lib/recipeImageCatalog";
+import { readProfileGoalFromStorage, type ProfileGoal } from "../lib/profileGoal";
 
 type ViewMode = "mine" | "public";
 type SortOption =
@@ -423,6 +424,7 @@ function RecipesPageContent() {
   const [openDislikeRecipeId, setOpenDislikeRecipeId] = useState<string | null>(null);
   const [selectedRecipeIds, setSelectedRecipeIds] = useState<Record<string, boolean>>({});
   const [isExportingRecipesPdf, setIsExportingRecipesPdf] = useState(false);
+  const [profileGoal, setProfileGoal] = useState<ProfileGoal>("menu");
   const canUseAdvancedFilters = isPaidFeatureEnabled(planTier, "advanced_filters");
   const canUsePdfExport = isPaidFeatureEnabled(planTier, "pdf_export");
   const effectiveSelectedTags = canUseAdvancedFilters ? selectedTags : [];
@@ -453,6 +455,25 @@ function RecipesPageContent() {
     if (viewMode === "mine") return;
     setSelectedRecipeIds({});
   }, [viewMode]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const refreshProfileGoal = () => setProfileGoal(readProfileGoalFromStorage());
+    refreshProfileGoal();
+    window.addEventListener("storage", refreshProfileGoal);
+    window.addEventListener("focus", refreshProfileGoal);
+    return () => {
+      window.removeEventListener("storage", refreshProfileGoal);
+      window.removeEventListener("focus", refreshProfileGoal);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (profileGoal !== "recipes") return;
+    if (canUseAdvancedFilters) {
+      setShowAdvancedFilters(true);
+    }
+  }, [canUseAdvancedFilters, profileGoal]);
 
   const refreshRecipes = async (mode: ViewMode, userId: string | null): Promise<void> => {
     setIsLoading(true);
@@ -1514,6 +1535,38 @@ function RecipesPageContent() {
         </div>
       ) : null}
 
+      {profileGoal !== "menu" ? (
+        <div
+          className="card"
+          style={{
+            marginTop: "-4px",
+            marginBottom: "12px",
+            padding: "10px 12px",
+            background: "var(--background-secondary)",
+          }}
+        >
+          <span className="muted">
+            {profileGoal === "recipes"
+              ? t("recipes.goalHints.recipes")
+              : profileGoal === "shopping"
+                ? t("recipes.goalHints.shopping")
+                : t("recipes.goalHints.explore")}
+          </span>
+        </div>
+      ) : (
+        <div
+          className="card"
+          style={{
+            marginTop: "-4px",
+            marginBottom: "12px",
+            padding: "10px 12px",
+            background: "var(--background-secondary)",
+          }}
+        >
+          <span className="muted">{t("recipes.goalHints.menu")}</span>
+        </div>
+      )}
+
       {hasAnyRecipes ? (
         <>
           <div className="recipes-filters-quick">
@@ -1853,6 +1906,12 @@ function RecipesPageContent() {
                 : t("recipes.card.addToMine")
               : t("recipes.card.open");
             const mainActionClassName = `btn ${isPublicSourceRecipe ? "btn-primary" : ""}`.trim();
+            const menuTargetRecipeId = !isPublicSourceRecipe
+              ? recipe.id
+              : addDone
+                ? existingMineRecipeId
+                : null;
+            const canQuickAddToMenu = profileGoal === "menu" && Boolean(menuTargetRecipeId);
             const handleMainAction = () => {
               if (isPublicSourceRecipe) {
                 if (addDone) {
@@ -2052,6 +2111,14 @@ function RecipesPageContent() {
                       {isPublicSourceRecipe ? (
                         <button className="btn" onClick={() => router.push(`/recipes/${openTargetId}`)}>
                           {t("recipes.card.open")}
+                        </button>
+                      ) : null}
+                      {canQuickAddToMenu ? (
+                        <button
+                          className="btn"
+                          onClick={() => openMenuWithRecipe(menuTargetRecipeId as string)}
+                        >
+                          {t("recipes.success.addToMenu")}
                         </button>
                       ) : null}
                     </div>

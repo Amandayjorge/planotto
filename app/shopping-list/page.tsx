@@ -16,6 +16,7 @@ import {
   type UnitId,
 } from "../lib/ingredientUnits";
 import { useI18n } from "../components/I18nProvider";
+import { readProfileGoalFromStorage, type ProfileGoal } from "../lib/profileGoal";
 import {
   SHOPPING_PRINT_SNAPSHOT_KEY,
   type ShoppingPrintItem,
@@ -532,6 +533,7 @@ const formatAmount = (value: number, locale: string): string => {
 export default function ShoppingListPage() {
   const { locale, t } = useI18n();
   const activeLocale = resolveIntlLocale(locale);
+  const [profileGoal, setProfileGoal] = useState<ProfileGoal>("menu");
   const [shoppingSelectedMenuId] = useState<string>(() => {
     if (typeof window === "undefined") return "";
     return window.sessionStorage.getItem(SHOPPING_SELECTED_MENU_ID_KEY) || "";
@@ -618,6 +620,18 @@ export default function ShoppingListPage() {
       shoppingSettings.mergeMenus ? "1" : "0"
     );
   }, [shoppingSettings]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const refreshProfileGoal = () => setProfileGoal(readProfileGoalFromStorage());
+    refreshProfileGoal();
+    window.addEventListener("storage", refreshProfileGoal);
+    window.addEventListener("focus", refreshProfileGoal);
+    return () => {
+      window.removeEventListener("storage", refreshProfileGoal);
+      window.removeEventListener("focus", refreshProfileGoal);
+    };
+  }, []);
 
   // сохраняем purchasedItems
   useEffect(() => {
@@ -1214,6 +1228,17 @@ export default function ShoppingListPage() {
           </button>
         </div>
 
+        {profileGoal === "shopping" ? (
+          <div className="card" style={{ marginTop: "10px", padding: "10px 12px" }}>
+            <p className="muted" style={{ margin: "0 0 8px 0" }}>
+              {t("shopping.goalHints.quickStart")}
+            </p>
+            <button type="button" className="btn btn-primary" onClick={() => setIsManualModalOpen(true)}>
+              {t("shopping.goalHints.quickAction")}
+            </button>
+          </div>
+        ) : null}
+
         {showMenuAddedHint && (
           <p className="muted" style={{ marginTop: "8px", marginBottom: 0, fontSize: "13px" }}>
             {t("shopping.hints.menuIngredientsAdded")}
@@ -1267,12 +1292,23 @@ export default function ShoppingListPage() {
           </div>
           <div className="empty-state__description">{t("shopping.empty.example")}</div>
           <div style={{ marginTop: "16px", display: "flex", gap: "10px", flexWrap: "wrap", justifyContent: "center" }}>
-            <Link href="/menu" className="btn btn-primary">
-              {t("shopping.actions.buildMenu")}
-            </Link>
+            {profileGoal === "shopping" ? (
+              <button type="button" className="btn btn-primary" onClick={() => setIsManualModalOpen(true)}>
+                {t("shopping.goalHints.quickAction")}
+              </button>
+            ) : (
+              <Link href="/menu" className="btn btn-primary">
+                {t("shopping.actions.buildMenu")}
+              </Link>
+            )}
             <Link href="/recipes/new" className="btn btn-add">
               {t("shopping.actions.addRecipe")}
             </Link>
+            {profileGoal === "shopping" ? (
+              <Link href="/menu" className="btn">
+                {t("shopping.actions.buildMenu")}
+              </Link>
+            ) : null}
           </div>
           <div style={{ marginTop: "12px", fontSize: "13px", color: "var(--text-tertiary)" }}>
             {t("shopping.empty.footer")}

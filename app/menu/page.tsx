@@ -26,6 +26,7 @@ import { useI18n } from "../components/I18nProvider";
 import { usePlanTier } from "../lib/usePlanTier";
 import { isPaidFeatureEnabled } from "../lib/subscription";
 import { downloadPdfExport, type PdfRecipePayload } from "../lib/pdfExportClient";
+import { readProfileGoalFromStorage, type ProfileGoal } from "../lib/profileGoal";
 import {
   DEFAULT_UNIT_ID,
   getUnitLabelById,
@@ -1205,6 +1206,7 @@ function MenuPageContent() {
   const [pendingDeleteMenuId, setPendingDeleteMenuId] = useState<string | null>(null);
   const [mergeShoppingWithAllMenus, setMergeShoppingWithAllMenus] = useState(false);
   const [showAddRecipePromptInRecipes, setShowAddRecipePromptInRecipes] = useState(true);
+  const [profileGoal, setProfileGoal] = useState<ProfileGoal>("menu");
   const [showMealSettingsDialog, setShowMealSettingsDialog] = useState(false);
   const [newMealSlotName, setNewMealSlotName] = useState("");
   const [saveMealSlotsAsDefault, setSaveMealSlotsAsDefault] = useState(false);
@@ -1259,6 +1261,18 @@ function MenuPageContent() {
     if (typeof window === "undefined") return;
     localStorage.setItem(DAY_STRUCTURE_MODE_KEY, dayStructureMode);
   }, [dayStructureMode]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const refreshProfileGoal = () => setProfileGoal(readProfileGoalFromStorage());
+    refreshProfileGoal();
+    window.addEventListener("storage", refreshProfileGoal);
+    window.addEventListener("focus", refreshProfileGoal);
+    return () => {
+      window.removeEventListener("storage", refreshProfileGoal);
+      window.removeEventListener("focus", refreshProfileGoal);
+    };
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -2448,6 +2462,10 @@ function MenuPageContent() {
 
   useEffect(() => {
     if (!hasLoaded || typeof window === "undefined") return;
+    if (profileGoal === "explore") {
+      setShowFirstVisitOnboarding(false);
+      return;
+    }
     if (forceFirstFromQuery) {
       localStorage.removeItem(MENU_FIRST_VISIT_ONBOARDING_KEY);
       setForcedOnboardingFlow(true);
@@ -2463,9 +2481,14 @@ function MenuPageContent() {
     if (menuMode === "mine" && recipes.length === 0 && !isDismissed) {
       setShowFirstVisitOnboarding(true);
     }
-  }, [allMenusEmpty, forceFirstFromQuery, hasLoaded, menuMode, recipes.length, router]);
+  }, [allMenusEmpty, forceFirstFromQuery, hasLoaded, menuMode, profileGoal, recipes.length, router]);
 
   useEffect(() => {
+    if (profileGoal === "explore") {
+      setShowCalendarInlineHint(false);
+      setShowFirstVisitOnboarding(false);
+      return;
+    }
     if (forceFirstFromQuery) return;
     if (recipes.length > 0 && !forcedOnboardingFlow) {
       setShowCalendarInlineHint(false);
@@ -2477,7 +2500,7 @@ function MenuPageContent() {
     if (inlineDismissed) {
       setShowCalendarInlineHint(false);
     }
-  }, [forceFirstFromQuery, forcedOnboardingFlow, recipes.length]);
+  }, [forceFirstFromQuery, forcedOnboardingFlow, profileGoal, recipes.length]);
 
   useEffect(() => {
     if (!hasLoaded) return;
@@ -4102,6 +4125,12 @@ function MenuPageContent() {
           </button>
         </div>
       </div>
+
+      {profileGoal === "menu" ? (
+        <p className="muted" style={{ marginTop: "0", marginBottom: "10px" }}>
+          {t("menu.goalHints.planning")}
+        </p>
+      ) : null}
 
       <div className="card" style={{ marginBottom: "10px", padding: "8px 10px" }}>
         <div style={{ display: "grid", gap: "4px" }}>
