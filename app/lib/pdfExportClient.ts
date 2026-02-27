@@ -25,6 +25,7 @@ export type PdfExportPayload =
       periodLabel: string;
       days: PdfMenuDay[];
       fileName?: string;
+      uiLanguage?: string;
     }
   | {
       kind: "menu_full";
@@ -33,17 +34,20 @@ export type PdfExportPayload =
       days: PdfMenuDay[];
       recipes: PdfRecipePayload[];
       fileName?: string;
+      uiLanguage?: string;
     }
   | {
       kind: "recipe";
       recipe: PdfRecipePayload;
       fileName?: string;
+      uiLanguage?: string;
     }
   | {
       kind: "recipes";
       coverTitle?: string;
       recipes: PdfRecipePayload[];
       fileName?: string;
+      uiLanguage?: string;
     };
 
 const parseFileNameFromDisposition = (value: string | null): string | null => {
@@ -71,10 +75,19 @@ const parseBackendError = async (response: Response): Promise<string> => {
 };
 
 export const downloadPdfExport = async (payload: PdfExportPayload): Promise<void> => {
+  const uiLanguage =
+    typeof document !== "undefined"
+      ? (document.documentElement.lang || navigator.language || "").trim()
+      : "";
+  const requestPayload = {
+    ...payload,
+    uiLanguage,
+  };
+
   const response = await fetch("/api/pdf/export", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(requestPayload),
   });
 
   if (!response.ok) {

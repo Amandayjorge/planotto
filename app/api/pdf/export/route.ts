@@ -25,6 +25,7 @@ type MenuExportPayload = {
   menuTitle: string;
   periodLabel: string;
   fileName?: string;
+  uiLanguage?: "ru" | "en" | "es";
   days: Array<{
     dayLabel: string;
     dateLabel: string;
@@ -40,6 +41,7 @@ type MenuWithRecipesExportPayload = {
   menuTitle: string;
   periodLabel: string;
   fileName?: string;
+  uiLanguage?: "ru" | "en" | "es";
   days: Array<{
     dayLabel: string;
     dateLabel: string;
@@ -61,6 +63,7 @@ type MenuWithRecipesExportPayload = {
 type RecipeExportPayload = {
   kind: "recipe";
   fileName?: string;
+  uiLanguage?: "ru" | "en" | "es";
   recipe: {
     title: string;
     servings: number;
@@ -75,6 +78,7 @@ type RecipesExportPayload = {
   kind: "recipes";
   fileName?: string;
   coverTitle?: string;
+  uiLanguage?: "ru" | "en" | "es";
   recipes: Array<{
     title: string;
     servings: number;
@@ -154,7 +158,23 @@ const sanitizeFileName = (value: string, fallback: string): string => {
   return normalized.toLowerCase().endsWith(".pdf") ? normalized : `${normalized}.pdf`;
 };
 
-const getBaseDoc = (content: unknown[]): Record<string, unknown> => ({
+const normalizeUiLanguage = (value: unknown): "ru" | "en" | "es" => {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (normalized.startsWith("es")) return "es";
+  if (normalized.startsWith("en")) return "en";
+  return "ru";
+};
+
+const getPdfPageLabel = (language: "ru" | "en" | "es"): string => {
+  if (language === "es") return "Página";
+  if (language === "en") return "Page";
+  return "Стр.";
+};
+
+const getBaseDoc = (
+  content: unknown[],
+  language: "ru" | "en" | "es"
+): Record<string, unknown> => ({
   pageSize: "A4",
   pageOrientation: "portrait",
   pageMargins: [42, 54, 42, 42],
@@ -174,7 +194,7 @@ const getBaseDoc = (content: unknown[]): Record<string, unknown> => ({
     coverTitle: { fontSize: 28, bold: true, alignment: "center", margin: [0, 260, 0, 0] },
   },
   footer: (currentPage: number, pageCount: number) => ({
-    columns: [{ text: `Стр. ${currentPage} / ${pageCount}`, alignment: "right" }],
+    columns: [{ text: `${getPdfPageLabel(language)} ${currentPage} / ${pageCount}`, alignment: "right" }],
     margin: [42, 0, 42, 16],
     fontSize: 8,
     color: "#666666",
@@ -247,7 +267,7 @@ const toMenuContentBlocks = (
 
 const buildMenuPdf = async (payload: MenuExportPayload): Promise<Buffer> => {
   const content = toMenuContentBlocks(payload);
-  return await toBuffer(getBaseDoc(content));
+  return await toBuffer(getBaseDoc(content, normalizeUiLanguage(payload.uiLanguage)));
 };
 
 const buildMenuWithRecipesPdf = async (payload: MenuWithRecipesExportPayload): Promise<Buffer> => {
@@ -255,13 +275,13 @@ const buildMenuWithRecipesPdf = async (payload: MenuWithRecipesExportPayload): P
   payload.recipes.forEach((recipe) => {
     content.push(toRecipeContentBlock(recipe, true));
   });
-  return await toBuffer(getBaseDoc(content));
+  return await toBuffer(getBaseDoc(content, normalizeUiLanguage(payload.uiLanguage)));
 };
 
 const buildSingleRecipePdf = async (payload: RecipeExportPayload): Promise<Buffer> => {
   const recipe = payload.recipe;
   const content = [toRecipeContentBlock(recipe)];
-  return await toBuffer(getBaseDoc(content));
+  return await toBuffer(getBaseDoc(content, normalizeUiLanguage(payload.uiLanguage)));
 };
 
 const buildRecipesCollectionPdf = async (payload: RecipesExportPayload): Promise<Buffer> => {
@@ -274,7 +294,7 @@ const buildRecipesCollectionPdf = async (payload: RecipesExportPayload): Promise
     content.push(toRecipeContentBlock(recipe, true));
   });
 
-  return await toBuffer(getBaseDoc(content));
+  return await toBuffer(getBaseDoc(content, normalizeUiLanguage(payload.uiLanguage)));
 };
 
 const normalizePayload = (raw: unknown): PdfExportPayload | null => {
@@ -305,6 +325,7 @@ const normalizePayload = (raw: unknown): PdfExportPayload | null => {
       periodLabel: safeText(record.periodLabel, "—"),
       days,
       fileName: safeText(record.fileName),
+      uiLanguage: normalizeUiLanguage(record.uiLanguage),
     };
   }
 
@@ -343,6 +364,7 @@ const normalizePayload = (raw: unknown): PdfExportPayload | null => {
         };
       }),
       fileName: safeText(record.fileName),
+      uiLanguage: normalizeUiLanguage(record.uiLanguage),
     };
   }
 
@@ -351,6 +373,7 @@ const normalizePayload = (raw: unknown): PdfExportPayload | null => {
     return {
       kind: "recipe",
       fileName: safeText(record.fileName),
+      uiLanguage: normalizeUiLanguage(record.uiLanguage),
       recipe: {
         title: safeText(recipeRaw.title, "Рецепт"),
         servings: Math.max(1, safeNumber(recipeRaw.servings, 1)),
@@ -368,6 +391,7 @@ const normalizePayload = (raw: unknown): PdfExportPayload | null => {
       kind: "recipes",
       fileName: safeText(record.fileName),
       coverTitle: safeText(record.coverTitle, "Сборник рецептов"),
+      uiLanguage: normalizeUiLanguage(record.uiLanguage),
       recipes: recipesRaw.map((recipe) => {
         const recipeRecord = recipe as Record<string, unknown>;
         return {
