@@ -56,7 +56,6 @@ import { resolveRecipeImageForCard } from "../../lib/recipeImageCatalog";
 
 type IngredientHintsMap = Record<number, string[]>;
 const RECIPE_LANGUAGES: RecipeLanguage[] = ["ru", "en", "es"];
-const LANGUAGE_LABELS: Record<RecipeLanguage, string> = { ru: "RU", en: "EN", es: "ES" };
 const RECIPES_FIRST_FLOW_KEY = "recipesFirstFlowActive";
 const FIRST_RECIPE_ADDED_KEY = "recipes:first-added-recipe-id";
 const FIRST_RECIPE_SUCCESS_PENDING_KEY = "recipes:first-success-pending";
@@ -274,6 +273,7 @@ export default function RecipeDetailPage() {
   const [isCreatingTranslation, setIsCreatingTranslation] = useState(false);
   const [isExportingRecipePdf, setIsExportingRecipePdf] = useState(false);
   const [showPdfProPrompt, setShowPdfProPrompt] = useState(false);
+  const [showTranslationProPrompt, setShowTranslationProPrompt] = useState(false);
   const [alreadyInMine, setAlreadyInMine] = useState(false);
   const hasCoreInput = title.trim().length > 0 || ingredients.some((item) => item.name.trim().length > 0);
   const canUseAiTranslation = isPaidFeatureEnabled(planTier, "ai_translation");
@@ -301,6 +301,12 @@ export default function RecipeDetailPage() {
       setShowPdfProPrompt(false);
     }
   }, [canUsePdfExport]);
+
+  useEffect(() => {
+    if (canUseAiTranslation) {
+      setShowTranslationProPrompt(false);
+    }
+  }, [canUseAiTranslation]);
 
   const getRecipeTranslation = (source: RecipeModel, language: RecipeLanguage): RecipeTranslation | null => {
     const baseLanguage = normalizeRecipeLanguage(source.baseLanguage);
@@ -1243,14 +1249,34 @@ export default function RecipeDetailPage() {
   const showReportButton = showPublicViewerActions;
   const canChangeVisibility = Boolean(recipe.ownerId && currentUserId && recipe.ownerId === currentUserId);
   const recipeImage = resolveRecipeImage(recipe);
-  const isMissingTranslation = !recipe.translations?.[contentLanguage] && contentLanguage !== baseLanguage;
-  const canCreateTranslation = canEdit && isMissingTranslation;
-  const canPreviewTranslation = !canEdit && canUseAiTranslation && isMissingTranslation;
-  const canRegenerateTranslation =
-    canEdit &&
-    canUseAiTranslation &&
-    contentLanguage !== baseLanguage &&
-    Boolean(recipe.translations?.[contentLanguage]);
+  const uiLanguage = resolveRecipeLanguageFromLocale(locale);
+  const translationTargetLanguage: RecipeLanguage =
+    contentLanguage !== baseLanguage
+      ? contentLanguage
+      : uiLanguage !== baseLanguage
+        ? uiLanguage
+        : (RECIPE_LANGUAGES.find((language) => language !== baseLanguage) || baseLanguage);
+  const hasTargetTranslation =
+    translationTargetLanguage === baseLanguage || Boolean(recipe.translations?.[translationTargetLanguage]);
+
+  const handleTranslationAction = async () => {
+    if (!canUseAiTranslation) {
+      setShowTranslationProPrompt(true);
+      return;
+    }
+
+    setShowTranslationProPrompt(false);
+    if (hasTargetTranslation) {
+      if (contentLanguage !== translationTargetLanguage) {
+        await switchContentLanguage(translationTargetLanguage);
+        return;
+      }
+      setTranslationNotice(t("recipes.detail.translation.versionAvailable"));
+      return;
+    }
+
+    await createTranslationDraft(translationTargetLanguage);
+  };
 
   return (
     <div style={{ padding: "20px", maxWidth: "900px", margin: "0 auto" }}>
@@ -1338,63 +1364,28 @@ export default function RecipeDetailPage() {
 
       <div className="card" style={{ marginBottom: "14px", padding: "10px 12px" }}>
         <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
-          <span className="muted" style={{ marginRight: "4px" }}>{t("recipes.detail.translation.languageLabel")}</span>
-          {RECIPE_LANGUAGES.map((language) => {
-            const exists = Boolean(recipe.translations?.[language]) || language === baseLanguage;
-            const active = contentLanguage === language;
-            return (
-              <button
-                key={language}
-                type="button"
-                className={`btn ${active ? "btn-primary" : ""}`}
-                onClick={() => switchContentLanguage(language)}
-                style={{ padding: "4px 10px", fontSize: "12px" }}
-                title={
-                  exists
-                    ? t("recipes.detail.translation.versionAvailable")
-                    : t("recipes.detail.translation.versionMissing")
-                }
-              >
-                {LANGUAGE_LABELS[language]}{exists ? "" : " *"}
-              </button>
-            );
-          })}
-
-          {canCreateTranslation || canPreviewTranslation ? (
-            <button
-              type="button"
-              className="btn"
-              onClick={() => {
-                void createTranslationDraft(contentLanguage, { previewOnly: canPreviewTranslation });
-              }}
-              disabled={isCreatingTranslation}
-            >
-              {isCreatingTranslation
-                ? t("recipes.detail.translation.creating")
-                : canUseAiTranslation
-                  ? t("recipes.detail.translation.createButton", { lang: LANGUAGE_LABELS[contentLanguage] })
-                  : t("recipes.detail.translation.createManualButton", { lang: LANGUAGE_LABELS[contentLanguage] })}
-            </button>
-          ) : null}
-          {canRegenerateTranslation ? (
-            <button
-              type="button"
-              className="btn"
-              onClick={() => {
-                void createTranslationDraft(contentLanguage, { replaceExisting: true });
-              }}
-              disabled={isCreatingTranslation}
-            >
-              {isCreatingTranslation
-                ? t("recipes.detail.translation.creating")
-                : t("recipes.detail.translation.regenerateButton", { lang: LANGUAGE_LABELS[contentLanguage] })}
-            </button>
-          ) : null}
+          <button
+            type="button"
+            className={`btn ${canUseAiTranslation ? "btn-primary" : ""}`.trim()}
+            onClick={() => {
+              void handleTranslationAction();
+            }}
+            disabled={isCreatingTranslation}
+          >
+            {isCreatingTranslation
+              ? t("recipes.detail.translation.creating")
+              : canUseAiTranslation
+                ? t("recipes.detail.translation.translateCta")
+                : t("recipes.detail.translation.proOnlyCta")}
+          </button>
         </div>
-        {canCreateTranslation && !canUseAiTranslation ? (
-          <p className="muted" style={{ margin: "8px 0 0 0" }}>
-            {t("subscription.locks.translationAi")}
-          </p>
+        {!canUseAiTranslation && showTranslationProPrompt ? (
+          <div style={{ marginTop: "8px", display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+            <span className="muted">🔒 {t("subscription.availableInPro")}</span>
+            <button type="button" className="btn btn-primary" onClick={() => router.push("/auth")}>
+              {t("subscription.goToPro")}
+            </button>
+          </div>
         ) : null}
         {translationNotice ? (
           <p className="muted" style={{ margin: "8px 0 0 0" }}>{translationNotice}</p>

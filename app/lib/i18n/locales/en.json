@@ -898,6 +898,8 @@
         "creating": "Creating translation...",
         "createButton": "Create translation ({{lang}})",
         "regenerateButton": "Regenerate translation ({{lang}})",
+        "translateCta": "Translate",
+        "proOnlyCta": "Translation available in Pro",
         "createManualButton": "Create manual translation ({{lang}})",
         "exists": "Translation already exists.",
         "noTitle": "Cannot create translation without a title.",

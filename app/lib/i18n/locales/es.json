@@ -898,6 +898,8 @@
         "creating": "Creando traducción...",
         "createButton": "Crear traducción ({{lang}})",
         "regenerateButton": "Regenerar traducción ({{lang}})",
+        "translateCta": "Traducir",
+        "proOnlyCta": "Traducción disponible en Pro",
         "createManualButton": "Crear traducción manual ({{lang}})",
         "exists": "La traducción ya existe.",
         "noTitle": "No se puede crear una traducción sin título.",
