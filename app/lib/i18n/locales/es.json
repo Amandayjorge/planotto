@@ -478,6 +478,7 @@
       "dayStructure": "Estructura del día",
       "configureMeals": "Configurar comidas",
       "mergeMenusForShopping": "Unificar todos los menús en una lista de compras",
+      "showAddRecipePrompt": "Mostrar sugerencia para añadir receta al menú",
       "activeProducts": "Productos activos",
       "manageMenus": "Gestión de menús",
       "menuNameAria": "Nombre del menú {{name}}",

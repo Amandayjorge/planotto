@@ -44,6 +44,7 @@ const FIRST_RECIPE_CREATE_FLOW_KEY = "recipes:first-create-flow";
 const GUEST_RECIPES_REMINDER_DISMISSED_KEY = "recipes:guest-register-reminder-dismissed";
 const GUEST_RECIPES_REMINDER_THRESHOLD = 3;
 const MENU_RANGE_STATE_KEY = "selectedMenuRange";
+const MENU_ADD_TO_MENU_PROMPT_KEY = "menuAddToMenuPromptEnabled";
 const ACTIVE_PRODUCTS_STORAGE_PREFIX = "activeProducts:";
 const PANTRY_STORAGE_KEY = "pantry";
 
@@ -254,6 +255,11 @@ function toErrorText(error: unknown, fallback: string): string {
     if (text) return text;
   }
   return fallback;
+}
+
+function isAddToMenuPromptEnabled(): boolean {
+  if (typeof window === "undefined") return true;
+  return window.localStorage.getItem(MENU_ADD_TO_MENU_PROMPT_KEY) !== "0";
 }
 
 function isMissingRecipesTableError(error: unknown): boolean {
@@ -977,7 +983,9 @@ function RecipesPageContent() {
       setJustAddedRecipeTitles((prev) => ({ ...prev, [key]: true }));
     }
     setMineSyncVersion((prev) => prev + 1);
-    setAddToMenuPromptRecipeId(recipeId);
+    if (isAddToMenuPromptEnabled()) {
+      setAddToMenuPromptRecipeId(recipeId);
+    }
   };
 
   const handleCreateRecipe = () => {

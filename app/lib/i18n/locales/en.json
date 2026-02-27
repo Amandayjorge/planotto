@@ -478,6 +478,7 @@
       "dayStructure": "Day structure",
       "configureMeals": "Configure meals",
       "mergeMenusForShopping": "Merge all menus into one shopping list",
+      "showAddRecipePrompt": "Show prompt to add recipe to menu",
       "activeProducts": "Active products",
       "manageMenus": "Manage menus",
       "menuNameAria": "Menu name {{name}}",

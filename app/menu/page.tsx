@@ -55,6 +55,7 @@ const MENU_STORAGE_VERSION = 2;
 const DEFAULT_MENU_NAME_FALLBACK = "Main";
 const SYSTEM_MENU_NAME_ALIASES = new Set(["main", "основное", "principal"]);
 const MENU_SHOPPING_MERGE_KEY_PREFIX = "menuShoppingMerge";
+const MENU_ADD_TO_MENU_PROMPT_KEY = "menuAddToMenuPromptEnabled";
 const DAY_STRUCTURE_MODE_KEY = "menuDayStructureMode";
 const MEAL_STRUCTURE_SETTINGS_KEY = "menuMealStructureSettings";
 const MEAL_STRUCTURE_DEFAULT_SETTINGS_KEY = "menuMealStructureDefaults";
@@ -1203,6 +1204,7 @@ function MenuPageContent() {
   const [newMenuNameDraft, setNewMenuNameDraft] = useState("");
   const [pendingDeleteMenuId, setPendingDeleteMenuId] = useState<string | null>(null);
   const [mergeShoppingWithAllMenus, setMergeShoppingWithAllMenus] = useState(false);
+  const [showAddRecipePromptInRecipes, setShowAddRecipePromptInRecipes] = useState(true);
   const [showMealSettingsDialog, setShowMealSettingsDialog] = useState(false);
   const [newMealSlotName, setNewMealSlotName] = useState("");
   const [saveMealSlotsAsDefault, setSaveMealSlotsAsDefault] = useState(false);
@@ -2363,6 +2365,8 @@ function MenuPageContent() {
     setActiveMenuId(initialActiveId);
     setNameDrafts(buildNameDrafts(parsedBundle.menus));
     setMergeShoppingWithAllMenus(localStorage.getItem(getMergeShoppingKey(rangeKey)) === "1");
+    const storedAddPromptPreference = localStorage.getItem(MENU_ADD_TO_MENU_PROMPT_KEY);
+    setShowAddRecipePromptInRecipes(storedAddPromptPreference !== "0");
     setMealData(initialActiveMenu?.mealData || {});
     setCellPeopleCount(initialActiveMenu?.cellPeopleCount || {});
     setCookedStatus(initialActiveMenu?.cookedStatus || {});
@@ -2494,6 +2498,11 @@ function MenuPageContent() {
     if (!hasLoaded) return;
     localStorage.setItem(getMergeShoppingKey(rangeKey), mergeShoppingWithAllMenus ? "1" : "0");
   }, [getMergeShoppingKey, hasLoaded, mergeShoppingWithAllMenus, rangeKey]);
+
+  useEffect(() => {
+    if (!hasLoaded || typeof window === "undefined") return;
+    localStorage.setItem(MENU_ADD_TO_MENU_PROMPT_KEY, showAddRecipePromptInRecipes ? "1" : "0");
+  }, [hasLoaded, showAddRecipePromptInRecipes]);
 
   useEffect(() => {
     if (!hasLoaded || !authResolved || !currentUserId || !activeProductsCloudHydrated) return;
@@ -4495,6 +4504,15 @@ function MenuPageContent() {
                 onChange={(e) => setMergeShoppingWithAllMenus(e.target.checked)}
               />
               {t("menu.settings.mergeMenusForShopping")}
+            </label>
+
+            <label style={{ marginTop: "4px", display: "inline-flex", alignItems: "center", gap: "8px" }}>
+              <input
+                type="checkbox"
+                checked={showAddRecipePromptInRecipes}
+                onChange={(e) => setShowAddRecipePromptInRecipes(e.target.checked)}
+              />
+              {t("menu.settings.showAddRecipePrompt")}
             </label>
 
             <div
