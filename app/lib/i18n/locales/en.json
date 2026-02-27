@@ -376,10 +376,12 @@
     },
     "notice": {
       "dishAdded": "Dish added to menu.",
+      "dishDeleted": "Dish removed.",
       "ingredientsAdded": "Ingredients added to shopping list.",
       "noIngredientsYet": "No ingredients for this dish in shopping list yet.",
       "openShopping": "Open shopping list",
-      "continuePlanning": "Continue planning"
+      "continuePlanning": "Continue planning",
+      "undoDelete": "Undo"
     },
     "guestReminder": {
       "strong": "Register so your data is not lost.",

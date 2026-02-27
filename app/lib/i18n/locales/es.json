@@ -376,10 +376,12 @@
     },
     "notice": {
       "dishAdded": "Plato añadido al menú.",
+      "dishDeleted": "Plato eliminado.",
       "ingredientsAdded": "Ingredientes añadidos a la lista de compras.",
       "noIngredientsYet": "Este plato aún no tiene ingredientes en la lista de compras.",
       "openShopping": "Ver lista de compras",
-      "continuePlanning": "Continuar planificación"
+      "continuePlanning": "Continuar planificación",
+      "undoDelete": "Deshacer"
     },
     "guestReminder": {
       "strong": "Regístrate para no perder tus datos.",

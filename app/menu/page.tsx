@@ -59,6 +59,7 @@ const MENU_SHOPPING_MERGE_KEY_PREFIX = "menuShoppingMerge";
 const MENU_ADD_TO_MENU_PROMPT_KEY = "menuAddToMenuPromptEnabled";
 const MENU_PLANNING_DAYS_KEY_PREFIX = "menuPlanningDays";
 const MENU_TWO_MEALS_MODE_KEY = "menuTwoMealsMode";
+const MENU_DELETE_UNDO_TIMEOUT_MS = 5000;
 const DAY_STRUCTURE_MODE_KEY = "menuDayStructureMode";
 const MEAL_STRUCTURE_SETTINGS_KEY = "menuMealStructureSettings";
 const MEAL_STRUCTURE_DEFAULT_SETTINGS_KEY = "menuMealStructureDefaults";
@@ -560,6 +561,12 @@ interface DemoMenuTemplate {
   title: string;
   description: string;
   meals: Record<MealType, string[]>;
+}
+
+interface DeletedMenuItemSnapshot {
+  cellKey: string;
+  index: number;
+  item: MenuItem;
 }
 
 // Helper functions for period management
@@ -1462,12 +1469,14 @@ function MenuPageContent() {
   const [quickRecipeConfirm, setQuickRecipeConfirm] = useState<QuickRecipeConfirm | null>(null);
   const [showMenuAddedNotice, setShowMenuAddedNotice] = useState(false);
   const [menuAddedHasIngredients, setMenuAddedHasIngredients] = useState(false);
+  const [deletedMenuItem, setDeletedMenuItem] = useState<DeletedMenuItemSnapshot | null>(null);
   const [showGuestReminder, setShowGuestReminder] = useState(false);
   const [guestReminderStrong, setGuestReminderStrong] = useState(false);
   const [authResolved, setAuthResolved] = useState(false);
   const guestVisitTrackedRef = useRef(false);
   const activeProductsSaveTimerRef = useRef<number | null>(null);
   const activeProductSavedNoteTimerRef = useRef<number | null>(null);
+  const deleteUndoTimerRef = useRef<number | null>(null);
 
   const rangeKey = `${weekStart}__${periodEnd}`;
   const periodDays = getRangeLengthDays(weekStart, periodEnd);
@@ -1791,6 +1800,26 @@ function MenuPageContent() {
       document.removeEventListener("keydown", onEscape, true);
     };
   }, [isCreateMenuDialogOpen, pendingDeleteMenuId, showMealSettingsDialog, showMenuSettingsDialog, showPdfExportDialog]);
+
+  useEffect(() => {
+    if (deleteUndoTimerRef.current !== null) {
+      window.clearTimeout(deleteUndoTimerRef.current);
+      deleteUndoTimerRef.current = null;
+    }
+    if (!deletedMenuItem) return;
+
+    deleteUndoTimerRef.current = window.setTimeout(() => {
+      setDeletedMenuItem(null);
+      deleteUndoTimerRef.current = null;
+    }, MENU_DELETE_UNDO_TIMEOUT_MS);
+
+    return () => {
+      if (deleteUndoTimerRef.current !== null) {
+        window.clearTimeout(deleteUndoTimerRef.current);
+        deleteUndoTimerRef.current = null;
+      }
+    };
+  }, [deletedMenuItem]);
 
   const handleOnboardingAddFirstRecipe = () => {
     setShowFirstVisitOnboarding(false);
@@ -3434,10 +3463,34 @@ function MenuPageContent() {
     });
   };
 
+  const handleUndoDeleteItem = () => {
+    if (!deletedMenuItem) return;
+    const { cellKey, index, item } = deletedMenuItem;
+    setMealData((prev) => {
+      const currentItems = prev[cellKey] || [];
+      const safeIndex = Math.max(0, Math.min(index, currentItems.length));
+      const nextItems = [
+        ...currentItems.slice(0, safeIndex),
+        item,
+        ...currentItems.slice(safeIndex),
+      ];
+      return { ...prev, [cellKey]: nextItems };
+    });
+    setDeletedMenuItem(null);
+  };
+
   const handleDeleteItem = (cellKey: string, itemIndex: number) => {
-    if (confirm(t("menu.confirm.clearPeriod"))) {
-      handleRemoveItem(cellKey, itemIndex);
+    const removedItem = (mealData[cellKey] || [])[itemIndex];
+    if (!removedItem) {
+      closeDropdownMenu();
+      return;
     }
+    handleRemoveItem(cellKey, itemIndex);
+    setDeletedMenuItem({
+      cellKey,
+      index: itemIndex,
+      item: removedItem,
+    });
     closeDropdownMenu();
   };
 
@@ -4276,6 +4329,17 @@ function MenuPageContent() {
               }}
             >
               {t("menu.notice.continuePlanning")}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {deletedMenuItem && (
+        <div className="recipes-add-to-menu-banner" role="status" aria-live="polite">
+          <span className="recipes-add-to-menu-banner__text">{t("menu.notice.dishDeleted")}</span>
+          <div className="recipes-add-to-menu-banner__actions">
+            <button type="button" className="btn" onClick={handleUndoDeleteItem}>
+              {t("menu.notice.undoDelete")}
             </button>
           </div>
         </div>
