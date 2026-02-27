@@ -981,7 +981,8 @@
       "pdfExport": "La exportación a PDF está disponible en el plan Pro.",
       "pdfExportShort": "El PDF está disponible en Pro."
     },
-    "availableInPro": "Disponible en Pro"
+    "availableInPro": "Disponible en Pro",
+    "goToPro": "Ir a Pro"
   },
   "languages": {
     "ru": "Русский",

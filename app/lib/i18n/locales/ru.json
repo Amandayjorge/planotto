@@ -981,7 +981,8 @@
       "pdfExport": "Экспорт в PDF доступен в тарифе Pro.",
       "pdfExportShort": "PDF доступен в Pro."
     },
-    "availableInPro": "Доступно в Pro"
+    "availableInPro": "Доступно в Pro",
+    "goToPro": "Перейти на Pro"
   },
   "languages": {
     "ru": "Русский",

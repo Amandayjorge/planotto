@@ -273,6 +273,7 @@ export default function RecipeDetailPage() {
   const [translationNotice, setTranslationNotice] = useState("");
   const [isCreatingTranslation, setIsCreatingTranslation] = useState(false);
   const [isExportingRecipePdf, setIsExportingRecipePdf] = useState(false);
+  const [showPdfProPrompt, setShowPdfProPrompt] = useState(false);
   const [alreadyInMine, setAlreadyInMine] = useState(false);
   const hasCoreInput = title.trim().length > 0 || ingredients.some((item) => item.name.trim().length > 0);
   const canUseAiTranslation = isPaidFeatureEnabled(planTier, "ai_translation");
@@ -294,6 +295,12 @@ export default function RecipeDetailPage() {
     if (!isSupabaseConfigured()) return;
     getCurrentUserId().then(setCurrentUserId).catch(() => setCurrentUserId(null));
   }, []);
+
+  useEffect(() => {
+    if (canUsePdfExport) {
+      setShowPdfProPrompt(false);
+    }
+  }, [canUsePdfExport]);
 
   const getRecipeTranslation = (source: RecipeModel, language: RecipeLanguage): RecipeTranslation | null => {
     const baseLanguage = normalizeRecipeLanguage(source.baseLanguage);
@@ -1125,9 +1132,10 @@ export default function RecipeDetailPage() {
   const exportRecipePdf = async () => {
     if (!recipe) return;
     if (!canUsePdfExport) {
-      setTranslationNotice(t("subscription.availableInPro"));
+      setShowPdfProPrompt(true);
       return;
     }
+    setShowPdfProPrompt(false);
 
     const active = getRecipeTranslation(recipe, contentLanguage);
     const exportTitle = (active?.title || recipe.title || "").trim();
@@ -1294,8 +1302,7 @@ export default function RecipeDetailPage() {
           onClick={() => {
             void exportRecipePdf();
           }}
-          disabled={isExportingRecipePdf || !canUsePdfExport}
-          title={!canUsePdfExport ? t("subscription.availableInPro") : undefined}
+          disabled={isExportingRecipePdf}
         >
           {isExportingRecipePdf ? t("pdf.actions.exporting") : t("pdf.actions.exportRecipe")}
         </button>
@@ -1318,6 +1325,16 @@ export default function RecipeDetailPage() {
           </button>
         )}
       </div>
+      {showPdfProPrompt ? (
+        <div className="card" style={{ marginBottom: "14px", padding: "10px 12px" }}>
+          <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+            <span className="muted">🔒 {t("subscription.availableInPro")}</span>
+            <button type="button" className="btn btn-primary" onClick={() => router.push("/auth")}>
+              {t("subscription.goToPro")}
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       <div className="card" style={{ marginBottom: "14px", padding: "10px 12px" }}>
         <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
@@ -1383,11 +1400,6 @@ export default function RecipeDetailPage() {
           <p className="muted" style={{ margin: "8px 0 0 0" }}>{translationNotice}</p>
         ) : null}
       </div>
-      {!canUsePdfExport ? (
-        <p className="muted" style={{ marginTop: "-6px", marginBottom: "12px" }}>
-          {t("subscription.availableInPro")}
-        </p>
-      ) : null}
 
       {showReportButton && showReportForm && !isEditing && (
         <div className="card" style={{ marginBottom: "16px", padding: "14px" }}>

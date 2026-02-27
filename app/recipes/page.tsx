@@ -470,6 +470,7 @@ function RecipesPageContent() {
   const [savingPersonalTagsRecipeId, setSavingPersonalTagsRecipeId] = useState<string | null>(null);
   const [showPersonalTagsHint, setShowPersonalTagsHint] = useState(false);
   const [isExportingRecipesPdf, setIsExportingRecipesPdf] = useState(false);
+  const [showPdfProPrompt, setShowPdfProPrompt] = useState(false);
   const [profileGoal, setProfileGoal] = useState<ProfileGoal>("menu");
   const canUseAdvancedFilters = isPaidFeatureEnabled(planTier, "advanced_filters");
   const canUsePdfExport = isPaidFeatureEnabled(planTier, "pdf_export");
@@ -496,6 +497,12 @@ function RecipesPageContent() {
     setSelectedTags([]);
     setShowAdvancedFilters(false);
   }, [canUseAdvancedFilters, sortBy]);
+
+  useEffect(() => {
+    if (canUsePdfExport) {
+      setShowPdfProPrompt(false);
+    }
+  }, [canUsePdfExport]);
 
   useEffect(() => {
     if (viewMode === "mine") return;
@@ -1557,9 +1564,11 @@ function RecipesPageContent() {
 
   const exportSelectedRecipesPdf = async () => {
     if (!canUsePdfExport) {
-      setActionMessage(t("subscription.availableInPro"));
+      setShowPdfProPrompt(true);
+      setActionMessage("");
       return;
     }
+    setShowPdfProPrompt(false);
     if (selectedMineRecipes.length === 0) {
       setActionMessage(t("pdf.errors.selectRecipes"));
       return;
@@ -1723,14 +1732,23 @@ function RecipesPageContent() {
               onClick={() => {
                 void exportSelectedRecipesPdf();
               }}
-              disabled={isExportingRecipesPdf || !canUsePdfExport || selectedMineRecipes.length === 0}
-              title={!canUsePdfExport ? t("subscription.availableInPro") : undefined}
+              disabled={isExportingRecipesPdf}
             >
               {isExportingRecipesPdf ? t("pdf.actions.exporting") : t("pdf.actions.exportSelectedRecipes")}
             </button>
             <span className="muted">
               {t("pdf.selectedCount", { count: selectedMineRecipes.length })}
             </span>
+          </div>
+        </div>
+      ) : null}
+      {viewMode === "mine" && showPdfProPrompt ? (
+        <div className="card" style={{ marginTop: "-4px", marginBottom: "12px", padding: "10px 12px" }}>
+          <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+            <span className="muted">🔒 {t("subscription.availableInPro")}</span>
+            <button type="button" className="btn btn-primary" onClick={() => router.push("/auth")}>
+              {t("subscription.goToPro")}
+            </button>
           </div>
         </div>
       ) : null}
