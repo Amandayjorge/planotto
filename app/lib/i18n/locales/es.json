@@ -430,7 +430,7 @@
       "createMenu": "Crear menú",
       "loadExample": "Cargar ejemplo",
       "addToMine": "Añadir al mío",
-      "replaceConfirm": "Esta plantilla reemplazará los platos del menú actual. ¿Continuar?",
+      "replaceConfirm": "¿Seguro que quieres aplicar esta plantilla? Se reemplazarán los platos del menú actual.",
       "quick": {
         "title": "Menú rápido",
         "description": "Tiempo mínimo de cocina con platos simples del día a día."
@@ -532,7 +532,7 @@
     },
     "deleteMenu": {
       "title": "Eliminar menú",
-      "confirm": "¿Eliminar menú {{name}}?"
+      "confirm": "¿Seguro que quieres eliminar el menú \"{{name}}\"?"
     },
     "moveDialog": {
       "title": "Mover plato",
@@ -556,7 +556,7 @@
       "saveFailed": "Error al guardar menú."
     },
     "confirm": {
-      "clearPeriod": "¿Seguro que quieres limpiar el menú del período?",
+      "clearPeriod": "¿Seguro que quieres limpiar el menú de este período?",
       "clearCurrentMenu": "¿Seguro que quieres limpiar el menú actual?"
     },
     "fallback": {
@@ -581,15 +581,15 @@
       "localMode": "Trabajamos en modo local. Tus recetas están en este dispositivo.",
       "alreadyInMine": "La receta ya estaba en mis recetas.",
       "addedToMine": "Receta añadida a mis recetas.",
-      "allergyWarningMany": "Esta receta contiene productos de “Alergias”: {{listed}}. ¿Añadir manualmente?",
-      "allergyWarningOne": "Esta receta contiene un producto de “Alergias”. ¿Añadir manualmente?",
+      "allergyWarningMany": "Esta receta contiene ingredientes de \"Alergias\": {{listed}}. ¿Añadir esta receta manualmente?",
+      "allergyWarningOne": "Esta receta contiene un ingrediente de \"Alergias\". ¿Añadir esta receta manualmente?",
       "supabaseTableMissingAlreadyLocal": "La tabla de recetas en Supabase no está inicializada. La receta ya está local.",
       "supabaseTableMissingAddedLocal": "La tabla de recetas en Supabase no está inicializada. Receta añadida localmente.",
       "copyFailed": "No se pudo copiar la receta.",
-      "clearAllConfirm": "¿Eliminar todas tus recetas? También se borrarán borradores locales.",
+      "clearAllConfirm": "¿Seguro que quieres eliminar todas tus recetas? También se borrarán los borradores locales.",
       "cleared": "Recetas limpiadas. Puedes cargar nuevas para probar.",
       "clearFailed": "No se pudieron limpiar recetas.",
-      "deleteOneConfirm": "¿Eliminar receta \"{{title}}\"?",
+      "deleteOneConfirm": "¿Seguro que quieres eliminar la receta \"{{title}}\"?",
       "deleted": "Receta eliminada.",
       "deleteFailed": "No se pudo eliminar la receta."
     },

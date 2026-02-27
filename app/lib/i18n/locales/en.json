@@ -430,7 +430,7 @@
       "createMenu": "Create menu",
       "loadExample": "Load example",
       "addToMine": "Add to mine",
-      "replaceConfirm": "This template will replace dishes in the current menu. Continue?",
+      "replaceConfirm": "Are you sure you want to apply this template? Current menu dishes will be replaced.",
       "quick": {
         "title": "Quick menu",
         "description": "Minimal cooking time with simple everyday dishes."
@@ -532,7 +532,7 @@
     },
     "deleteMenu": {
       "title": "Delete menu",
-      "confirm": "Delete menu {{name}}?"
+      "confirm": "Are you sure you want to delete menu \"{{name}}\"?"
     },
     "moveDialog": {
       "title": "Move dish",
@@ -556,8 +556,8 @@
       "saveFailed": "Failed to save menu."
     },
     "confirm": {
-      "clearPeriod": "Are you sure you want to clear menu for this period?",
-      "clearCurrentMenu": "Are you sure you want to clear current menu?"
+      "clearPeriod": "Are you sure you want to clear the menu for this period?",
+      "clearCurrentMenu": "Are you sure you want to clear the current menu?"
     },
     "fallback": {
       "recipeTitle": "recipe",
@@ -581,15 +581,15 @@
       "localMode": "Working in local mode. Your recipes are available on this device.",
       "alreadyInMine": "Recipe is already in my recipes.",
       "addedToMine": "Recipe added to my recipes.",
-      "allergyWarningMany": "This recipe contains products from “Allergies”: {{listed}}. Add manually?",
-      "allergyWarningOne": "This recipe contains a product from “Allergies”. Add manually?",
+      "allergyWarningMany": "This recipe contains ingredients from \"Allergies\": {{listed}}. Add this recipe manually?",
+      "allergyWarningOne": "This recipe contains an ingredient from \"Allergies\". Add this recipe manually?",
       "supabaseTableMissingAlreadyLocal": "Supabase recipes table is not initialized. Recipe is already local.",
       "supabaseTableMissingAddedLocal": "Supabase recipes table is not initialized. Recipe added locally.",
       "copyFailed": "Failed to copy recipe.",
-      "clearAllConfirm": "Delete all your recipes? Local drafts will also be removed.",
+      "clearAllConfirm": "Are you sure you want to delete all your recipes? Local drafts will also be removed.",
       "cleared": "Recipes cleared. You can upload new ones for testing.",
       "clearFailed": "Failed to clear recipes.",
-      "deleteOneConfirm": "Delete recipe \"{{title}}\"?",
+      "deleteOneConfirm": "Are you sure you want to delete recipe \"{{title}}\"?",
       "deleted": "Recipe deleted.",
       "deleteFailed": "Failed to delete recipe."
     },
