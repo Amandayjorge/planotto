@@ -631,8 +631,8 @@
       "oldest": "Antiguas",
       "titleAsc": "Nombre A-Z",
       "titleDesc": "Nombre Z-A",
-      "oftenCooked": "Cocino a menudo",
-      "rarelyCooked": "Cocino raro"
+      "oftenCooked": "Más cocinadas",
+      "rarelyCooked": "Menos cocinadas"
     },
     "filters": {
       "searchPlaceholder": "Buscar por nombre e ingredientes",
