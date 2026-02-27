@@ -3940,6 +3940,51 @@ body {
   cursor: not-allowed;
 }
 
+.recipes-add-to-menu-banner {
+  position: fixed;
+  left: 50%;
+  bottom: calc(14px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  z-index: 10030;
+  width: min(480px, calc(100vw - 24px));
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  background: var(--card-bg);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.16);
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.recipes-add-to-menu-banner__text {
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.recipes-add-to-menu-banner__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+@media (max-width: 720px) {
+  .recipes-add-to-menu-banner {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    bottom: calc(10px + env(safe-area-inset-bottom));
+  }
+
+  .recipes-add-to-menu-banner__actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
+
 /* Shopping print page */
 body.shopping-print-page .header,
 body.shopping-print-page .footer,

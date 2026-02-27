@@ -406,7 +406,7 @@ function RecipesPageContent() {
   const [pendingCopyRecipeId, setPendingCopyRecipeId] = useState<string | null>(null);
   const [mineSyncVersion, setMineSyncVersion] = useState(0);
   const [justAddedRecipeTitles, setJustAddedRecipeTitles] = useState<Record<string, boolean>>({});
-  const [addedToastMessage, setAddedToastMessage] = useState<string | null>(null);
+  const [addToMenuPromptRecipeId, setAddToMenuPromptRecipeId] = useState<string | null>(null);
   const [showFirstRecipeSuccess, setShowFirstRecipeSuccess] = useState(false);
   const [isFirstRecipeFlow, setIsFirstRecipeFlow] = useState(false);
   const [firstCopiedRecipeId, setFirstCopiedRecipeId] = useState<string | null>(null);
@@ -429,7 +429,6 @@ function RecipesPageContent() {
     : (sortBy === "often_cooked" || sortBy === "rarely_cooked" ? "newest" : sortBy);
 
   const importedForUser = useRef<string | null>(null);
-  const addedToastTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (canUseAdvancedFilters) return;
@@ -554,14 +553,6 @@ function RecipesPageContent() {
     return () => {
       window.removeEventListener("storage", handleStorageChange);
       window.removeEventListener("focus", refreshPantry);
-    };
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      if (addedToastTimerRef.current !== null) {
-        window.clearTimeout(addedToastTimerRef.current);
-      }
     };
   }, []);
 
@@ -954,22 +945,39 @@ function RecipesPageContent() {
     return map;
   }, [mineSyncVersion, recipes, viewMode]);
 
-  const showAddedFeedback = (title: string, duplicate = false) => {
+  const openMenuWithRecipe = (recipeId: string) => {
+    const recipeFromState = recipes.find((item) => item.id === recipeId) || null;
+    const recipeForMenu = recipeFromState || findRecipeInLocalCacheById(recipeId);
+    const params = new URLSearchParams({ recipe: recipeId });
+
+    const recipeView = recipeForMenu ? getRecipeLocalizedContent(recipeForMenu, uiRecipeLanguage) : null;
+    const recipeTitle = recipeView?.title?.trim();
+    if (recipeTitle) {
+      params.set("title", recipeTitle);
+    }
+    params.set(
+      "meal",
+      inferMealFromRecipeForMenu(
+        recipeForMenu
+          ? {
+              ...recipeForMenu,
+              title: recipeView?.title || recipeForMenu.title,
+              shortDescription: recipeView?.shortDescription || recipeForMenu.shortDescription,
+            }
+          : null
+      )
+    );
+
+    router.push("/menu?" + params.toString());
+  };
+
+  const showAddedFeedback = (title: string, recipeId: string) => {
     const key = normalizeRecipeTitle(title);
     if (key) {
       setJustAddedRecipeTitles((prev) => ({ ...prev, [key]: true }));
     }
     setMineSyncVersion((prev) => prev + 1);
-    setAddedToastMessage(
-      duplicate ? t("recipes.messages.alreadyInMine") : t("recipes.messages.addedToMine")
-    );
-    if (addedToastTimerRef.current !== null) {
-      window.clearTimeout(addedToastTimerRef.current);
-    }
-    addedToastTimerRef.current = window.setTimeout(() => {
-      setAddedToastMessage(null);
-      addedToastTimerRef.current = null;
-    }, 3500);
+    setAddToMenuPromptRecipeId(recipeId);
   };
 
   const handleCreateRecipe = () => {
@@ -1022,30 +1030,19 @@ function RecipesPageContent() {
       return;
     }
 
-    const recipeFromState = recipes.find((item) => item.id === firstCopiedRecipeId) || null;
-    const recipeForMenu = recipeFromState || findRecipeInLocalCacheById(firstCopiedRecipeId);
-    const params = new URLSearchParams({ recipe: firstCopiedRecipeId });
-
-    const recipeView = recipeForMenu ? getRecipeLocalizedContent(recipeForMenu, uiRecipeLanguage) : null;
-    const recipeTitle = recipeView?.title?.trim();
-    if (recipeTitle) {
-      params.set("title", recipeTitle);
-    }
-    params.set(
-      "meal",
-      inferMealFromRecipeForMenu(
-        recipeForMenu
-          ? {
-              ...recipeForMenu,
-              title: recipeView?.title || recipeForMenu.title,
-              shortDescription: recipeView?.shortDescription || recipeForMenu.shortDescription,
-            }
-          : null
-      )
-    );
-
     handleDismissFirstRecipeSuccess();
-    router.push("/menu?" + params.toString());
+    openMenuWithRecipe(firstCopiedRecipeId);
+  };
+
+  const handleConfirmAddedRecipeMenu = () => {
+    if (!addToMenuPromptRecipeId) return;
+    const recipeId = addToMenuPromptRecipeId;
+    setAddToMenuPromptRecipeId(null);
+    openMenuWithRecipe(recipeId);
+  };
+
+  const handleDismissAddedRecipeMenu = () => {
+    setAddToMenuPromptRecipeId(null);
   };
 
   const handleChooseReadyRecipe = () => {
@@ -1126,7 +1123,7 @@ function RecipesPageContent() {
           if (showOverlayForThisCopy) {
             showFirstRecipeOverlay(existingLocal.id);
           } else {
-            showAddedFeedback(source.title || "", true);
+            showAddedFeedback(source.title || "", existingLocal.id);
           }
           return;
         }
@@ -1146,7 +1143,7 @@ function RecipesPageContent() {
           showFirstRecipeOverlay(localCopy.id);
         } else {
           setActionMessage("");
-          showAddedFeedback(source.title || "", false);
+          showAddedFeedback(source.title || "", localCopy.id);
         }
         return;
       }
@@ -1156,7 +1153,7 @@ function RecipesPageContent() {
         if (showOverlayForThisCopy) {
           showFirstRecipeOverlay(existingLocal.id);
         } else {
-          showAddedFeedback(source.title || "", true);
+          showAddedFeedback(source.title || "", existingLocal.id);
         }
         return;
       }
@@ -1167,7 +1164,7 @@ function RecipesPageContent() {
         showFirstRecipeOverlay(copied.id);
       } else {
         setActionMessage("");
-        showAddedFeedback(source.title || "", false);
+        showAddedFeedback(source.title || "", copied.id);
       }
     } catch (copyError) {
       if (isMissingRecipesTableError(copyError)) {
@@ -1177,7 +1174,7 @@ function RecipesPageContent() {
             showFirstRecipeOverlay(existingLocal.id);
           } else {
             setActionMessage(t("recipes.messages.supabaseTableMissingAlreadyLocal"));
-            showAddedFeedback(source.title || "", true);
+            showAddedFeedback(source.title || "", existingLocal.id);
           }
           return;
         }
@@ -1196,7 +1193,7 @@ function RecipesPageContent() {
           showFirstRecipeOverlay(localCopy.id);
         } else {
           setActionMessage(t("recipes.messages.supabaseTableMissingAddedLocal"));
-          showAddedFeedback(source.title || "", false);
+          showAddedFeedback(source.title || "", localCopy.id);
         }
         return;
       }
@@ -1673,22 +1670,6 @@ function RecipesPageContent() {
         </p>
       )}
 
-      {addedToastMessage ? (
-        <div className="card" style={{ marginBottom: "14px", padding: "10px 12px", display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
-          <span style={{ color: "var(--text-primary)", fontWeight: 600 }}>{addedToastMessage}</span>
-          <button
-            type="button"
-            className="btn"
-            onClick={() => {
-              setViewMode("mine");
-              setAddedToastMessage(null);
-            }}
-          >
-            {t("recipes.actions.goToMine")}
-          </button>
-        </div>
-      ) : null}
-
       {showGuestRegisterReminder && (
         <div className="card" style={{ marginBottom: "14px", padding: "12px 14px", borderRadius: "10px" }}>
           <img
@@ -2074,6 +2055,20 @@ function RecipesPageContent() {
         </div>
       )}
       </div>
+
+      {addToMenuPromptRecipeId ? (
+        <div className="recipes-add-to-menu-banner" role="status" aria-live="polite">
+          <span className="recipes-add-to-menu-banner__text">{t("recipes.addToMenuPrompt.title")}</span>
+          <div className="recipes-add-to-menu-banner__actions">
+            <button type="button" className="btn btn-primary" onClick={handleConfirmAddedRecipeMenu}>
+              {t("recipes.addToMenuPrompt.confirm")}
+            </button>
+            <button type="button" className="btn" onClick={handleDismissAddedRecipeMenu}>
+              {t("recipes.addToMenuPrompt.later")}
+            </button>
+          </div>
+        </div>
+      ) : null}
     </>
   );
 }

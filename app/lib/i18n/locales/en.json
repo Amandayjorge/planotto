@@ -616,6 +616,11 @@
       "goToPublic": "Open recipe library",
       "addToMineHint": "The \"Add to mine\" button is available in the \"Recipe library\" tab."
     },
+    "addToMenuPrompt": {
+      "title": "Add to menu?",
+      "confirm": "Yes",
+      "later": "Later"
+    },
     "guestReminder": {
       "text": "You already added several recipes. Create an account to keep them safe.",
       "createAccount": "Create account",

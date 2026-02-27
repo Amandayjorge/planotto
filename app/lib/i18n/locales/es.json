@@ -616,6 +616,11 @@
       "goToPublic": "Abrir biblioteca de recetas",
       "addToMineHint": "El boton \"Anadir a las mias\" esta en la pestana \"Biblioteca de recetas\"."
     },
+    "addToMenuPrompt": {
+      "title": "¿Añadir al menú?",
+      "confirm": "Sí",
+      "later": "Después"
+    },
     "guestReminder": {
       "text": "Ya añadiste varias recetas. Crea cuenta para no perderlas.",
       "createAccount": "Crear cuenta",
