@@ -19,15 +19,12 @@ import {
 import {
   createRecipe,
   getCurrentUserId,
-  replaceRecipeAccessByEmail,
-  sendRecipeAccessInvites,
   upsertRecipeTranslation,
   upsertRecipeInLocalCache,
   type Ingredient,
   type RecipeLanguage,
   type RecipeModel,
   type RecipeTranslation,
-  type RecipeVisibility,
 } from "../../lib/recipesSupabase";
 import { isSupabaseConfigured } from "../../lib/supabaseClient";
 import { RECIPE_TAGS, localizeRecipeTag, normalizeRecipeTags } from "../../lib/recipeTags";
@@ -48,6 +45,7 @@ const RECIPES_FIRST_FLOW_KEY = "recipesFirstFlowActive";
 const FIRST_RECIPE_ADDED_KEY = "recipes:first-added-recipe-id";
 const FIRST_RECIPE_SUCCESS_PENDING_KEY = "recipes:first-success-pending";
 const FIRST_RECIPE_CREATE_FLOW_KEY = "recipes:first-create-flow";
+const DEFAULT_VISIBLE_TAG_COUNT = 5;
 
 type IngredientHintsMap = Record<number, string[]>;
 type ImportMode = "url" | "photo";
@@ -118,46 +116,6 @@ const sanitizeImportIssue = (issue: string, photoUnavailableFallback: string): s
 const sanitizeImportIssues = (issues: string[], photoUnavailableFallback: string): string[] =>
   Array.from(new Set(issues.map((issue) => sanitizeImportIssue(issue, photoUnavailableFallback)).filter(Boolean)));
 
-const ACCESS_OPTIONS: Array<{
-  value: RecipeVisibility;
-  labelKey: string;
-  descriptionKey: string;
-}> = [
-  {
-    value: "private",
-    labelKey: "recipes.new.access.private.label",
-    descriptionKey: "recipes.new.access.private.description",
-  },
-  {
-    value: "public",
-    labelKey: "recipes.new.access.public.label",
-    descriptionKey: "recipes.new.access.public.description",
-  },
-  {
-    value: "link",
-    labelKey: "recipes.new.access.link.label",
-    descriptionKey: "recipes.new.access.link.description",
-  },
-  {
-    value: "invited",
-    labelKey: "recipes.new.access.invited.label",
-    descriptionKey: "recipes.new.access.invited.description",
-  },
-];
-
-const generateShareToken = (): string => crypto.randomUUID().replace(/-/g, "");
-
-const parseInvitedEmails = (raw: string): string[] => {
-  const unique = new Set<string>();
-  raw
-    .split(/[\n,;]+/g)
-    .map((item) => item.trim())
-    .filter(Boolean)
-    .forEach((item) => unique.add(item.toLowerCase()));
-
-  return Array.from(unique);
-};
-
 const normalizeRecipeLanguage = (value: unknown): RecipeLanguage =>
   value === "ru" || value === "en" || value === "es" ? value : "ru";
 
@@ -180,10 +138,6 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
   const [notes, setNotes] = useState("");
   const [image, setImage] = useState("");
   const [servings, setServings] = useState(2);
-  const [visibility, setVisibility] = useState<RecipeVisibility>("private");
-  const [shareToken, setShareToken] = useState("");
-  const [invitedEmailsDraft, setInvitedEmailsDraft] = useState("");
-  const [showInvitedAccessEditor, setShowInvitedAccessEditor] = useState(false);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [ingredients, setIngredients] = useState<Ingredient[]>([
     {
@@ -206,6 +160,8 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
   const [showImportTools, setShowImportTools] = useState(false);
   const [showAiTools, setShowAiTools] = useState(false);
   const [showAdvancedFields, setShowAdvancedFields] = useState(false);
+  const [showTagFields, setShowTagFields] = useState(false);
+  const [showAllTagOptions, setShowAllTagOptions] = useState(false);
   const [importMode, setImportMode] = useState<ImportMode>("url");
   const [importUrl, setImportUrl] = useState("");
   const [importPhotoDataUrls, setImportPhotoDataUrls] = useState<string[]>([]);
@@ -222,7 +178,6 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
   const importPhotosTaskIdRef = useRef(0);
   const hasCoreInput = title.trim().length > 0 || ingredients.some((item) => item.name.trim().length > 0);
   const hasTitle = title.trim().length > 0;
-  const canChangeVisibility = Boolean(currentUserId);
 
   const optimizeImageFile = (file: File): Promise<string> =>
     new Promise((resolve) => {
@@ -705,11 +660,6 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
     }
   };
 
-  const handleVisibilityChange = (next: RecipeVisibility) => {
-    if (!canChangeVisibility && next !== "private") return;
-    setVisibility(next);
-  };
-
   const saveRecipe = async () => {
     if (!title.trim()) {
       alert(t("recipes.new.messages.titleRequired"));
@@ -795,12 +745,6 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
         return;
       }
 
-      const normalizedVisibility: RecipeVisibility = canChangeVisibility ? visibility : "private";
-      const normalizedShareToken =
-        normalizedVisibility === "link" ? (shareToken.trim() || generateShareToken()) : "";
-      const invitedEmails =
-        normalizedVisibility === "invited" ? parseInvitedEmails(invitedEmailsDraft) : [];
-
       const created = await createRecipe(currentUserId, {
         title: title.trim(),
         shortDescription: shortDescription.trim(),
@@ -810,24 +754,12 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
         image: image.trim(),
         ingredients: normalizedIngredients,
         servings: servings > 0 ? servings : 2,
-        visibility: normalizedVisibility,
-        shareToken: normalizedShareToken || undefined,
+        visibility: "private",
         categories: normalizedTags,
         tags: normalizedTags,
         baseLanguage,
         translations,
       });
-
-      if (normalizedVisibility === "invited") {
-        await replaceRecipeAccessByEmail(currentUserId, created.id, invitedEmails);
-        if (invitedEmails.length > 0) {
-          const inviteResult = await sendRecipeAccessInvites(created.id, invitedEmails);
-          if (inviteResult.failed.length > 0) {
-            const failedEmails = inviteResult.failed.map((item) => item.email).join(", ");
-            alert(t("recipes.new.messages.invitesPartial", { emails: failedEmails }));
-          }
-        }
-      }
 
       let savedBaseTranslation = baseTranslation;
       try {
@@ -837,9 +769,7 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
       }
 
       const finalizedRecipe: RecipeModel = {
-        ...(normalizedVisibility === "link" && normalizedShareToken
-          ? { ...created, shareToken: normalizedShareToken }
-          : created),
+        ...created,
         baseLanguage,
         translations: {
           ...(created.translations || {}),
@@ -865,8 +795,12 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
   return (
     <div style={{ padding: "20px", maxWidth: "860px", margin: "0 auto" }}>
       <div style={{ marginBottom: "20px" }}>
-        <button className="btn" onClick={() => router.push("/recipes")}>
-          {t("recipes.new.actions.backToRecipes")}
+        <button
+          type="button"
+          className="recipes-nav-back-link"
+          onClick={() => router.push("/recipes")}
+        >
+          ← {t("recipes.new.actions.backToRecipes")}
         </button>
       </div>
 
@@ -890,13 +824,23 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
         {t("recipes.new.quickStart")}
       </p>
 
-      <div className="card" style={{ marginBottom: "14px", padding: "12px", background: "var(--background-secondary)" }}>
-        <button className="btn" type="button" onClick={() => setShowImportTools((prev) => !prev)}>
-          {showImportTools ? t("recipes.new.import.hide") : t("recipes.new.import.show")}
+      <div style={{ marginBottom: "14px" }}>
+        <button
+          type="button"
+          className="recipes-nav-back-link"
+          aria-expanded={showImportTools}
+          aria-controls="recipe-import-panel"
+          onClick={() => setShowImportTools((prev) => !prev)}
+        >
+          {showImportTools ? t("recipes.new.import.hide") : t("recipes.new.import.importAction")}
         </button>
 
         {showImportTools ? (
-          <div style={{ marginTop: "10px" }}>
+          <div
+            id="recipe-import-panel"
+            className="card"
+            style={{ marginTop: "8px", padding: "12px", background: "var(--background-secondary)" }}
+          >
             {!canUseRecipeImport ? (
               <p className="muted" style={{ marginTop: 0, marginBottom: "8px" }}>
                 {t("subscription.locks.recipeImport")}
@@ -1041,92 +985,29 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
             {t("recipes.new.fields.title")}
           </label>
           <input className="input" type="text" value={title} onChange={(e) => setTitle(e.target.value)} />
+          <p className="muted" style={{ marginTop: "8px" }}>
+            {t("recipes.new.fields.privateByDefaultHint")}
+          </p>
         </div>
 
         <div style={{ marginBottom: "16px" }}>
           <label style={{ display: "block", marginBottom: "8px", fontWeight: "bold" }}>
-            {t("recipes.new.fields.access")}
+            {t("recipes.new.fields.image")}
           </label>
-          <div style={{ display: "grid", gap: "8px" }}>
-            {ACCESS_OPTIONS.map((option) => {
-              const disabled = !canChangeVisibility && option.value !== "private";
-              const isActive = visibility === option.value;
-              return (
-                <button
-                  key={option.value}
-                  type="button"
-                  className={`btn ${isActive ? "btn-primary" : ""}`}
-                  onClick={() => handleVisibilityChange(option.value)}
-                  disabled={disabled}
-                  style={{
-                    justifyContent: "flex-start",
-                    textAlign: "left",
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "flex-start",
-                    gap: "2px",
-                  }}
-                >
-                  <span>{t(option.labelKey)}</span>
-                  <span style={{ fontSize: "12px", opacity: 0.85 }}>{t(option.descriptionKey)}</span>
-                </button>
-              );
-            })}
-          </div>
-          {!canChangeVisibility ? (
-            <p className="muted" style={{ margin: "8px 0 0 0" }}>
-              {t("recipes.new.access.loginRequired")}
-            </p>
-          ) : null}
-
-          {visibility === "link" ? (
-            <div style={{ marginTop: "10px", display: "grid", gap: "8px" }}>
-              <p className="muted" style={{ margin: 0 }}>
-                {t("recipes.new.access.linkAvailableAfterSave")}
-              </p>
-              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                <button
-                  type="button"
-                  className="btn"
-                  onClick={() => setShareToken(generateShareToken())}
-                >
-                  {t("recipes.new.access.generateLink")}
-                </button>
-                {shareToken ? (
-                  <span className="muted" style={{ alignSelf: "center", fontSize: "12px" }}>
-                    {t("recipes.new.access.token")}: {shareToken.slice(0, 12)}...
-                  </span>
-                ) : null}
-              </div>
-            </div>
-          ) : null}
-
-          {visibility === "invited" ? (
-            <div style={{ marginTop: "10px", display: "grid", gap: "8px" }}>
-              <button
-                type="button"
-                className="btn"
-                onClick={() => setShowInvitedAccessEditor((prev) => !prev)}
-              >
-                {t("recipes.new.access.manage")}
+          {image ? (
+            <div>
+              <img
+                src={image}
+                alt={t("recipes.new.fields.imagePreviewAlt")}
+                style={{ maxWidth: "220px", maxHeight: "220px", borderRadius: "10px", display: "block", marginBottom: "10px" }}
+              />
+              <button className="btn btn-danger" onClick={() => setImage("")}>
+                {t("recipes.new.actions.deleteImage")}
               </button>
-              {showInvitedAccessEditor ? (
-                <div style={{ display: "grid", gap: "6px" }}>
-                  <textarea
-                    className="input"
-                    rows={4}
-                    value={invitedEmailsDraft}
-                    onChange={(e) => setInvitedEmailsDraft(e.target.value)}
-                    placeholder={t("recipes.new.access.invitedPlaceholder")}
-                    style={{ minHeight: "88px", resize: "vertical" }}
-                  />
-                  <p className="muted" style={{ margin: 0 }}>
-                    {t("recipes.new.access.invitedHelp")}
-                  </p>
-                </div>
-              ) : null}
             </div>
-          ) : null}
+          ) : (
+            <input type="file" accept="image/*" onChange={handleImageUpload} className="input" />
+          )}
         </div>
 
         <div style={{ marginBottom: "16px" }}>
@@ -1230,9 +1111,6 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
         </button>
         {showAiTools ? (
           <div style={{ marginTop: "10px" }}>
-            <p className="muted" style={{ marginTop: 0, marginBottom: "8px" }}>
-              {t("recipes.new.ai.toolsHint")}
-            </p>
             {!canUseImageGeneration ? (
               <p className="muted" style={{ marginTop: 0, marginBottom: "8px" }}>
                 {t("subscription.locks.imageGeneration")}
@@ -1318,14 +1196,36 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
               <p className="muted" style={{ marginTop: "8px" }}>
                 {t("recipes.new.fields.sourceHint")}
               </p>
-              {visibility !== "private" ? (
-                <p className="muted" style={{ marginTop: "8px" }}>
-                  {t("recipes.new.fields.sourceWarning")}
-                </p>
-              ) : null}
             </div>
 
-            <div style={{ marginBottom: "16px" }}>
+            <div style={{ marginBottom: "0" }}>
+              <label style={{ display: "block", marginBottom: "8px", fontWeight: "bold" }}>
+                {t("recipes.new.fields.notes")}
+              </label>
+              <textarea
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                rows={4}
+                className="input"
+                style={{ minHeight: "90px", resize: "vertical" }}
+              />
+            </div>
+          </div>
+        ) : null}
+      </div>
+
+      <div className="card" style={{ marginBottom: "20px", padding: "12px", background: "var(--background-secondary)" }}>
+        <button
+          className="btn"
+          type="button"
+          onClick={() => setShowTagFields((prev) => !prev)}
+        >
+          {showTagFields ? t("recipes.new.step3.hide") : t("recipes.new.step3.show")}
+        </button>
+
+        {showTagFields ? (
+          <div style={{ marginTop: "12px" }}>
+            <div style={{ marginBottom: "0" }}>
               <label style={{ display: "block", fontWeight: "bold", marginBottom: "8px" }}>
                 {t("recipes.new.fields.tags")}
               </label>
@@ -1343,7 +1243,7 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
                 </div>
               ) : null}
               <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
-                {RECIPE_TAGS.map((tag) => {
+                {(showAllTagOptions ? RECIPE_TAGS : RECIPE_TAGS.slice(0, DEFAULT_VISIBLE_TAG_COUNT)).map((tag) => {
                   const checked = selectedTags.includes(tag);
                   const tagLabel = localizeRecipeTag(tag, locale as "ru" | "en" | "es");
                   return (
@@ -1374,39 +1274,17 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
                   );
                 })}
               </div>
-            </div>
-
-            <div style={{ marginBottom: "16px" }}>
-              <label style={{ display: "block", marginBottom: "8px", fontWeight: "bold" }}>
-                {t("recipes.new.fields.image")}
-              </label>
-              {image ? (
-                <div>
-                  <img
-                    src={image}
-                    alt={t("recipes.new.fields.imagePreviewAlt")}
-                    style={{ maxWidth: "220px", maxHeight: "220px", borderRadius: "10px", display: "block", marginBottom: "10px" }}
-                  />
-                  <button className="btn btn-danger" onClick={() => setImage("")}>
-                    {t("recipes.new.actions.deleteImage")}
+              {RECIPE_TAGS.length > DEFAULT_VISIBLE_TAG_COUNT ? (
+                <div style={{ marginTop: "10px" }}>
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={() => setShowAllTagOptions((prev) => !prev)}
+                  >
+                    {showAllTagOptions ? t("recipes.new.tags.showLess") : t("recipes.new.tags.showMore")}
                   </button>
                 </div>
-              ) : (
-                <input type="file" accept="image/*" onChange={handleImageUpload} className="input" />
-              )}
-            </div>
-
-            <div style={{ marginBottom: "0" }}>
-              <label style={{ display: "block", marginBottom: "8px", fontWeight: "bold" }}>
-                {t("recipes.new.fields.notes")}
-              </label>
-              <textarea
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                rows={4}
-                className="input"
-                style={{ minHeight: "90px", resize: "vertical" }}
-              />
+              ) : null}
             </div>
           </div>
         ) : null}

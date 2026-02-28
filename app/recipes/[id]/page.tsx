@@ -1291,20 +1291,25 @@ export default function RecipeDetailPage() {
     await createTranslationDraft(translationTargetLanguage);
   };
 
+  const openEditMode = () => {
+    setIsEditing(true);
+    setShowAiTools(false);
+    setShowAdvancedFields(false);
+  };
+
   return (
     <div style={{ padding: "20px", maxWidth: "900px", margin: "0 auto" }}>
       <div style={{ marginBottom: "20px", display: "flex", gap: "10px", flexWrap: "wrap" }}>
         <button className="btn" onClick={() => router.push("/recipes")}>{t("recipes.detail.actions.backToRecipes")}</button>
 
+        {!isEditing && canChangeVisibility && (
+          <button className="btn" onClick={openEditMode}>
+            {t("recipes.detail.actions.share")}
+          </button>
+        )}
+
         {!isEditing && canEdit && (
-          <button
-            className="btn btn-primary"
-            onClick={() => {
-              setIsEditing(true);
-              setShowAiTools(false);
-              setShowAdvancedFields(false);
-            }}
-          >
+          <button className="btn btn-primary" onClick={openEditMode}>
             {t("recipes.detail.actions.edit")}
           </button>
         )}
@@ -1648,9 +1653,6 @@ export default function RecipeDetailPage() {
             </button>
             {showAiTools ? (
               <div style={{ marginTop: "10px" }}>
-                <p className="muted" style={{ marginTop: 0, marginBottom: "8px" }}>
-                  {t("recipes.new.ai.toolsHint")}
-                </p>
                 {!canUseImageGeneration ? (
                   <p className="muted" style={{ marginTop: 0, marginBottom: "8px" }}>
                     {t("subscription.locks.imageGeneration")}

@@ -9,7 +9,7 @@ import {
   normalizeUnitId,
   type UnitId,
 } from "./ingredientUnits";
-import { getTemplateRecipeImageById, getTemplateRecipeImageByTitle } from "./recipeImageCatalog";
+import { findTemplateRecipeImage } from "./recipeImageCatalog";
 
 export const RECIPES_STORAGE_KEY = "recipes";
 const RECIPE_REPORTS_KEY = "recipeReports";
@@ -1047,11 +1047,9 @@ const SEED_TEMPLATE_RECIPES: RecipeModel[] = [
 ];
 
 SEED_TEMPLATE_RECIPES.forEach((recipe) => {
-  const resolved =
-    getTemplateRecipeImageById(recipe.id) ||
-    getTemplateRecipeImageByTitle(recipe.title);
-  if (resolved) {
-    recipe.image = resolved;
+  const mapped = findTemplateRecipeImage(recipe.id, recipe.title);
+  if (mapped.matched) {
+    recipe.image = mapped.image || "";
   }
 });
 

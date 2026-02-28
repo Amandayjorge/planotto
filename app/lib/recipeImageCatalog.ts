@@ -8,12 +8,18 @@ type RecipeImageCandidate = {
 
 type TemplateRecipeImageEntry = {
   id: string;
-  image: string;
+  image: string | null;
   titles: string[];
 };
 
 const normalizeRecipeTitle = (value: string): string =>
-  value.trim().toLowerCase().replace(/\s+/g, " ");
+  value
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .replace(/\s+/g, " ");
 
 const LEGACY_TEMPLATE_IMAGE_URLS = new Set<string>([
   "/recipes/templates/omelet-vegetables.jpg",
@@ -71,42 +77,42 @@ const TEMPLATE_RECIPE_IMAGE_ENTRIES: TemplateRecipeImageEntry[] = [
   },
   {
     id: "seed-greek-yogurt-granola",
-    image: "/recipes/templates/oatmeal-fruits.jpg",
+    image: null,
     titles: ["Йогурт с гранолой", "Yogurt with granola", "Yogur con granola"],
   },
   {
     id: "seed-buckwheat-mushrooms",
-    image: "/recipes/templates/chicken-rice.jpg",
+    image: null,
     titles: ["Гречка с грибами", "Buckwheat with mushrooms", "Trigo sarraceno con champinones"],
   },
   {
     id: "seed-mashed-potatoes",
-    image: "/recipes/templates/baked-fish-potatoes.jpg",
+    image: null,
     titles: ["Картофельное пюре", "Mashed potatoes", "Pure de patatas"],
   },
   {
     id: "seed-vegetable-soup",
-    image: "/recipes/templates/lentil-soup-v2.jpg",
+    image: null,
     titles: ["Овощной суп", "Vegetable soup", "Sopa de verduras"],
   },
   {
     id: "seed-fried-rice-egg",
-    image: "/recipes/templates/chicken-rice.jpg",
+    image: null,
     titles: ["Жареный рис с яйцом", "Fried rice with egg", "Arroz frito con huevo"],
   },
   {
     id: "seed-turkey-sandwich",
-    image: "/recipes/templates/tuna-salad.jpg",
+    image: null,
     titles: ["Сэндвич с индейкой", "Turkey sandwich", "Sandwich de pavo"],
   },
   {
     id: "seed-cottage-cheese-berries",
-    image: "/recipes/templates/oatmeal-fruits.jpg",
+    image: null,
     titles: ["Творог с ягодами", "Cottage cheese with berries", "Requeson con frutos rojos"],
   },
   {
     id: "seed-roasted-vegetables",
-    image: "/recipes/templates/baked-fish-potatoes.jpg",
+    image: null,
     titles: ["Запеченные овощи", "Roasted vegetables", "Verduras al horno"],
   },
   {
@@ -121,26 +127,26 @@ const TEMPLATE_RECIPE_IMAGE_ENTRIES: TemplateRecipeImageEntry[] = [
   },
   {
     id: "seed-rice-vegetables",
-    image: "/recipes/templates/chicken-rice.jpg",
+    image: null,
     titles: ["Рис с овощами", "Rice with vegetables", "Arroz con verduras"],
   },
   {
     id: "seed-crepes-milk",
-    image: "/recipes/templates/oladi-kefir.jpg",
+    image: null,
     titles: ["Блины на молоке", "Milk crepes", "Crepes con leche"],
   },
   {
     id: "seed-tuna-pasta-creamy",
-    image: "/recipes/templates/pasta-tomato.jpg",
+    image: null,
     titles: ["Паста с тунцом", "Pasta with tuna", "Pasta con atun"],
   },
 ];
 
-const IMAGE_BY_ID = new Map<string, string>(
+const IMAGE_BY_ID = new Map<string, string | null>(
   TEMPLATE_RECIPE_IMAGE_ENTRIES.map((entry) => [entry.id, entry.image])
 );
 
-const IMAGE_BY_TITLE = new Map<string, string>();
+const IMAGE_BY_TITLE = new Map<string, string | null>();
 TEMPLATE_RECIPE_IMAGE_ENTRIES.forEach((entry) => {
   entry.titles.forEach((title) => {
     const key = normalizeRecipeTitle(title);
@@ -153,29 +159,48 @@ export const isLegacyTemplateImageUrl = (value: string): boolean =>
 
 export const getTemplateRecipeImageById = (recipeId: string): string | null => {
   const key = String(recipeId || "").trim();
-  return IMAGE_BY_ID.get(key) || null;
+  if (!key || !IMAGE_BY_ID.has(key)) return null;
+  return IMAGE_BY_ID.get(key) ?? null;
 };
 
 export const getTemplateRecipeImageByTitle = (title: string): string | null => {
   const key = normalizeRecipeTitle(title || "");
-  if (!key) return null;
-  return IMAGE_BY_TITLE.get(key) || null;
+  if (!key || !IMAGE_BY_TITLE.has(key)) return null;
+  return IMAGE_BY_TITLE.get(key) ?? null;
+};
+
+export const findTemplateRecipeImage = (
+  recipeId: string,
+  recipeTitle: string
+): { matched: boolean; image: string | null } => {
+  const idKey = String(recipeId || "").trim();
+  if (idKey && IMAGE_BY_ID.has(idKey)) {
+    return { matched: true, image: IMAGE_BY_ID.get(idKey) ?? null };
+  }
+
+  const titleKey = normalizeRecipeTitle(recipeTitle || "");
+  if (titleKey && IMAGE_BY_TITLE.has(titleKey)) {
+    return { matched: true, image: IMAGE_BY_TITLE.get(titleKey) ?? null };
+  }
+
+  return { matched: false, image: null };
 };
 
 export const resolveRecipeImageForCard = (recipe: RecipeImageCandidate): string => {
-  const mapped =
-    getTemplateRecipeImageById(String(recipe.id || "")) ||
-    getTemplateRecipeImageByTitle(String(recipe.title || ""));
+  const mapped = findTemplateRecipeImage(
+    String(recipe.id || ""),
+    String(recipe.title || "")
+  );
   const direct = String(recipe.image || "").trim();
 
-  if (!mapped) return direct;
+  if (!mapped.matched) return direct;
 
   if (recipe.isTemplate === true || recipe.type === "template") {
-    return mapped;
+    return mapped.image || "";
   }
 
-  if (!direct) return mapped;
-  if (isLegacyTemplateImageUrl(direct)) return mapped;
-  if (isUnstableExternalRecipeImageUrl(direct)) return mapped;
+  if (!direct) return mapped.image || "";
+  if (isLegacyTemplateImageUrl(direct)) return mapped.image || "";
+  if (isUnstableExternalRecipeImageUrl(direct)) return mapped.image || "";
   return direct;
 };

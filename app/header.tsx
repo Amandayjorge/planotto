@@ -11,7 +11,15 @@ import {
 } from "./lib/profileGoal";
 
 const SHOPPING_HIGHLIGHT_KEY = "planottoHighlightShoppingNav";
-const NAV_ITEMS = [
+interface NavItem {
+  path: string;
+  labelKey: string;
+  mobileLabelKey?: string;
+  showDesktop?: boolean;
+}
+
+const NAV_ITEMS: NavItem[] = [
+  { path: "/", labelKey: "header.nav.home" },
   { path: "/recipes", labelKey: "header.nav.recipes" },
   { path: "/menu", labelKey: "header.nav.menu" },
   { path: "/pantry", labelKey: "header.nav.pantry" },
@@ -107,7 +115,7 @@ export default function Header() {
         </Link>
 
         <nav className="nav">
-          {NAV_ITEMS.map((item) => (
+          {NAV_ITEMS.filter((item) => item.showDesktop !== false).map((item) => (
             <Link
               key={item.path}
               href={item.path}

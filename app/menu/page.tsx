@@ -45,6 +45,8 @@ const WEEK_START_KEY = "selectedWeekStart";
 const PANTRY_STORAGE_KEY = "pantry";
 const MENU_FIRST_VISIT_ONBOARDING_KEY = "menuFirstVisitOnboardingSeen";
 const MENU_INLINE_HINT_DISMISSED_KEY = "menuInlineHintDismissed";
+const RETURNING_USER_LAST_SEEN_AT_KEY = "planottoLastSeenAt";
+const RETURNING_USER_HINT_AFTER_MS = 1000 * 60 * 60 * 24 * 30;
 const RECIPES_FIRST_FLOW_KEY = "recipesFirstFlowActive";
 const GUEST_REMINDER_VISITS_KEY = "guestReminderVisits";
 const GUEST_REMINDER_PERIOD_ATTEMPTS_KEY = "guestReminderPeriodAttempts";
@@ -1386,7 +1388,6 @@ function MenuPageContent() {
   const [movingItem, setMovingItem] = useState<{ cellKey: string; index: number } | null>(null);
   const [moveTargetDay, setMoveTargetDay] = useState<string>("");
   const [moveTargetMeal, setMoveTargetMeal] = useState<string>("");
-  const dialogMouseDownRef = useRef(false);
   const mealSlotsRangeKey = `${weekStart}__${periodEnd}`;
 
   useEffect(() => {
@@ -1466,6 +1467,7 @@ function MenuPageContent() {
   const [activeProductsCloudHydrated, setActiveProductsCloudHydrated] = useState(false);
   const [showFirstVisitOnboarding, setShowFirstVisitOnboarding] = useState(() => forceFirstFromQuery);
   const [showCalendarInlineHint, setShowCalendarInlineHint] = useState(false);
+  const [showReturningInlineHint, setShowReturningInlineHint] = useState(false);
   const [forcedOnboardingFlow, setForcedOnboardingFlow] = useState(() => forceFirstFromQuery);
   const [pendingRecipeForMenu, setPendingRecipeForMenu] = useState<string | null>(null);
   const [quickRecipeConfirm, setQuickRecipeConfirm] = useState<QuickRecipeConfirm | null>(null);
@@ -1832,7 +1834,7 @@ function MenuPageContent() {
     localStorage.removeItem("recipes:first-success-shown");
     localStorage.removeItem("recipes:first-added-recipe-id");
     localStorage.removeItem("recipes:first-success-pending");
-    router.replace("/recipes?first=1");
+    router.push("/recipes?first=1");
   };
 
   const handleOnboardingTryWithoutRecipes = () => {
@@ -2750,6 +2752,17 @@ function MenuPageContent() {
   ]);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    const now = Date.now();
+    const rawLastSeen = localStorage.getItem(RETURNING_USER_LAST_SEEN_AT_KEY);
+    const lastSeenAt = Number(rawLastSeen);
+    localStorage.setItem(RETURNING_USER_LAST_SEEN_AT_KEY, String(now));
+    if (Number.isFinite(lastSeenAt) && now - lastSeenAt >= RETURNING_USER_HINT_AFTER_MS) {
+      setShowReturningInlineHint(true);
+    }
+  }, []);
+
+  useEffect(() => {
     if (!hasLoaded || typeof window === "undefined") return;
     if (profileGoal === "explore") {
       setShowFirstVisitOnboarding(false);
@@ -2763,14 +2776,16 @@ function MenuPageContent() {
     }
 
     const isDismissed = localStorage.getItem(MENU_FIRST_VISIT_ONBOARDING_KEY) === "1";
-    if (menuMode === "mine" && allMenusEmpty) {
+    if (menuMode !== "mine") {
       setShowFirstVisitOnboarding(false);
       return;
     }
-    if (menuMode === "mine" && recipes.length === 0 && !isDismissed) {
+    if (recipes.length === 0 && !isDismissed) {
       setShowFirstVisitOnboarding(true);
+      return;
     }
-  }, [allMenusEmpty, forceFirstFromQuery, hasLoaded, menuMode, profileGoal, recipes.length, router]);
+    setShowFirstVisitOnboarding(false);
+  }, [forceFirstFromQuery, hasLoaded, menuMode, profileGoal, recipes.length]);
 
   useEffect(() => {
     if (profileGoal === "explore") {
@@ -2786,10 +2801,14 @@ function MenuPageContent() {
     }
     if (typeof window === "undefined") return;
     const inlineDismissed = localStorage.getItem(MENU_INLINE_HINT_DISMISSED_KEY) === "1";
+    if (showReturningInlineHint && !showFirstVisitOnboarding && recipes.length === 0) {
+      setShowCalendarInlineHint(true);
+      return;
+    }
     if (inlineDismissed) {
       setShowCalendarInlineHint(false);
     }
-  }, [forceFirstFromQuery, forcedOnboardingFlow, profileGoal, recipes.length]);
+  }, [forceFirstFromQuery, forcedOnboardingFlow, profileGoal, recipes.length, showFirstVisitOnboarding, showReturningInlineHint]);
 
   useEffect(() => {
     if (!hasLoaded) return;
@@ -3604,33 +3623,15 @@ function MenuPageContent() {
   };
 
   useEffect(() => {
-    const handlePointerDown = (event: PointerEvent) => {
-      const target = event.target as Element | null;
-      dialogMouseDownRef.current = Boolean(target && target.closest(".menu-dialog"));
-    };
-
-    const handleOutsideClick = (event: MouseEvent) => {
+    const handleGlobalPointerDown = (event: PointerEvent) => {
       const target = event.target as Element | null;
       if (!target) return;
-
-      // На случай перехода Next.js
-      if (target.closest("a") || target.closest('[role="link"]')) {
-        dialogMouseDownRef.current = false;
-        return;
-      }
 
       const clickedInside =
         target.closest(".menu-grid__item-menu-portal") ||
         target.closest(".menu-grid__item-more") ||
         target.closest(".menu-dialog") ||
         target.closest(".move-dialog");
-
-      if (dialogMouseDownRef.current && !clickedInside) {
-        dialogMouseDownRef.current = false;
-        return;
-      }
-
-      dialogMouseDownRef.current = false;
 
       if (clickedInside) return;
 
@@ -3645,14 +3646,13 @@ function MenuPageContent() {
     };
 
     if (openMoreMenu || movingItem || addingItemCell) {
-      document.addEventListener("pointerdown", handlePointerDown, true);
-      document.addEventListener("click", handleOutsideClick, false);
+      // Capture phase makes outside-close reliable even if inner handlers call stopPropagation.
+      document.addEventListener("pointerdown", handleGlobalPointerDown, true);
       document.addEventListener("keydown", handleEscapeKey, true);
     }
 
     return () => {
-      document.removeEventListener("pointerdown", handlePointerDown, true);
-      document.removeEventListener("click", handleOutsideClick, false);
+      document.removeEventListener("pointerdown", handleGlobalPointerDown, true);
       document.removeEventListener("keydown", handleEscapeKey, true);
     };
   }, [openMoreMenu, movingItem, addingItemCell]);
@@ -4063,11 +4063,11 @@ function MenuPageContent() {
     dayKey: string
   ) => {
     const menuKey = `${cellKey}-${index}`;
+    const isCooked = getDefaultCookedStatus(dayKey, menuItem.id);
     const title =
       menuItem.type === "recipe" && menuItem.recipeId
         ? recipes.find((r) => r.id === menuItem.recipeId)?.title || ""
         : menuItem.value || "";
-    const hasIngredients = getMenuItemIngredients(cellKey, menuItem).length > 0;
 
     return (
       <div key={menuItem.id} className="menu-slot-item">
@@ -4076,36 +4076,28 @@ function MenuPageContent() {
         </span>
 
         <div className="menu-slot-item__icons">
-          <label className="menu-slot-item__icon-toggle" title={t("menu.item.cooked")}>
-            <input
-              type="checkbox"
-              checked={getDefaultCookedStatus(dayKey, menuItem.id)}
-              onChange={(e) => {
-                if (e.target.checked) {
-                  markMenuItemCooked(cellKey, index, true);
-                } else {
-                  const updatedItems = [...(mealData[cellKey] || [])];
-                  updatedItems[index] = { ...updatedItems[index], cooked: false };
+          <button
+            type="button"
+            className={`menu-slot-item__cooked ${isCooked ? "menu-slot-item__cooked--active" : ""}`.trim()}
+            title={t("menu.item.cooked")}
+            aria-label={t("menu.item.cooked")}
+            aria-pressed={isCooked}
+            onClick={() => {
+              if (!isCooked) {
+                markMenuItemCooked(cellKey, index, true);
+                return;
+              }
 
-                  setMealData((prev) => ({ ...prev, [cellKey]: updatedItems }));
-                  setCookedStatus((prev) => ({ ...prev, [menuItem.id]: false }));
-                }
-              }}
-              className="menu-slot-item__checkbox"
-            />
-          </label>
+              const updatedItems = [...(mealData[cellKey] || [])];
+              updatedItems[index] = { ...updatedItems[index], cooked: false };
 
-          {menuItem.type === "text" ? (
-            <span className="menu-slot-item__icon" title={t("menu.item.noRecipe")}>
-              T
-            </span>
-          ) : null}
-
-          {hasIngredients ? (
-            <span className="menu-slot-item__icon" title={t("menu.item.hasIngredients")}>
-              I
-            </span>
-          ) : null}
+              setMealData((prev) => ({ ...prev, [cellKey]: updatedItems }));
+              setCookedStatus((prev) => ({ ...prev, [menuItem.id]: false }));
+            }}
+          >
+            <span className="menu-slot-item__cooked-icon" aria-hidden="true">✓</span>
+            <span className="menu-slot-item__cooked-text">{t("menu.item.cooked")}</span>
+          </button>
 
           <button
             className="menu-grid__item-more menu-slot-item__more"

@@ -2,6 +2,7 @@
   "header": {
     "slogan": "Plan, cook and shop",
     "nav": {
+      "home": "Home",
       "recipes": "Recipes",
       "menu": "Menu",
       "pantry": "Pantry",
@@ -155,15 +156,18 @@
   "pantry": {
     "title": "Pantry",
     "categories": {
-      "vegetablesFruits": "Vegetables and fruits",
+      "vegetablesFruits": "Fruits and vegetables",
       "meatFish": "Meat and fish",
-      "dairy": "Dairy products",
+      "dairy": "Dairy",
       "breadBakery": "Bakery and bread",
       "grocery": "Groceries",
       "frozen": "Frozen",
       "drinks": "Drinks",
       "snacksSweets": "Snacks and sweets",
-      "spicesSauces": "Spices and sauces"
+      "spicesSauces": "Spices and sauces",
+      "dryGoods": "Dry goods",
+      "household": "Household",
+      "other": "Other"
     },
     "updated": {
       "label": "Updated",
@@ -197,7 +201,8 @@
     },
     "form": {
       "namePlaceholder": "Name",
-      "categoryPlaceholder": "Category (for example: Vegetables)",
+      "createNewProduct": "Create new product",
+      "categoryPlaceholder": "Category",
       "searchPlaceholder": "Search products"
     },
     "sort": {
@@ -660,10 +665,29 @@
       "goToPublic": "Open recipe library",
       "addToMineHint": "The \"Add to mine\" button is available in the \"Recipe library\" tab."
     },
+    "selection": {
+      "enter": "Select",
+      "cancel": "Cancel",
+      "count": "{{count}} recipes selected",
+      "itemLabel": "Selected",
+      "share": "Share",
+      "sharing": "Sharing...",
+      "exportPdf": "Export PDF",
+      "sendLink": "Send link",
+      "sendingLink": "Creating link...",
+      "selectAtLeastOne": "Select at least one recipe.",
+      "requireAccount": "Sign in to share recipes.",
+      "linkRequiresCloud": "To send a link, recipes must be saved in your account (not local only).",
+      "sharedPublic": "Shared: {{count}}.",
+      "shareFailed": "Failed to share selected recipes.",
+      "linkCopied": "Link copied.",
+      "linkFailed": "Failed to create shared link."
+    },
     "addToMenuPrompt": {
       "title": "Recipe added. Add to menu?",
       "confirm": "Yes",
-      "later": "Later"
+      "later": "Later",
+      "closeAria": "Close notice"
     },
     "personalTags": {
       "hintText": "Add personal tags to quickly find your own recipes.",
@@ -734,6 +758,14 @@
       "linkTitle": "Recipe available only by direct link",
       "invitedTitle": "Recipe available only for invited users"
     },
+    "shareList": {
+      "title": "Shared recipes",
+      "description": "Choose a recipe to open it.",
+      "loading": "Loading shared recipes...",
+      "invalid": "This link does not contain valid recipes.",
+      "empty": "No recipes are available by this link.",
+      "openRecipe": "Open recipe"
+    },
     "authors": {
       "loading": "Loading author page...",
       "title": "Author",
@@ -758,6 +790,10 @@
         "hide": "Hide additional",
         "show": "Step 2. Additional (optional)"
       },
+      "step3": {
+        "hide": "Hide tags",
+        "show": "Step 3. Tags and filters (optional)"
+      },
       "fields": {
         "title": "Title",
         "access": "Access",
@@ -769,11 +805,16 @@
         "servings": "Servings",
         "source": "Source (optional)",
         "sourceHint": "If recipe comes from a book or website, add source.",
+        "privateByDefaultHint": "Recipe is saved as Private by default. You can share it after saving.",
         "sourceWarning": "If source is not specified, publication responsibility is on you.",
         "tags": "Tags (optional)",
         "image": "Image",
         "imagePreviewAlt": "Recipe preview",
         "notes": "Private notes"
+      },
+      "tags": {
+        "showMore": "Show more",
+        "showLess": "Show less"
       },
       "access": {
         "private": {
@@ -862,7 +903,7 @@
         "addSuggestedTags": "Add suggested tags"
       },
       "actions": {
-        "backToRecipes": "? Back to recipes",
+        "backToRecipes": "Back to recipes",
         "addIngredient": "+ Add ingredient",
         "deleteIngredient": "Delete",
         "deleteImage": "Delete image",
@@ -893,6 +934,7 @@
         "toRecipes": "To recipes list",
         "backToRecipes": "Back to recipes",
         "edit": "Edit",
+        "share": "Share",
         "delete": "Delete",
         "report": "Report"
       },

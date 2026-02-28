@@ -7,6 +7,7 @@ import { useI18n } from "../components/I18nProvider";
 import {
   findIngredientIdByName,
   getIngredientCategoryIdByIngredientId,
+  getIngredientNameById,
   type IngredientCategoryId,
 } from "../lib/ingredientDictionary";
 import {
@@ -24,7 +25,7 @@ interface PantryItem {
   unitId?: UnitId;
   unit_id?: UnitId;
   unit: string;
-  category: string;
+  category: PantryCategoryId;
   updatedAt: string;
 }
 
@@ -33,42 +34,39 @@ interface PantryDraftItem {
   amount: number | "";
   unitId: UnitId;
   unit: string;
-  category: string;
+  category: PantryCategoryId;
 }
 
 type SortMode = "name" | "amount" | "updatedAt";
-type BaseCategoryId =
+type PantryCategoryId =
   | "vegetablesFruits"
   | "meatFish"
   | "dairy"
-  | "breadBakery"
-  | "grocery"
+  | "dryGoods"
   | "frozen"
   | "drinks"
-  | "snacksSweets"
-  | "spicesSauces";
-interface BaseCategory {
-  id: BaseCategoryId;
+  | "household"
+  | "other";
+interface PantryCategory {
+  id: PantryCategoryId;
   emoji: string;
   labelKey: string;
 }
 
 const PANTRY_STORAGE_KEY = "pantry";
-const CATEGORY_DATALIST_ID = "pantry-category-options";
 const CATEGORY_FILTER_ALL = "__all__";
-const CATEGORY_FILTER_NONE = "__none__";
-const BASE_CATEGORIES: readonly BaseCategory[] = [
+const DEFAULT_PANTRY_CATEGORY_ID: PantryCategoryId = "other";
+const PANTRY_CATEGORIES: readonly PantryCategory[] = [
   { id: "vegetablesFruits", emoji: "🥦", labelKey: "pantry.categories.vegetablesFruits" },
   { id: "meatFish", emoji: "🥩", labelKey: "pantry.categories.meatFish" },
   { id: "dairy", emoji: "🧀", labelKey: "pantry.categories.dairy" },
-  { id: "breadBakery", emoji: "🥖", labelKey: "pantry.categories.breadBakery" },
-  { id: "grocery", emoji: "🥫", labelKey: "pantry.categories.grocery" },
+  { id: "dryGoods", emoji: "🥫", labelKey: "pantry.categories.dryGoods" },
   { id: "frozen", emoji: "🧊", labelKey: "pantry.categories.frozen" },
   { id: "drinks", emoji: "🧃", labelKey: "pantry.categories.drinks" },
-  { id: "snacksSweets", emoji: "🍫", labelKey: "pantry.categories.snacksSweets" },
-  { id: "spicesSauces", emoji: "🧂", labelKey: "pantry.categories.spicesSauces" },
+  { id: "household", emoji: "🧽", labelKey: "pantry.categories.household" },
+  { id: "other", emoji: "📦", labelKey: "pantry.categories.other" },
 ];
-const BASE_CATEGORY_ID_SET = new Set<string>(BASE_CATEGORIES.map((item) => item.id));
+const PANTRY_CATEGORY_ID_SET = new Set<string>(PANTRY_CATEGORIES.map((item) => item.id));
 const CATEGORY_EMOJI_BY_INGREDIENT_CATEGORY: Record<IngredientCategoryId, string> = {
   vegetables: "🥬",
   fruits: "🍎",
@@ -79,13 +77,35 @@ const CATEGORY_EMOJI_BY_INGREDIENT_CATEGORY: Record<IngredientCategoryId, string
   drinks: "🧃",
   other: "📦",
 };
+const PANTRY_CATEGORY_BY_INGREDIENT_CATEGORY: Record<IngredientCategoryId, PantryCategoryId> = {
+  vegetables: "vegetablesFruits",
+  fruits: "vegetablesFruits",
+  protein: "meatFish",
+  dairy: "dairy",
+  grocery: "dryGoods",
+  bakery: "dryGoods",
+  drinks: "drinks",
+  other: "other",
+};
 
-const normalizeCategory = (value: string): string => value.trim().replace(/\s+/g, " ");
+interface PantrySuggestionOption {
+  key: string;
+  name: string;
+  category: PantryCategoryId;
+  emoji: string;
+  isCreateNew?: boolean;
+}
+
 const nowIso = (): string => new Date().toISOString();
 const resolveIntlLocale = (locale: string): string => {
   if (locale === "ru") return "ru-RU";
   if (locale === "es") return "es-ES";
   return "en-US";
+};
+const resolveIngredientLocale = (locale: string): "ru" | "en" | "es" => {
+  if (locale === "es") return "es";
+  if (locale === "en") return "en";
+  return "ru";
 };
 const normalizeLookupText = (value: string): string =>
   value
@@ -94,6 +114,61 @@ const normalizeLookupText = (value: string): string =>
     .normalize("NFD")
     .replace(/\p{Diacritic}+/gu, "")
     .replace(/\s+/g, " ");
+
+const PANTRY_CATEGORY_ALIAS_TO_ID: Record<string, PantryCategoryId> = {
+  vegetablesfruits: "vegetablesFruits",
+  "vegetables fruits": "vegetablesFruits",
+  "frutas y verduras": "vegetablesFruits",
+  "fruits and vegetables": "vegetablesFruits",
+  "овощи и фрукты": "vegetablesFruits",
+
+  meatfish: "meatFish",
+  "meat and fish": "meatFish",
+  "carne y pescado": "meatFish",
+  "мясо и рыба": "meatFish",
+
+  dairy: "dairy",
+  "dairy products": "dairy",
+  lacteos: "dairy",
+  "молочные продукты": "dairy",
+
+  drygoods: "dryGoods",
+  grocery: "dryGoods",
+  groceries: "dryGoods",
+  breadbakery: "dryGoods",
+  "bakery and bread": "dryGoods",
+  "pan y bolleria": "dryGoods",
+  "despensa seca": "dryGoods",
+  secos: "dryGoods",
+  бакалея: "dryGoods",
+
+  frozen: "frozen",
+  congelados: "frozen",
+  заморозка: "frozen",
+
+  drinks: "drinks",
+  bebidas: "drinks",
+  напитки: "drinks",
+
+  household: "household",
+  "para casa": "household",
+  "для дома": "household",
+
+  other: "other",
+  otros: "other",
+  uncategorized: "other",
+  "sin categoria": "other",
+  "без категории": "other",
+};
+
+const normalizePantryCategoryId = (value: unknown): PantryCategoryId => {
+  if (typeof value !== "string") return DEFAULT_PANTRY_CATEGORY_ID;
+  const raw = value.trim();
+  if (!raw) return DEFAULT_PANTRY_CATEGORY_ID;
+  if (PANTRY_CATEGORY_ID_SET.has(raw)) return raw as PantryCategoryId;
+  const normalized = normalizeLookupText(raw);
+  return PANTRY_CATEGORY_ALIAS_TO_ID[normalized] || DEFAULT_PANTRY_CATEGORY_ID;
+};
 
 const normalizePantryItem = (raw: unknown): PantryItem | null => {
   if (!raw || typeof raw !== "object") return null;
@@ -108,7 +183,7 @@ const normalizePantryItem = (raw: unknown): PantryItem | null => {
     amount,
     unitId,
     unit: unit || getUnitLabelById(unitId, "en"),
-    category: normalizeCategory(typeof row.category === "string" ? row.category : ""),
+    category: normalizePantryCategoryId(row.category),
     updatedAt: typeof row.updatedAt === "string" && row.updatedAt.trim() ? row.updatedAt : nowIso(),
   };
 };
@@ -222,7 +297,7 @@ export default function PantryPage() {
       amount: pantry[index].amount > 0 ? pantry[index].amount : "",
       unitId,
       unit: getUnitLabelById(unitId, locale),
-      category: pantry[index].category || "",
+      category: normalizePantryCategoryId(pantry[index].category),
     });
   };
 
@@ -244,33 +319,77 @@ export default function PantryPage() {
     if (!draftItem || !editingId) return;
     if (!validateItem(draftItem, editingId)) return;
 
+    const normalizedName = canonicalizeProductName(draftItem.name.trim());
+    if (!normalizedName) return;
+    const normalizedCategory = normalizePantryCategoryId(draftItem.category);
+    const inferredCategory = resolveSuggestionCategory(normalizedName, normalizedCategory);
     const payload: PantryItem = {
-      name: draftItem.name.trim(),
+      name: normalizedName,
       amount: Number(draftItem.amount),
       unitId: draftItem.unitId,
       unit: getUnitLabelById(draftItem.unitId, locale),
-      category: normalizeCategory(draftItem.category),
+      category: inferredCategory,
       updatedAt: nowIso(),
     };
 
     upsertSuggestions(payload.name);
 
     if (editingId === "new") {
-      setPantry((prev) => [...prev, payload]);
+      const existingIndex = findExistingPantryIndex(payload.name, payload.unitId ?? DEFAULT_UNIT_ID);
+      if (existingIndex >= 0) {
+        setPantry((prev) =>
+          prev.map((item, index) =>
+            index === existingIndex
+              ? {
+                  ...item,
+                  amount: Number((item.amount + payload.amount).toFixed(2)),
+                  category: payload.category,
+                  updatedAt: nowIso(),
+                }
+              : item
+          )
+        );
+      } else {
+        setPantry((prev) => [...prev, payload]);
+      }
     } else {
       const index = Number(editingId.replace("edit-", ""));
-      setPantry((prev) => prev.map((item, i) => (i === index ? payload : item)));
+      const existingIndex = findExistingPantryIndex(payload.name, payload.unitId ?? DEFAULT_UNIT_ID, index);
+      if (existingIndex >= 0) {
+        setPantry((prev) => {
+          const next = [...prev];
+          const target = next[existingIndex];
+          if (!target) return prev;
+          next[existingIndex] = {
+            ...target,
+            amount: Number((target.amount + payload.amount).toFixed(2)),
+            category: payload.category,
+            updatedAt: nowIso(),
+          };
+          next.splice(index, 1);
+          return next;
+        });
+      } else {
+        setPantry((prev) => prev.map((item, i) => (i === index ? payload : item)));
+      }
     }
 
     setEditingId(null);
     setDraftItem(null);
+    setActiveSuggestionField(null);
   };
 
   const updateDraftItem = (field: "name" | "amount" | "unit" | "category", value: string | number) => {
     if (!draftItem) return;
     const updated = { ...draftItem };
 
-    if (field === "name") updated.name = String(value);
+    if (field === "name") {
+      updated.name = String(value);
+      const exactPantryMatchCategory = findPantryCategoryByName(updated.name);
+      if (exactPantryMatchCategory) {
+        updated.category = exactPantryMatchCategory;
+      }
+    }
     if (field === "amount") {
       const raw = String(value).trim();
       if (!raw) {
@@ -285,7 +404,7 @@ export default function PantryPage() {
       updated.unitId = nextUnitId;
       updated.unit = getUnitLabelById(nextUnitId, locale);
     }
-    if (field === "category") updated.category = String(value);
+    if (field === "category") updated.category = normalizePantryCategoryId(value);
 
     setDraftItem(updated);
     validateItem(updated, editingId || undefined);
@@ -302,7 +421,7 @@ export default function PantryPage() {
       amount: "",
       unitId: DEFAULT_UNIT_ID,
       unit: getUnitLabelById(DEFAULT_UNIT_ID, locale),
-      category: "",
+      category: DEFAULT_PANTRY_CATEGORY_ID,
     });
     setActiveSuggestionField("new");
   };
@@ -315,7 +434,7 @@ export default function PantryPage() {
         amount: 1,
         unitId: "l",
         unit: getUnitLabelById("l", locale),
-        category: "",
+        category: DEFAULT_PANTRY_CATEGORY_ID,
         updatedAt: nowIso(),
       },
       {
@@ -323,7 +442,7 @@ export default function PantryPage() {
         amount: 10,
         unitId: "pcs",
         unit: getUnitLabelById("pcs", locale),
-        category: "",
+        category: DEFAULT_PANTRY_CATEGORY_ID,
         updatedAt: nowIso(),
       },
       {
@@ -331,7 +450,7 @@ export default function PantryPage() {
         amount: 1,
         unitId: "pcs",
         unit: getUnitLabelById("pcs", locale),
-        category: "",
+        category: DEFAULT_PANTRY_CATEGORY_ID,
         updatedAt: nowIso(),
       },
     ];
@@ -339,50 +458,124 @@ export default function PantryPage() {
     appendProductSuggestions(starterItems.map((item) => item.name));
     setProductSuggestions(loadProductSuggestions());
   };
-
-  const getSuggestions = (value: string): string[] => {
-    const query = value.trim().toLowerCase();
-    if (query.length < 2) return [];
-    return productSuggestions
-      .filter((name) => name.toLowerCase().includes(query))
-      .slice(0, 6);
-  };
-
-  const normalizedSearch = normalizeLookupText(searchQuery);
-  const baseCategoryEntries = BASE_CATEGORIES.map((item) => ({
+  const ingredientLocale = resolveIngredientLocale(locale);
+  const pantryCategoryEntries = PANTRY_CATEGORIES.map((item) => ({
     ...item,
     label: t(item.labelKey),
   }));
-  const baseCategoryLabelMap = new Map<string, string>(
-    baseCategoryEntries.map((item) => [item.id, item.label])
+  const pantryCategoryLabelMap = new Map<PantryCategoryId, string>(
+    pantryCategoryEntries.map((item) => [item.id, item.label])
   );
-  const baseCategoryLabelSet = new Set(
-    baseCategoryEntries.map((item) => normalizeLookupText(item.label))
-  );
-  const existingCategories = Array.from(
-    new Set(pantry.map((item) => normalizeCategory(item.category)).filter((category) => category.length > 0))
-  ).sort((a, b) => a.localeCompare(b, activeLocale, { sensitivity: "base" }));
-  const categoryOptions = Array.from(
-    new Set([
-      ...baseCategoryEntries.map((item) => item.label),
-      ...existingCategories,
-    ])
-  );
-  const customCategoryChips = existingCategories.filter(
-    (category) => !baseCategoryLabelSet.has(normalizeLookupText(category))
-  );
+
+  const normalizeProductName = (value: string): string => value.trim().replace(/\s+/g, " ");
+  const canonicalizeProductName = (value: string): string => {
+    const normalized = normalizeProductName(value);
+    if (!normalized) return "";
+    const ingredientId = findIngredientIdByName(normalized, ingredientLocale);
+    if (!ingredientId) return normalized;
+    return getIngredientNameById(ingredientId, ingredientLocale, normalized) || normalized;
+  };
+  const resolveSuggestionCategory = (
+    name: string,
+    preferredCategory?: PantryCategoryId
+  ): PantryCategoryId => {
+    if (preferredCategory && PANTRY_CATEGORY_ID_SET.has(preferredCategory)) return preferredCategory;
+    const ingredientId = findIngredientIdByName(name, ingredientLocale);
+    if (!ingredientId) return DEFAULT_PANTRY_CATEGORY_ID;
+    const ingredientCategoryId = getIngredientCategoryIdByIngredientId(ingredientId, "other");
+    return PANTRY_CATEGORY_BY_INGREDIENT_CATEGORY[ingredientCategoryId] || DEFAULT_PANTRY_CATEGORY_ID;
+  };
+
+  const findPantryCategoryByName = (value: string): PantryCategoryId | null => {
+    const canonicalName = canonicalizeProductName(value);
+    const lookup = normalizeLookupText(canonicalName);
+    if (!lookup) return null;
+    const match = pantry.find((item) => normalizeLookupText(item.name) === lookup);
+    return match ? normalizePantryCategoryId(match.category) : null;
+  };
+
+  const findExistingPantryIndex = (name: string, unitId: UnitId, ignoreIndex?: number): number => {
+    const nameKey = normalizeLookupText(name);
+    return pantry.findIndex((item, index) => {
+      if (index === ignoreIndex) return false;
+      const itemKey = normalizeLookupText(item.name || "");
+      if (itemKey !== nameKey) return false;
+      const itemUnitId = normalizeUnitId(item.unitId || item.unit_id || item.unit || DEFAULT_UNIT_ID, DEFAULT_UNIT_ID);
+      return itemUnitId === unitId;
+    });
+  };
+
+  const getSuggestionOptions = (value: string): PantrySuggestionOption[] => {
+    const typedName = normalizeProductName(value);
+    const normalizedQuery = normalizeLookupText(typedName);
+    if (normalizedQuery.length < 2) return [];
+
+    const options = new Map<string, PantrySuggestionOption>();
+    const pushOption = (rawName: string, preferredCategory?: PantryCategoryId) => {
+      const sourceName = normalizeProductName(rawName);
+      if (!sourceName) return;
+      const canonicalName = canonicalizeProductName(sourceName);
+      const suggestionKey = normalizeLookupText(canonicalName);
+      if (!suggestionKey) return;
+      if (!suggestionKey.includes(normalizedQuery)) return;
+      if (options.has(suggestionKey)) return;
+      const category = resolveSuggestionCategory(canonicalName, preferredCategory);
+      options.set(suggestionKey, {
+        key: suggestionKey,
+        name: canonicalName,
+        category,
+        emoji: getProductEmoji(canonicalName, ingredientLocale),
+      });
+    };
+
+    pantry.forEach((item) => pushOption(item.name, item.category));
+    productSuggestions.forEach((name) => pushOption(name));
+
+    const sorted = Array.from(options.values())
+      .sort((a, b) => {
+        const aStarts = normalizeLookupText(a.name).startsWith(normalizedQuery) ? 0 : 1;
+        const bStarts = normalizeLookupText(b.name).startsWith(normalizedQuery) ? 0 : 1;
+        if (aStarts !== bStarts) return aStarts - bStarts;
+        return a.name.localeCompare(b.name, activeLocale, { sensitivity: "base" });
+      })
+      .slice(0, 6);
+
+    const exactKey = normalizeLookupText(canonicalizeProductName(typedName));
+    if (!options.has(exactKey)) {
+      sorted.push({
+        key: `new:${exactKey}`,
+        name: typedName,
+        category: DEFAULT_PANTRY_CATEGORY_ID,
+        emoji: "➕",
+        isCreateNew: true,
+      });
+    }
+
+    return sorted;
+  };
+
+  const applySuggestionOption = (option: PantrySuggestionOption) => {
+    if (!draftItem) return;
+    const normalizedName = normalizeProductName(option.name);
+    if (!normalizedName) return;
+    const nextCategory = option.isCreateNew ? draftItem.category : option.category;
+    const updated: PantryDraftItem = {
+      ...draftItem,
+      name: normalizedName,
+      category: nextCategory,
+    };
+    setDraftItem(updated);
+    validateItem(updated, editingId || undefined);
+    setActiveSuggestionField(null);
+  };
+
+  const normalizedSearch = normalizeLookupText(searchQuery);
   const categoryChips: Array<{ value: string; label: string; emoji?: string }> = [
     { value: CATEGORY_FILTER_ALL, label: t("pantry.filters.all") },
-    ...baseCategoryEntries.map((category) => ({
+    ...pantryCategoryEntries.map((category) => ({
       value: category.id,
       label: category.label,
       emoji: category.emoji,
-    })),
-    { value: CATEGORY_FILTER_NONE, label: t("pantry.filters.uncategorized"), emoji: "🏷️" },
-    ...customCategoryChips.map((category) => ({
-      value: category,
-      label: category,
-      emoji: "🏷️",
     })),
   ];
 
@@ -390,14 +583,9 @@ export default function PantryPage() {
     .map((item, index) => ({ item, index }))
     .filter(({ item }) => {
       if (normalizedSearch && !normalizeLookupText(item.name).includes(normalizedSearch)) return false;
-      if (categoryFilter === CATEGORY_FILTER_NONE && normalizeCategory(item.category).length > 0) return false;
-      if (categoryFilter !== CATEGORY_FILTER_ALL && categoryFilter !== CATEGORY_FILTER_NONE) {
-        if (BASE_CATEGORY_ID_SET.has(categoryFilter)) {
-          const label = baseCategoryLabelMap.get(categoryFilter) || "";
-          if (normalizeLookupText(item.category) !== normalizeLookupText(label)) return false;
-        } else if (item.category !== categoryFilter) {
-          return false;
-        }
+      if (categoryFilter !== CATEGORY_FILTER_ALL) {
+        if (!PANTRY_CATEGORY_ID_SET.has(categoryFilter)) return false;
+        if (item.category !== categoryFilter) return false;
       }
       return true;
     })
@@ -452,18 +640,25 @@ export default function PantryPage() {
         />
         {activeSuggestionField === suggestionKey && (
           <div className="pantry-suggestions">
-            {getSuggestions(currentItem.name).map((name) => (
+            {getSuggestionOptions(currentItem.name).map((option) => (
               <button
-                key={name}
+                key={option.key}
                 type="button"
                 className="pantry-suggestion"
                 onMouseDown={(e) => e.preventDefault()}
-                onClick={() => {
-                  updateDraftItem("name", name);
-                  setActiveSuggestionField(null);
-                }}
+                onClick={() => applySuggestionOption(option)}
               >
-                {name}
+                <span className="pantry-suggestion__row">
+                  <span className="pantry-suggestion__emoji" aria-hidden="true">{option.emoji}</span>
+                  <span className="pantry-suggestion__name">
+                    {option.isCreateNew ? t("pantry.form.createNewProduct") : option.name}
+                  </span>
+                </span>
+                {!option.isCreateNew && option.category ? (
+                  <span className="pantry-suggestion__meta">
+                    {pantryCategoryLabelMap.get(option.category) || t("pantry.categories.other")}
+                  </span>
+                ) : null}
               </button>
             ))}
           </div>
@@ -494,14 +689,17 @@ export default function PantryPage() {
           ))}
         </select>
       </div>
-      <input
-        type="text"
+      <select
         value={currentItem.category}
         onChange={(e) => updateDraftItem("category", e.target.value)}
-        placeholder={t("pantry.form.categoryPlaceholder")}
-        list={CATEGORY_DATALIST_ID}
         className="input"
-      />
+      >
+        {pantryCategoryEntries.map((category) => (
+          <option key={category.id} value={category.id}>
+            {category.label}
+          </option>
+        ))}
+      </select>
     </>
   );
 
@@ -565,14 +763,6 @@ export default function PantryPage() {
       </div>
       <div className="pantry-category-hint" aria-hidden="true">{t("pantry.filters.scrollHint")}</div>
 
-      {categoryOptions.length > 0 ? (
-        <datalist id={CATEGORY_DATALIST_ID}>
-          {categoryOptions.map((category) => (
-            <option key={category} value={category} />
-          ))}
-        </datalist>
-      ) : null}
-
       {pantry.length === 0 && editingId !== "new" ? (
         <div className="empty-state">
           <div className="empty-state__title">{t("pantry.empty.title")}</div>
@@ -628,7 +818,7 @@ export default function PantryPage() {
                   amount: item.amount,
                   unitId: fallbackUnitId,
                   unit: getUnitLabelById(fallbackUnitId, locale),
-                  category: item.category || "",
+                  category: normalizePantryCategoryId(item.category),
                 };
             const cardEmoji = getProductEmoji(item.name, locale);
 

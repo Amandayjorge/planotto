@@ -2,6 +2,7 @@
   "header": {
     "slogan": "Planifica, cocina y compra",
     "nav": {
+      "home": "Inicio",
       "recipes": "Recetas",
       "menu": "Menú",
       "pantry": "Despensa",
@@ -163,7 +164,10 @@
       "frozen": "Congelados",
       "drinks": "Bebidas",
       "snacksSweets": "Snacks y dulces",
-      "spicesSauces": "Especias y salsas"
+      "spicesSauces": "Especias y salsas",
+      "dryGoods": "Secos",
+      "household": "Para casa",
+      "other": "Otros"
     },
     "updated": {
       "label": "Actualizado",
@@ -197,7 +201,8 @@
     },
     "form": {
       "namePlaceholder": "Nombre",
-      "categoryPlaceholder": "Categoría (por ejemplo: Verduras)",
+      "createNewProduct": "Crear nuevo producto",
+      "categoryPlaceholder": "Categoría",
       "searchPlaceholder": "Buscar productos"
     },
     "sort": {
@@ -372,7 +377,7 @@
       "scopeInMenu": "en este menú"
     },
     "item": {
-      "cooked": "Preparado",
+      "cooked": "Hecho",
       "noRecipe": "Sin receta",
       "hasIngredients": "Tiene ingredientes"
     },
@@ -660,10 +665,29 @@
       "goToPublic": "Abrir biblioteca de recetas",
       "addToMineHint": "El boton \"Anadir a las mias\" esta en la pestana \"Biblioteca de recetas\"."
     },
+    "selection": {
+      "enter": "Seleccionar",
+      "cancel": "Cancelar",
+      "count": "{{count}} recetas seleccionadas",
+      "itemLabel": "Seleccionada",
+      "share": "Compartir",
+      "sharing": "Compartiendo...",
+      "exportPdf": "Exportar PDF",
+      "sendLink": "Enviar enlace",
+      "sendingLink": "Creando enlace...",
+      "selectAtLeastOne": "Selecciona al menos una receta.",
+      "requireAccount": "Inicia sesión para compartir recetas.",
+      "linkRequiresCloud": "Para enviar enlace, guarda recetas en la cuenta (no solo local).",
+      "sharedPublic": "Compartidas: {{count}}.",
+      "shareFailed": "No se pudieron compartir las recetas seleccionadas.",
+      "linkCopied": "Enlace copiado.",
+      "linkFailed": "No se pudo crear el enlace compartido."
+    },
     "addToMenuPrompt": {
       "title": "Receta añadida. ¿Añadir al menú?",
       "confirm": "Sí",
-      "later": "Después"
+      "later": "Después",
+      "closeAria": "Cerrar aviso"
     },
     "personalTags": {
       "hintText": "Agrega etiquetas personales para encontrar rapido tus recetas.",
@@ -734,6 +758,14 @@
       "linkTitle": "Receta disponible solo por enlace directo",
       "invitedTitle": "Receta disponible solo para invitados"
     },
+    "shareList": {
+      "title": "Recetas compartidas",
+      "description": "Selecciona una receta para abrirla.",
+      "loading": "Cargando recetas compartidas...",
+      "invalid": "El enlace no contiene recetas válidas.",
+      "empty": "No hay recetas disponibles por este enlace.",
+      "openRecipe": "Abrir receta"
+    },
     "authors": {
       "loading": "Cargando la pagina del autor...",
       "title": "Autor",
@@ -758,6 +790,10 @@
         "hide": "Ocultar adicional",
         "show": "Paso 2. Adicional (opcional)"
       },
+      "step3": {
+        "hide": "Ocultar etiquetas",
+        "show": "Paso 3. Etiquetas y filtros (opcional)"
+      },
       "fields": {
         "title": "Nombre",
         "access": "Acceso",
@@ -769,11 +805,16 @@
         "servings": "Porciones",
         "source": "Fuente (opcional)",
         "sourceHint": "Si la receta viene de un libro o sitio, indique la fuente.",
+        "privateByDefaultHint": "La receta se guardará como Privado. Podrás compartirla después de guardar.",
         "sourceWarning": "Si no se indica la fuente, la responsabilidad de publicacion es suya.",
         "tags": "Etiquetas (opcional)",
         "image": "Imagen",
         "imagePreviewAlt": "Vista previa de receta",
         "notes": "Notas personales"
+      },
+      "tags": {
+        "showMore": "Mostrar más",
+        "showLess": "Mostrar menos"
       },
       "access": {
         "private": {
@@ -862,7 +903,7 @@
         "addSuggestedTags": "Agregar etiquetas sugeridas"
       },
       "actions": {
-        "backToRecipes": "? Volver a recetas",
+        "backToRecipes": "Volver a recetas",
         "addIngredient": "+ Agregar ingrediente",
         "deleteIngredient": "Eliminar",
         "deleteImage": "Eliminar imagen",
@@ -893,6 +934,7 @@
         "toRecipes": "A la lista de recetas",
         "backToRecipes": "Volver a recetas",
         "edit": "Editar",
+        "share": "Compartir",
         "delete": "Eliminar",
         "report": "Reportar"
       },

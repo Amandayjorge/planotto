@@ -17,6 +17,7 @@ import {
   loadLocalRecipes,
   removeRecipeFromLocalCache,
   syncRecipesToLocalCache,
+  updateRecipe,
   updateRecipePersonalTags,
   upsertRecipeInLocalCache,
   type RecipeModel,
@@ -32,6 +33,7 @@ import { usePlanottoConfirm } from "../components/usePlanottoConfirm";
 import { downloadPdfExport } from "../lib/pdfExportClient";
 import { resolveRecipeImageForCard } from "../lib/recipeImageCatalog";
 import { readProfileGoalFromStorage, type ProfileGoal } from "../lib/profileGoal";
+import { encodeRecipeShareBundle } from "../lib/recipeShareBundle";
 
 type ViewMode = "mine" | "public";
 type SortOption =
@@ -56,6 +58,7 @@ const PANTRY_STORAGE_KEY = "pantry";
 const PERSONAL_TAGS_HINT_SEEN_KEY = "recipes:personal-tags-hint-seen";
 const PERSONAL_TAG_MAX_LENGTH = 32;
 const PERSONAL_TAG_MAX_COUNT = 12;
+const ADD_TO_MENU_PROMPT_AUTO_CLOSE_MS = 4000;
 
 const VISIBILITY_BADGE_META: Record<
   Exclude<RecipeVisibility, "private">,
@@ -297,6 +300,30 @@ function toErrorText(error: unknown, fallback: string): string {
   return fallback;
 }
 
+function generateShareToken(): string {
+  return crypto.randomUUID().replace(/-/g, "");
+}
+
+function toRecipeUpsertInput(recipe: RecipeModel, overrides?: Partial<RecipeModel>) {
+  const next = { ...recipe, ...(overrides || {}) };
+  return {
+    title: next.title,
+    shortDescription: next.shortDescription || "",
+    description: next.description || "",
+    instructions: next.instructions || next.description || "",
+    ingredients: next.ingredients || [],
+    notes: next.notes || "",
+    servings: next.servings || 2,
+    image: next.image || "",
+    categories: [...(next.tags || next.categories || [])],
+    tags: [...(next.tags || next.categories || [])],
+    baseLanguage: normalizeRecipeLanguage(next.baseLanguage),
+    translations: next.translations,
+    visibility: next.visibility,
+    shareToken: next.shareToken || "",
+  };
+}
+
 function isAddToMenuPromptEnabled(): boolean {
   if (typeof window === "undefined") return true;
   return window.localStorage.getItem(MENU_ADD_TO_MENU_PROMPT_KEY) !== "0";
@@ -463,6 +490,9 @@ function RecipesPageContent() {
   const [openActiveMatchesRecipeId, setOpenActiveMatchesRecipeId] = useState<string | null>(null);
   const [openDislikeRecipeId, setOpenDislikeRecipeId] = useState<string | null>(null);
   const [selectedRecipeIds, setSelectedRecipeIds] = useState<Record<string, boolean>>({});
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [isSharingSelection, setIsSharingSelection] = useState(false);
+  const [isSendingSelectionLink, setIsSendingSelectionLink] = useState(false);
   const [publicAuthorProfiles, setPublicAuthorProfiles] = useState<Record<string, PublicAuthorProfile>>({});
   const [selectedPersonalTagFilters, setSelectedPersonalTagFilters] = useState<string[]>([]);
   const [personalTagEditorRecipeId, setPersonalTagEditorRecipeId] = useState<string | null>(null);
@@ -506,11 +536,29 @@ function RecipesPageContent() {
 
   useEffect(() => {
     if (viewMode === "mine") return;
+    setIsSelectionMode(false);
     setSelectedRecipeIds({});
     setSelectedPersonalTagFilters([]);
     setPersonalTagEditorRecipeId(null);
     setPersonalTagDraft("");
   }, [viewMode]);
+
+  useEffect(() => {
+    if (viewMode !== "mine") return;
+    const recipeIdSet = new Set(recipes.map((item) => item.id));
+    setSelectedRecipeIds((prev) => {
+      const next: Record<string, boolean> = {};
+      let changed = false;
+      Object.keys(prev).forEach((id) => {
+        if (prev[id] && recipeIdSet.has(id)) {
+          next[id] = true;
+          return;
+        }
+        changed = true;
+      });
+      return changed ? next : prev;
+    });
+  }, [recipes, viewMode]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1076,8 +1124,8 @@ function RecipesPageContent() {
   }, [recipes]);
 
   const selectedMineRecipes = useMemo(
-    () => filteredRecipes.filter((recipe) => Boolean(selectedRecipeIds[recipe.id])),
-    [filteredRecipes, selectedRecipeIds]
+    () => recipes.filter((recipe) => Boolean(selectedRecipeIds[recipe.id])),
+    [recipes, selectedRecipeIds]
   );
 
   const existingMineTitleSet = useMemo(() => {
@@ -1206,6 +1254,21 @@ function RecipesPageContent() {
   const handleDismissAddedRecipeMenu = () => {
     setAddToMenuPromptRecipeId(null);
   };
+
+  useEffect(() => {
+    if (!addToMenuPromptRecipeId) return;
+    if (typeof window === "undefined") return;
+
+    const timer = window.setTimeout(() => {
+      setAddToMenuPromptRecipeId((current) =>
+        current === addToMenuPromptRecipeId ? null : current
+      );
+    }, ADD_TO_MENU_PROMPT_AUTO_CLOSE_MS);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [addToMenuPromptRecipeId]);
 
   const handleChooseReadyRecipe = () => {
     setViewMode("public");
@@ -1616,6 +1679,117 @@ function RecipesPageContent() {
     }
   };
 
+  const toggleRecipeSelection = (recipeId: string, checked: boolean) => {
+    setSelectedRecipeIds((prev) => {
+      if (checked) return { ...prev, [recipeId]: true };
+      const next = { ...prev };
+      delete next[recipeId];
+      return next;
+    });
+  };
+
+  const enterSelectionMode = () => {
+    setIsSelectionMode(true);
+    setActionMessage("");
+  };
+
+  const exitSelectionMode = () => {
+    setIsSelectionMode(false);
+    setSelectedRecipeIds({});
+    setActionMessage("");
+  };
+
+  const shareSelectedRecipesPublic = async () => {
+    if (selectedMineRecipes.length === 0) {
+      setActionMessage(t("recipes.selection.selectAtLeastOne"));
+      return;
+    }
+    if (!currentUserId) {
+      setActionMessage(t("recipes.selection.requireAccount"));
+      return;
+    }
+
+    try {
+      setIsSharingSelection(true);
+      setActionMessage("");
+      const updates = await Promise.all(
+        selectedMineRecipes.map(async (recipe) => {
+          if (recipe.visibility === "public") return recipe;
+          const updated = await updateRecipe(
+            currentUserId,
+            recipe.id,
+            toRecipeUpsertInput(recipe, { visibility: "public", shareToken: "" })
+          );
+          upsertRecipeInLocalCache(updated);
+          return updated;
+        })
+      );
+
+      const updatedById = new Map(updates.map((recipe) => [recipe.id, recipe]));
+      const nextRecipes = recipes.map((recipe) => updatedById.get(recipe.id) || recipe);
+      setRecipes(nextRecipes);
+      syncRecipesToLocalCache(nextRecipes);
+      setActionMessage(t("recipes.selection.sharedPublic", { count: updates.length }));
+    } catch (error) {
+      const text = toErrorText(error, t("recipes.selection.shareFailed"));
+      setActionMessage(text);
+    } finally {
+      setIsSharingSelection(false);
+    }
+  };
+
+  const sendSelectedRecipesByLink = async () => {
+    if (selectedMineRecipes.length === 0) {
+      setActionMessage(t("recipes.selection.selectAtLeastOne"));
+      return;
+    }
+    if (!currentUserId || !isSupabaseConfigured()) {
+      setActionMessage(t("recipes.selection.linkRequiresCloud"));
+      return;
+    }
+    if (typeof window === "undefined") return;
+
+    try {
+      setIsSendingSelectionLink(true);
+      setActionMessage("");
+      const updates = await Promise.all(
+        selectedMineRecipes.map(async (recipe) => {
+          const token = String(recipe.shareToken || "").trim() || generateShareToken();
+          if (recipe.visibility === "link" && token === String(recipe.shareToken || "").trim()) {
+            return { recipe, token };
+          }
+          const updated = await updateRecipe(
+            currentUserId,
+            recipe.id,
+            toRecipeUpsertInput(recipe, { visibility: "link", shareToken: token })
+          );
+          upsertRecipeInLocalCache(updated);
+          return { recipe: updated, token: String(updated.shareToken || token).trim() };
+        })
+      );
+
+      const updatedById = new Map(updates.map(({ recipe }) => [recipe.id, recipe]));
+      const nextRecipes = recipes.map((recipe) => updatedById.get(recipe.id) || recipe);
+      setRecipes(nextRecipes);
+      syncRecipesToLocalCache(nextRecipes);
+
+      const bundle = encodeRecipeShareBundle(
+        updates.map(({ recipe, token }) => ({
+          id: recipe.id,
+          token,
+        }))
+      );
+      const shareUrl = `${window.location.origin}/recipes/share?items=${encodeURIComponent(bundle)}`;
+      await navigator.clipboard.writeText(shareUrl);
+      setActionMessage(t("recipes.selection.linkCopied"));
+    } catch (error) {
+      const text = toErrorText(error, t("recipes.selection.linkFailed"));
+      setActionMessage(text);
+    } finally {
+      setIsSendingSelectionLink(false);
+    }
+  };
+
   return (
     <>
       {showFirstRecipePrompt && (
@@ -1744,24 +1918,57 @@ function RecipesPageContent() {
           </div>
         </div>
       ) : null}
-      {viewMode === "mine" ? (
-        <div className="card" style={{ marginTop: "-4px", marginBottom: "12px", padding: "10px 12px" }}>
-          <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
-            <button
-              type="button"
-              className="btn"
-              onClick={() => {
-                void exportSelectedRecipesPdf();
-              }}
-              disabled={isExportingRecipesPdf}
-            >
-              {isExportingRecipesPdf ? t("pdf.actions.exporting") : t("pdf.actions.exportSelectedRecipes")}
-            </button>
-            <span className="muted">
-              {t("pdf.selectedCount", { count: selectedMineRecipes.length })}
-            </span>
+      {viewMode === "mine" && hasAnyRecipes ? (
+        isSelectionMode ? (
+          <div className="card" style={{ marginTop: "-4px", marginBottom: "12px", padding: "10px 12px" }}>
+            <div style={{ display: "flex", gap: "8px", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap" }}>
+              <strong style={{ fontSize: "14px" }}>
+                {t("recipes.selection.count", { count: selectedMineRecipes.length })}
+              </strong>
+              <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => {
+                    void shareSelectedRecipesPublic();
+                  }}
+                  disabled={isSharingSelection || isSendingSelectionLink || isExportingRecipesPdf}
+                >
+                  {isSharingSelection ? t("recipes.selection.sharing") : t("recipes.selection.share")}
+                </button>
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => {
+                    void exportSelectedRecipesPdf();
+                  }}
+                  disabled={isExportingRecipesPdf || isSharingSelection || isSendingSelectionLink}
+                >
+                  {isExportingRecipesPdf ? t("pdf.actions.exporting") : t("recipes.selection.exportPdf")}
+                </button>
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => {
+                    void sendSelectedRecipesByLink();
+                  }}
+                  disabled={isSendingSelectionLink || isSharingSelection || isExportingRecipesPdf}
+                >
+                  {isSendingSelectionLink ? t("recipes.selection.sendingLink") : t("recipes.selection.sendLink")}
+                </button>
+                <button type="button" className="btn" onClick={exitSelectionMode}>
+                  {t("recipes.selection.cancel")}
+                </button>
+              </div>
+            </div>
           </div>
-        </div>
+        ) : (
+          <div style={{ marginTop: "-4px", marginBottom: "12px" }}>
+            <button type="button" className="recipes-nav-back-link" onClick={enterSelectionMode}>
+              {t("recipes.selection.enter")}
+            </button>
+          </div>
+        )
       ) : null}
       {viewMode === "mine" && showPdfProPrompt ? (
         <div className="card" style={{ marginTop: "-4px", marginBottom: "12px", padding: "10px 12px" }}>
@@ -2157,7 +2364,13 @@ function RecipesPageContent() {
                     ? t("recipes.card.adding")
                     : t("recipes.card.addToMine")
               : t("recipes.card.open");
-            const mainActionClassName = `btn ${isPublicSourceRecipe && !isGuestPublicViewer ? "btn-primary" : ""}`.trim();
+            const mainActionClassName = `btn ${
+              isPublicSourceRecipe && !isGuestPublicViewer
+                ? addDone
+                  ? "recipes-card__add-btn--disabled"
+                  : "btn-primary"
+                : ""
+            }`.trim();
             const menuTargetRecipeId = !isPublicSourceRecipe
               ? recipe.id
               : isGuestPublicViewer
@@ -2349,22 +2562,16 @@ function RecipesPageContent() {
                           </span>
                         ) : null}
                       </div>
-                      {isMineCard ? (
+                      {isMineCard && isSelectionMode ? (
                         <label style={{ display: "inline-flex", alignItems: "center", gap: "6px", marginLeft: "8px", fontSize: "12px", color: "var(--text-secondary)" }}>
                           <input
                             type="checkbox"
                             checked={isSelectedForExport}
                             onChange={(event) => {
-                              const checked = event.target.checked;
-                              setSelectedRecipeIds((prev) => {
-                                if (checked) return { ...prev, [recipe.id]: true };
-                                const next = { ...prev };
-                                delete next[recipe.id];
-                                return next;
-                              });
+                              toggleRecipeSelection(recipe.id, event.target.checked);
                             }}
                           />
-                          {t("pdf.actions.select")}
+                          {t("recipes.selection.itemLabel")}
                         </label>
                       ) : null}
                     </div>
@@ -2574,7 +2781,20 @@ function RecipesPageContent() {
       {confirmDialog}
 
       {addToMenuPromptRecipeId ? (
-        <div className="recipes-add-to-menu-banner" role="status" aria-live="polite">
+        <div
+          className="recipes-add-to-menu-banner recipes-add-to-menu-banner--dismissable"
+          role="status"
+          aria-live="polite"
+        >
+          <button
+            type="button"
+            className="recipes-add-to-menu-banner__close"
+            onClick={handleDismissAddedRecipeMenu}
+            aria-label={t("recipes.addToMenuPrompt.closeAria")}
+            title={t("recipes.addToMenuPrompt.closeAria")}
+          >
+            ×
+          </button>
           <span className="recipes-add-to-menu-banner__text">{t("recipes.addToMenuPrompt.title")}</span>
           <div className="recipes-add-to-menu-banner__actions">
             <button type="button" className="btn btn-primary" onClick={handleConfirmAddedRecipeMenu}>
