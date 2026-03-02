@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
@@ -34,6 +34,7 @@ import { downloadPdfExport } from "../lib/pdfExportClient";
 import { resolveRecipeImageForCard } from "../lib/recipeImageCatalog";
 import { readProfileGoalFromStorage, type ProfileGoal } from "../lib/profileGoal";
 import { encodeRecipeShareBundle } from "../lib/recipeShareBundle";
+import { hasInappropriateRecipeContent, INAPPROPRIATE_CONTENT_MESSAGE } from "../lib/contentModeration";
 
 type ViewMode = "mine" | "public";
 type SortOption =
@@ -59,6 +60,13 @@ const PERSONAL_TAGS_HINT_SEEN_KEY = "recipes:personal-tags-hint-seen";
 const PERSONAL_TAG_MAX_LENGTH = 32;
 const PERSONAL_TAG_MAX_COUNT = 12;
 const ADD_TO_MENU_PROMPT_AUTO_CLOSE_MS = 4000;
+const LEGACY_RECIPE_LANGUAGE_PREFERENCE_KEY = "recipes:language-preference";
+const LANGUAGE_FILTER_MODE_KEY = "recipes:language-filter-mode";
+const AVAILABLE_RECIPE_LANGUAGES: RecipeLanguage[] = ["ru", "en", "es"];
+
+type LanguageFilterMode = "interface" | "interfaceEnglish" | "all";
+const DEFAULT_LANGUAGE_FILTER_MODE: LanguageFilterMode = "interface";
+const LANGUAGE_FILTER_OPTIONS: LanguageFilterMode[] = ["interface", "interfaceEnglish", "all"];
 
 const VISIBILITY_BADGE_META: Record<
   Exclude<RecipeVisibility, "private">,
@@ -214,6 +222,87 @@ function resolveActiveProductsStorageKey(): string | null {
   if (candidateKeys.length === 0) return null;
   candidateKeys.sort();
   return candidateKeys[candidateKeys.length - 1];
+}
+
+function normalizePreferredRecipeLanguages(
+  list: RecipeLanguage[],
+  interfaceLanguage: RecipeLanguage
+): RecipeLanguage[] {
+  const seen = new Set<RecipeLanguage>();
+  const normalized: RecipeLanguage[] = [];
+
+  for (const language of list) {
+    if (!AVAILABLE_RECIPE_LANGUAGES.includes(language) || seen.has(language)) continue;
+    seen.add(language);
+    normalized.push(language);
+  }
+
+  if (!seen.has(interfaceLanguage)) {
+    return [interfaceLanguage, ...normalized];
+  }
+
+  if (normalized[0] === interfaceLanguage) {
+    return normalized;
+  }
+
+  return [interfaceLanguage, ...normalized.filter((language) => language !== interfaceLanguage)];
+}
+
+function isLanguageFilterMode(value: unknown): value is LanguageFilterMode {
+  return typeof value === "string" && LANGUAGE_FILTER_OPTIONS.includes(value as LanguageFilterMode);
+}
+
+function normalizeStoredRecipeLanguages(raw: unknown): RecipeLanguage[] {
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set<RecipeLanguage>();
+  const normalized: RecipeLanguage[] = [];
+  raw.forEach((value) => {
+    if (typeof value !== "string") return;
+    const lower = value.toLowerCase();
+    if (!AVAILABLE_RECIPE_LANGUAGES.includes(lower as RecipeLanguage)) return;
+    if (seen.has(lower as RecipeLanguage)) return;
+    seen.add(lower as RecipeLanguage);
+    normalized.push(lower as RecipeLanguage);
+  });
+  return normalized;
+}
+
+function resolveLanguageFilterModeFromPreferredList(
+  raw: unknown,
+  interfaceLanguage: RecipeLanguage
+): LanguageFilterMode {
+  const normalized = normalizeStoredRecipeLanguages(raw);
+  const unique = new Set<RecipeLanguage>(normalized);
+  if (!unique.has(interfaceLanguage)) {
+    unique.add(interfaceLanguage);
+  }
+
+  const hasExtra = Array.from(unique).some((language) => {
+    return language !== interfaceLanguage && language !== "en";
+  });
+
+  if (hasExtra) {
+    return "all";
+  }
+
+  if (unique.has("en")) {
+    return "interfaceEnglish";
+  }
+
+  return "interface";
+}
+
+function getLanguagesForFilterMode(mode: LanguageFilterMode, interfaceLanguage: RecipeLanguage): RecipeLanguage[] {
+  if (mode === "interfaceEnglish") {
+    return normalizePreferredRecipeLanguages([interfaceLanguage, "en"], interfaceLanguage);
+  }
+  if (mode === "all") {
+    return normalizePreferredRecipeLanguages(
+      [interfaceLanguage, ...AVAILABLE_RECIPE_LANGUAGES.filter((language) => language !== interfaceLanguage)],
+      interfaceLanguage
+    );
+  }
+  return [interfaceLanguage];
 }
 
 function loadActiveProductNamesForCurrentRange(): string[] {
@@ -463,6 +552,8 @@ function RecipesPageContent() {
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<SortOption>("newest");
+  const [languageFilterMode, setLanguageFilterMode] = useState<LanguageFilterMode>(DEFAULT_LANGUAGE_FILTER_MODE);
+  const languageFilterLoaded = useRef(false);
   const [onlyWithPhoto, setOnlyWithPhoto] = useState(false);
   const [onlyWithNotes, setOnlyWithNotes] = useState(false);
   const [onlyWithActiveProducts, setOnlyWithActiveProducts] = useState(false);
@@ -506,14 +597,61 @@ function RecipesPageContent() {
   const canUsePdfExport = isPaidFeatureEnabled(planTier, "pdf_export");
   const effectiveSelectedTags = canUseAdvancedFilters ? selectedTags : [];
   const effectiveOnlyWithPhoto = canUseAdvancedFilters ? onlyWithPhoto : false;
-  const effectiveOnlyWithNotes = canUseAdvancedFilters ? onlyWithNotes : false;
+  const effectiveOnlyWithNotes = canUseAdvancedFilters && viewMode === "mine" ? onlyWithNotes : false;
   const effectiveOnlyWithActiveProducts = canUseAdvancedFilters ? onlyWithActiveProducts : false;
   const effectiveOnlyFromPantry = canUseAdvancedFilters ? onlyFromPantry : false;
   const effectiveSortBy: SortOption = canUseAdvancedFilters
     ? sortBy
     : (sortBy === "often_cooked" || sortBy === "rarely_cooked" ? "newest" : sortBy);
 
+  const hasLanguageVariant = (recipe: RecipeModel, language: RecipeLanguage): boolean => {
+    const normalizedBase = normalizeRecipeLanguage(recipe.baseLanguage);
+    if (normalizedBase === language) return true;
+    if (recipe.translations?.[language]) return true;
+    return false;
+  };
+
+  const effectivePreferredRecipeLanguages = useMemo(
+    () => getLanguagesForFilterMode(languageFilterMode, uiRecipeLanguage),
+    [languageFilterMode, uiRecipeLanguage]
+  );
+
+  const getPreferredRecipeLanguage = useCallback(
+    (recipe: RecipeModel): RecipeLanguage | null =>
+      effectivePreferredRecipeLanguages.find((language) => hasLanguageVariant(recipe, language)) ?? null,
+    [effectivePreferredRecipeLanguages]
+  );
+
+  const passesPreferredLanguages = (recipe: RecipeModel): boolean => {
+    if (languageFilterMode === "all") return true;
+    return effectivePreferredRecipeLanguages.some((language) => hasLanguageVariant(recipe, language));
+  };
+
   const importedForUser = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || languageFilterLoaded.current) return;
+    languageFilterLoaded.current = true;
+    const stored = window.localStorage.getItem(LANGUAGE_FILTER_MODE_KEY);
+    if (isLanguageFilterMode(stored)) {
+      setLanguageFilterMode(stored);
+      return;
+    }
+    const legacy = window.localStorage.getItem(LEGACY_RECIPE_LANGUAGE_PREFERENCE_KEY);
+    if (!legacy) return;
+    try {
+      const parsed = JSON.parse(legacy);
+      const mode = resolveLanguageFilterModeFromPreferredList(parsed, uiRecipeLanguage);
+      setLanguageFilterMode(mode);
+    } catch {
+      // ignore malformed legacy value
+    }
+  }, [uiRecipeLanguage]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(LANGUAGE_FILTER_MODE_KEY, languageFilterMode);
+  }, [languageFilterMode]);
 
   useEffect(() => {
     if (canUseAdvancedFilters) return;
@@ -991,6 +1129,11 @@ function RecipesPageContent() {
       if (effectiveOnlyWithNotes && !item.notes?.trim()) return false;
       if (effectiveOnlyWithActiveProducts && (recipeActiveMatchMap.get(item.id)?.matchCount || 0) === 0) return false;
       if (effectiveOnlyFromPantry && !recipePantryCoverageMap.get(item.id)?.isFullyCovered) return false;
+      const canonicalTitleKey = normalizeRecipeTitle(getRecipeCanonicalTitle(item));
+      if (viewMode === "public" && canonicalTitleKey && existingMineTitleSet.has(canonicalTitleKey)) {
+        return false;
+      }
+      if (!passesPreferredLanguages(item)) return false;
       if (
         viewMode === "mine" &&
         selectedPersonalTagFilters.length > 0
@@ -1006,14 +1149,22 @@ function RecipesPageContent() {
 
       const title = localized.title.toLowerCase();
       const shortDescription = localized.shortDescription.toLowerCase();
+      const description = localized.description.toLowerCase();
       const ingredientsText = (item.ingredients || [])
         .map((ingredient) => (ingredient.name || "").toLowerCase())
         .join(" ");
+      const authorId = String(item.authorId || item.ownerId || "").trim();
+      const authorDisplayName = (publicAuthorProfiles[authorId]?.displayName || "").toLowerCase();
+      const fallbackAuthorName =
+        viewMode === "mine" && currentUserName ? currentUserName.toLowerCase() : "";
+      const authorSearch = authorDisplayName || fallbackAuthorName;
 
       return (
         title.includes(query) ||
         shortDescription.includes(query) ||
-        ingredientsText.includes(query)
+        description.includes(query) ||
+        ingredientsText.includes(query) ||
+        authorSearch.includes(query)
       );
     });
 
@@ -1071,7 +1222,29 @@ function RecipesPageContent() {
       .filter((row) => row.matchCount === 0)
       .sort((a, b) => a.dislikeCount - b.dislikeCount || b.coverageRatio - a.coverageRatio || a.index - b.index);
 
-    return [...matched, ...rest].map((row) => row.item);
+    const prioritizeRowsByLanguage = (rows: typeof decorated[]): typeof decorated[] => {
+      if (effectivePreferredRecipeLanguages.length <= 1) return rows;
+      const buckets = effectivePreferredRecipeLanguages.map(() => [] as typeof decorated[]);
+      const fallback: typeof decorated[] = [];
+
+      rows.forEach((row) => {
+        const language = getPreferredRecipeLanguage(row.item);
+        const index = language ? effectivePreferredRecipeLanguages.indexOf(language) : -1;
+        if (index >= 0) {
+          buckets[index].push(row);
+        } else {
+          fallback.push(row);
+        }
+      });
+
+      const ordered = buckets.reduce<typeof decorated[]>((acc, bucket) => acc.concat(bucket), []);
+      return [...ordered, ...fallback];
+    };
+
+    const prioritizedMatched = prioritizeRowsByLanguage(matched);
+    const prioritizedRest = prioritizeRowsByLanguage(rest);
+
+    return [...prioritizedMatched, ...prioritizedRest].map((row) => row.item);
   }, [
     effectiveOnlyFromPantry,
     effectiveOnlyWithActiveProducts,
@@ -1087,28 +1260,33 @@ function RecipesPageContent() {
     selectedPersonalTagFilters,
     uiRecipeLanguage,
     viewMode,
+    existingMineTitleSet,
+    effectivePreferredRecipeLanguages,
+    getPreferredRecipeLanguage,
+    publicAuthorProfiles,
+    currentUserName,
   ]);
 
   useEffect(() => {
     let cancelled = false;
 
-    const publicOwnerIds = Array.from(
+    const publicAuthorIds = Array.from(
       new Set(
         recipes
           .filter((recipe) => recipe.visibility === "public")
-          .map((recipe) => String(recipe.ownerId || "").trim())
-          .filter((ownerId) => ownerId.length > 0 && ownerId !== "system" && isUuidLike(ownerId))
+          .map((recipe) => String(recipe.authorId || recipe.ownerId || "").trim())
+          .filter((authorId) => authorId.length > 0 && authorId !== "system" && isUuidLike(authorId))
       )
     );
 
-    if (publicOwnerIds.length === 0) {
+    if (publicAuthorIds.length === 0) {
       setPublicAuthorProfiles({});
       return () => {
         cancelled = true;
       };
     }
 
-    listPublicAuthorProfiles(publicOwnerIds)
+    listPublicAuthorProfiles(publicAuthorIds)
       .then((profiles) => {
         if (cancelled) return;
         setPublicAuthorProfiles(profiles);
@@ -1709,6 +1887,24 @@ function RecipesPageContent() {
       return;
     }
 
+    const hasBlockedContent = selectedMineRecipes
+      .filter((recipe) => recipe.visibility !== "public")
+      .some((recipe) =>
+        hasInappropriateRecipeContent({
+          title: recipe.title,
+          shortDescription: recipe.shortDescription,
+          description: recipe.description,
+          instructions: recipe.instructions,
+          notes: recipe.notes,
+          tags: recipe.tags || recipe.categories,
+          ingredients: recipe.ingredients,
+        })
+      );
+    if (hasBlockedContent) {
+      setActionMessage(t("recipes.new.messages.inappropriateContent") || INAPPROPRIATE_CONTENT_MESSAGE);
+      return;
+    }
+
     try {
       setIsSharingSelection(true);
       setActionMessage("");
@@ -1841,12 +2037,7 @@ function RecipesPageContent() {
               {t("recipes.actions.addRecipe")}
             </button>
           ) : null}
-          {viewMode === "mine" && hasAnyRecipes ? (
-            <button className="btn btn-danger" onClick={handleClearAllRecipes}>
-              {t("recipes.actions.clearMine")}
-            </button>
-          ) : null}
-        </div>
+          </div>
         <button className="recipes-account-chip" onClick={() => router.push("/auth")}>
           <span
             className={`recipes-account-chip__avatar ${
@@ -2019,6 +2210,29 @@ function RecipesPageContent() {
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder={t("recipes.filters.searchPlaceholder")}
             />
+            <div className="recipes-language-filter">
+              <span className="recipes-language-filter__label">
+                {t("recipes.filters.languageFilter.label")}
+              </span>
+              <div className="recipes-language-filter__options">
+                {LANGUAGE_FILTER_OPTIONS.map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    className={[
+                      "recipes-language-filter__option",
+                      languageFilterMode === mode && "recipes-language-filter__option--active",
+                    ]
+                      .filter(Boolean)
+                      .join(" ")}
+                    aria-pressed={languageFilterMode === mode}
+                    onClick={() => setLanguageFilterMode(mode)}
+                  >
+                    <span>{t(`recipes.filters.languageFilter.${mode}`)}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
             <select
               className="input"
               value={sortBy}
@@ -2062,13 +2276,15 @@ function RecipesPageContent() {
               >
                 {t("recipes.filters.withPhoto")}
               </button>
-              <button
-                type="button"
-                className={`btn ${onlyWithNotes ? "btn-primary" : ""}`}
-                onClick={() => setOnlyWithNotes((prev) => !prev)}
-              >
-                {t("recipes.filters.withNotes")}
-              </button>
+              {viewMode === "mine" ? (
+                <button
+                  type="button"
+                  className={`btn ${onlyWithNotes ? "btn-primary" : ""}`}
+                  onClick={() => setOnlyWithNotes((prev) => !prev)}
+                >
+                  {t("recipes.filters.withNotes")}
+                </button>
+              ) : null}
               <button
                 type="button"
                 className={`btn ${onlyWithActiveProducts ? "btn-primary" : ""}`}
@@ -2268,7 +2484,7 @@ function RecipesPageContent() {
         <div className="empty-state">
           <div className="empty-state__title">{t("recipes.emptyFiltered.title")}</div>
           <div className="empty-state__description">{t("recipes.emptyFiltered.description")}</div>
-          {hasActiveFilters ? (
+        {hasActiveFilters ? (
             <div style={{ marginTop: "14px" }}>
               <button
                 className="btn"
@@ -2285,8 +2501,19 @@ function RecipesPageContent() {
                 {t("recipes.filters.resetAll")}
               </button>
             </div>
+        ) : null}
+          {viewMode === "mine" && hasAnyRecipes ? (
+            <div className="recipes-clear-link-wrapper">
+              <button
+                type="button"
+                className="recipes-clear-link"
+                onClick={handleClearAllRecipes}
+              >
+                {t("recipes.actions.clearMine")}
+              </button>
+            </div>
           ) : null}
-        </div>
+      </div>
       ) : (
         <div style={{ display: "grid", gap: "12px" }}>
           {filteredRecipes.map((recipe) => {
@@ -2310,11 +2537,12 @@ function RecipesPageContent() {
             const addDone = duplicateExists || addedNow;
             const isAdding = pendingCopyRecipeId === recipe.id;
             const isPublicRecipe = recipe.visibility === "public";
-            const authorProfile = isPublicRecipe ? publicAuthorProfiles[recipe.ownerId] : undefined;
+            const authorUserId = String(recipe.authorId || recipe.ownerId || "").trim();
+            const authorProfile = isPublicRecipe ? publicAuthorProfiles[authorUserId] : undefined;
             const authorName =
               (authorProfile?.displayName || "").trim() ||
-              (recipe.ownerId === "system" ? t("recipes.card.planottoAuthor") : t("recipes.card.authorUnknown"));
-            const canOpenAuthorPage = isPublicRecipe && (recipe.ownerId === "system" || isUuidLike(recipe.ownerId || ""));
+              (authorUserId === "system" ? t("recipes.card.planottoAuthor") : t("recipes.card.authorUnknown"));
+            const canOpenAuthorPage = isPublicRecipe && (authorUserId === "system" || isUuidLike(authorUserId));
             const timesCooked = Number(
               (recipe as RecipeModel & { timesCooked?: number }).timesCooked || 0
             );
@@ -2431,7 +2659,7 @@ function RecipesPageContent() {
                               {t("recipes.card.authorLabel")}:{" "}
                               {canOpenAuthorPage ? (
                                 <Link
-                                  href={`/authors/${encodeURIComponent(recipe.ownerId || "system")}`}
+                                  href={`/authors/${encodeURIComponent(authorUserId || "system")}`}
                                   className="recipes-card__author-link"
                                 >
                                   {authorName}

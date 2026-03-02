@@ -16,7 +16,17 @@
       "closeMenu": "Close menu",
       "navigation": "Navigation",
       "logoAlt": "Planotto mascot"
+    },
+    "support": {
+      "title": "Help",
+      "help": "Help",
+      "contact": "Write to us",
+      "reportBug": "Report a bug"
     }
+  },
+  "appFooter": {
+    "help": "Help",
+    "contact": "Contact us"
   },
   "common": {
     "confirmDialog": {
@@ -358,6 +368,7 @@
     },
     "activeProducts": {
       "allTitle": "All active products",
+      "explanation": "Add products you want to use more often in your menu. They will be taken into account when planning.",
       "count": "Active: {{count}}",
       "addPlaceholder": "Add product",
       "searchPlaceholder": "Search by name and note",
@@ -524,7 +535,6 @@
       "planningDaysHelp": "You can switch presets or toggle specific days manually."
     },
     "goalHints": {
-      "planning": "Goal: menu planning. Select period and add dishes with the + button."
     },
     "mealsConfig": {
       "title": "Configure meals",
@@ -563,8 +573,8 @@
       "saveFailed": "Failed to save menu."
     },
     "confirm": {
-      "clearPeriod": "Are you sure you want to clear the menu for this period?",
-      "clearCurrentMenu": "Are you sure you want to clear the current menu?"
+    "clearPeriod": "Are you sure you want to clear the menu for this period?",
+    "clearCurrentMenu": "Delete all dishes for {{days}} days? This action cannot be undone."
     },
     "fallback": {
       "recipeTitle": "recipe",
@@ -651,8 +661,19 @@
       "activeProductsTooltip": "Show only recipes matching active products",
       "onlyWithActiveProducts": "Only with active products",
       "pantryEmpty": "Pantry is empty",
-      "onlyFromPantryTooltip": "Show only recipes that can be made from pantry",
-      "onlyFromPantry": "Only from pantry",
+        "onlyFromPantryTooltip": "Show only recipes that can be made from pantry",
+        "onlyFromPantry": "Only from pantry",
+        "languageFilter": {
+          "label": "Language",
+          "interface": "Interface language only",
+          "interfaceEnglish": "Interface + English",
+          "all": "All languages"
+        },
+        "languagePreference": {
+        "label": "Recipe languages",
+        "description": "Choose which languages should appear by default in your recipe library.",
+        "interfaceHint": "Interface language (always included)"
+      },
       "resetAll": "Reset all",
       "tags": "Tags",
       "resetTags": "Reset tags"
@@ -805,12 +826,23 @@
         "servings": "Servings",
         "source": "Source (optional)",
         "sourceHint": "If recipe comes from a book or website, add source.",
-        "privateByDefaultHint": "Recipe is saved as Private by default. You can share it after saving.",
+        "privateByDefaultHint": "",
         "sourceWarning": "If source is not specified, publication responsibility is on you.",
         "tags": "Tags (optional)",
         "image": "Image",
+        "imageChoiceHint": "Choose a file or generate with AI.",
         "imagePreviewAlt": "Recipe preview",
-        "notes": "Private notes"
+      "notes": "Private notes"
+      },
+      "nutrition": {
+        "title": "Nutrition (optional)",
+        "modePerServing": "Per serving",
+        "modePer100g": "Per 100 g",
+        "calories": "Calories",
+        "protein": "Protein",
+        "fat": "Fat",
+        "carbs": "Carbs",
+        "hint": "Leave fields blank if you do not want to record nutrition data."
       },
       "tags": {
         "showMore": "Show more",
@@ -854,6 +886,10 @@
         "urlUnsupported": "This URL is not supported.",
         "urlSuccess": "Imported. Review and save.",
         "urlFailed": "Failed to import recipe by URL. Try another URL or fill manually.",
+        "urlFailedDetails": "Could not recognize a recipe from this link. Supported sites publish structured recipe metadata.",
+        "supportedSitesTitle": "Supported sites",
+        "supportedSites": "allrecipes.com, foodnetwork.com, nytimes.com/recipes, bbcgoodfood.com",
+        "tryAlternative": "Try importing by photo or paste the recipe text manually.",
         "photoRequired": "Select a recipe photo.",
         "preparingPhoto": "Preparing photo...",
         "photoLoaded": "Loaded photos: {{count}}. Tap \"Recognize\".",
@@ -874,6 +910,11 @@
         "removePhoto": "Remove photo",
         "photoN": "Photo {{index}}",
         "reviewAfterImport": "Check after import:"
+      },
+      "image": {
+        "generateLabel": "Generate with AI",
+        "generateLocked": "Generate with AI (Pro only)",
+        "upsell": "Pro unlocks AI generation. Subscribe to try it."
       },
       "ai": {
         "needIngredient": "Add at least one ingredient first.",
@@ -914,6 +955,7 @@
       "messages": {
         "titleRequired": "Recipe title is required",
         "saveFailed": "Failed to save recipe.",
+        "inappropriateContent": "Este contenido no es apropiado",
         "invitesPartial": "Some invites were not sent: {{emails}}",
         "checkAmountAndUnit": "Check amount and unit after import."
       }
@@ -936,7 +978,7 @@
         "edit": "Edit",
         "share": "Share",
         "delete": "Delete",
-        "report": "Report"
+        "report": "Report content"
       },
       "notFound": "Recipe not found",
       "translation": {
