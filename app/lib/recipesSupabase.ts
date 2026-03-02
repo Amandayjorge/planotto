@@ -10,6 +10,8 @@ import {
   type UnitId,
 } from "./ingredientUnits";
 import { findTemplateRecipeImage } from "./recipeImageCatalog";
+import { hasInappropriateRecipeContent, INAPPROPRIATE_CONTENT_MESSAGE } from "./contentModeration";
+import { normalizeNutritionRow, type NutritionInfo } from "./nutrition";
 
 export const RECIPES_STORAGE_KEY = "recipes";
 const RECIPE_REPORTS_KEY = "recipeReports";
@@ -41,6 +43,7 @@ export interface RecipeTranslation {
 export interface RecipeModel {
   id: string;
   ownerId: string;
+  authorId?: string;
   type?: "user" | "template";
   isTemplate?: boolean;
   title: string;
@@ -60,6 +63,7 @@ export interface RecipeModel {
   shareToken?: string;
   createdAt?: string;
   updatedAt?: string;
+  nutrition?: NutritionInfo;
 }
 
 export interface RecipeUpsertInput {
@@ -77,6 +81,7 @@ export interface RecipeUpsertInput {
   translations?: Partial<Record<RecipeLanguage, RecipeTranslation>>;
   visibility?: RecipeVisibility;
   shareToken?: string;
+  nutrition?: NutritionInfo;
 }
 
 export interface PublicAuthorProfile {
@@ -89,6 +94,7 @@ export interface PublicAuthorProfile {
 interface RecipeRow {
   id: string;
   owner_id: string | null;
+  author_id?: string | null;
   title: string;
   short_description: string | null;
   description: string | null;
@@ -96,6 +102,7 @@ interface RecipeRow {
   ingredients: Ingredient[] | null;
   servings: number | null;
   image: string | null;
+  nutrition: NutritionInfo | null;
   categories: string[] | null;
   visibility: RecipeVisibility | null;
   share_token: string | null;
@@ -167,7 +174,8 @@ const normalizeRecipeReportReason = (value: unknown): RecipeReportReasonId => {
 };
 
 const RECIPE_COLUMNS =
-  "id,owner_id,title,short_description,description,instructions,ingredients,servings,image,categories,visibility,share_token,created_at,updated_at";
+  "id,owner_id,title,short_description,description,instructions,ingredients,servings,image,nutrition,categories,visibility,share_token,created_at,updated_at";
+const RECIPE_COLUMNS_WITH_AUTHOR = `${RECIPE_COLUMNS},author_id`;
 const RECIPE_TRANSLATION_COLUMNS =
   "recipe_id,language,title,short_description,description,instructions,is_auto_generated,updated_at";
 
@@ -1109,11 +1117,41 @@ export const getReportedRecipeIds = (): string[] => {
 export const isRecipeHiddenByReport = (recipeId: string): boolean =>
   getReportedRecipeIds().includes(recipeId);
 
-export const reportRecipeForReview = (
+const saveRecipeReportToCloud = async (
   recipeId: string,
   reason: RecipeReportReasonId,
   details = ""
-): void => {
+): Promise<void> => {
+  const supabase = getSupabaseClient();
+  const { data, error: authError } = await supabase.auth.getUser();
+  if (authError) throw authError;
+
+  const reporterId = data.user?.id || null;
+  const payload = {
+    recipe_id: recipeId,
+    reporter_id: reporterId,
+    reason,
+    details: details.trim(),
+    status: "open",
+  };
+
+  if (reporterId) {
+    const { error } = await supabase
+      .from("recipe_reports")
+      .upsert(payload, { onConflict: "recipe_id,reporter_id" });
+    if (error) throw error;
+    return;
+  }
+
+  const { error } = await supabase.from("recipe_reports").insert(payload);
+  if (error) throw error;
+};
+
+export const reportRecipeForReview = async (
+  recipeId: string,
+  reason: RecipeReportReasonId,
+  details = ""
+): Promise<void> => {
   const current = readRecipeReports();
   const next: RecipeReportRecord[] = [
     ...current.filter((item) => item.recipeId !== recipeId),
@@ -1125,6 +1163,12 @@ export const reportRecipeForReview = (
     },
   ];
   writeRecipeReports(next);
+
+  try {
+    await saveRecipeReportToCloud(recipeId, reason, details);
+  } catch {
+    // Keep report flow non-blocking if cloud moderation table is unavailable.
+  }
 };
 
 const isMissingRelationError = (error: unknown, relationName: string): boolean => {
@@ -1156,6 +1200,30 @@ const isDuplicateKeyError = (error: unknown): boolean => {
   const typed = error as PostgrestLikeError;
   const message = String(typed.message || "").toLowerCase();
   return typed.code === "23505" || message.includes("duplicate key");
+};
+
+const assertRecipeOwnerIsNotBlocked = async (ownerId: string): Promise<void> => {
+  const normalizedOwnerId = String(ownerId || "").trim();
+  if (!normalizedOwnerId) return;
+
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase
+    .from("user_profiles")
+    .select("is_blocked")
+    .eq("user_id", normalizedOwnerId)
+    .maybeSingle();
+
+  if (error) {
+    if (isMissingRelationError(error, "user_profiles")) return;
+    const code = String((error as { code?: unknown }).code || "");
+    if (code === "PGRST116") return;
+    throw error;
+  }
+
+  const isBlocked = Boolean((data as { is_blocked?: unknown } | null)?.is_blocked);
+  if (isBlocked) {
+    throw new Error("Account is blocked.");
+  }
 };
 
 const normalizeTitle = (value: string): string =>
@@ -1412,6 +1480,7 @@ const normalizeRecipeTagArray = (value: unknown): string[] =>
 
 const serializeRecipeForCloudFallback = (recipe: RecipeModel): Record<string, unknown> => ({
   id: recipe.id,
+  authorId: String(recipe.authorId || recipe.ownerId || "").trim(),
   title: recipe.title || "Рецепт",
   shortDescription: recipe.shortDescription || "",
   description: recipe.description || "",
@@ -1421,6 +1490,7 @@ const serializeRecipeForCloudFallback = (recipe: RecipeModel): Record<string, un
   personalTags: normalizePersonalTags(recipe.personalTags),
   servings: recipe.servings && recipe.servings > 0 ? recipe.servings : 2,
   image: recipe.image || "",
+  nutrition: recipe.nutrition ? recipe.nutrition : undefined,
   categories: normalizeRecipeTagArray(recipe.categories),
   tags: normalizeRecipeTagArray(recipe.tags || recipe.categories),
   baseLanguage: normalizeRecipeLanguage(recipe.baseLanguage),
@@ -1463,6 +1533,7 @@ const mapCloudFallbackItemToRecipe = (ownerId: string, value: unknown): RecipeMo
   return {
     id,
     ownerId,
+    authorId: String(raw.authorId || raw.ownerId || ownerId).trim() || ownerId,
     type: "user",
     isTemplate: false,
     title,
@@ -1474,6 +1545,7 @@ const mapCloudFallbackItemToRecipe = (ownerId: string, value: unknown): RecipeMo
     personalTags: normalizePersonalTags(raw.personalTags),
     servings: Number(raw.servings || 2),
     image: String(raw.image || ""),
+    nutrition: raw.nutrition ? normalizeNutritionRow(raw.nutrition) : undefined,
     categories,
     tags: tags.length > 0 ? tags : categories,
     baseLanguage,
@@ -1540,6 +1612,7 @@ const mapRow = (row: RecipeRow, notes?: string | null, personalTags?: string[] |
   return {
     id: row.id,
     ownerId: row.owner_id || "system",
+    authorId: row.author_id || row.owner_id || undefined,
     type: isTemplate ? "template" : "user",
     isTemplate,
     title: row.title,
@@ -1564,6 +1637,7 @@ const mapRow = (row: RecipeRow, notes?: string | null, personalTags?: string[] |
         updatedAt: row.updated_at || undefined,
       },
     },
+    nutrition: row.nutrition ? normalizeNutritionRow(row.nutrition) : undefined,
     visibility: normalizeVisibility(row.visibility),
     shareToken: row.share_token || undefined,
     createdAt: row.created_at || undefined,
@@ -1627,6 +1701,7 @@ const toPayload = (input: RecipeUpsertInput) => {
     categories: tags,
     visibility: normalizeVisibility(input.visibility),
     share_token: (input.shareToken || "").trim() || null,
+    nutrition: input.nutrition || null,
   };
 };
 
@@ -1657,6 +1732,7 @@ export const syncRecipesToLocalCache = (recipes: RecipeModel[]): void => {
     }),
     visibility: normalizeVisibility(item.visibility),
     shareToken: (item.shareToken || "").trim(),
+    nutrition: item.nutrition,
   }));
   localStorage.setItem(RECIPES_STORAGE_KEY, JSON.stringify(mapped));
 };
@@ -1723,6 +1799,7 @@ export const loadLocalRecipes = (): RecipeModel[] => {
         }),
         visibility: normalizeVisibility(row.visibility),
         shareToken: String(row.shareToken || "").trim() || undefined,
+        nutrition: normalizeNutritionRow(row.nutrition),
       };
     }));
 
@@ -1800,11 +1877,21 @@ export const listMyRecipes = async (ownerId: string): Promise<RecipeModel[]> => 
 
 export const listPublicRecipes = async (): Promise<RecipeModel[]> => {
   const supabase = getSupabaseClient();
-  const { data, error } = await supabase
+  let publicRecipesResponse = await supabase
     .from("recipes")
-    .select(RECIPE_COLUMNS)
+    .select(RECIPE_COLUMNS_WITH_AUTHOR)
     .eq("visibility", "public")
     .order("updated_at", { ascending: false });
+
+  if (publicRecipesResponse.error && isMissingColumnError(publicRecipesResponse.error, "author_id")) {
+    publicRecipesResponse = await supabase
+      .from("recipes")
+      .select(RECIPE_COLUMNS)
+      .eq("visibility", "public")
+      .order("updated_at", { ascending: false }) as typeof publicRecipesResponse;
+  }
+
+  const { data, error } = publicRecipesResponse;
 
   if (error) {
     if (isMissingRelationError(error, "recipes")) {
@@ -1895,12 +1982,23 @@ export const listPublicRecipesByAuthor = async (authorId: string): Promise<Recip
   if (!isUuidLike(normalizedAuthorId)) return [];
 
   const supabase = getSupabaseClient();
-  const { data, error } = await supabase
+  let authorRecipesResponse = await supabase
     .from("recipes")
-    .select(RECIPE_COLUMNS)
+    .select(RECIPE_COLUMNS_WITH_AUTHOR)
     .eq("visibility", "public")
-    .eq("owner_id", normalizedAuthorId)
+    .eq("author_id", normalizedAuthorId)
     .order("updated_at", { ascending: false });
+
+  if (authorRecipesResponse.error && isMissingColumnError(authorRecipesResponse.error, "author_id")) {
+    authorRecipesResponse = await supabase
+      .from("recipes")
+      .select(RECIPE_COLUMNS)
+      .eq("visibility", "public")
+      .eq("owner_id", normalizedAuthorId)
+      .order("updated_at", { ascending: false }) as typeof authorRecipesResponse;
+  }
+
+  const { data, error } = authorRecipesResponse;
 
   if (error) {
     if (isMissingRelationError(error, "recipes")) return [];
@@ -2086,13 +2184,39 @@ export const upsertRecipeTranslation = async (
 
 export const createRecipe = async (ownerId: string, input: RecipeUpsertInput): Promise<RecipeModel> => {
   const supabase = getSupabaseClient();
+  await assertRecipeOwnerIsNotBlocked(ownerId);
   const payload = toPayload(input);
 
-  const { data, error } = await supabase
+  if (
+    normalizeVisibility(payload.visibility) === "public" &&
+    hasInappropriateRecipeContent({
+      title: payload.title,
+      shortDescription: payload.short_description,
+      description: payload.description,
+      instructions: payload.instructions,
+      notes: input.notes,
+      tags: payload.categories,
+      ingredients: payload.ingredients,
+    })
+  ) {
+    throw new Error(INAPPROPRIATE_CONTENT_MESSAGE);
+  }
+
+  let createResponse = await supabase
     .from("recipes")
-    .insert({ ...payload, owner_id: ownerId })
+    .insert({ ...payload, owner_id: ownerId, author_id: ownerId })
     .select(RECIPE_COLUMNS)
     .single();
+
+  if (createResponse.error && isMissingColumnError(createResponse.error, "author_id")) {
+    createResponse = await supabase
+      .from("recipes")
+      .insert({ ...payload, owner_id: ownerId })
+      .select(RECIPE_COLUMNS)
+      .single();
+  }
+
+  const { data, error } = createResponse;
 
   if (error) {
     if (isMissingRelationError(error, "recipes")) {
@@ -2111,6 +2235,7 @@ export const createRecipe = async (ownerId: string, input: RecipeUpsertInput): P
       const created: RecipeModel = {
         id: crypto.randomUUID(),
         ownerId,
+        authorId: ownerId,
         type: "user",
         isTemplate: false,
         title: payload.title || "Рецепт",
@@ -2157,7 +2282,23 @@ export const createRecipe = async (ownerId: string, input: RecipeUpsertInput): P
 
 export const updateRecipe = async (ownerId: string, recipeId: string, input: RecipeUpsertInput): Promise<RecipeModel> => {
   const supabase = getSupabaseClient();
+  await assertRecipeOwnerIsNotBlocked(ownerId);
   const payload = toPayload(input);
+
+  if (
+    normalizeVisibility(payload.visibility) === "public" &&
+    hasInappropriateRecipeContent({
+      title: payload.title,
+      shortDescription: payload.short_description,
+      description: payload.description,
+      instructions: payload.instructions,
+      notes: input.notes,
+      tags: payload.categories,
+      ingredients: payload.ingredients,
+    })
+  ) {
+    throw new Error(INAPPROPRIATE_CONTENT_MESSAGE);
+  }
 
   const { data, error } = await supabase
     .from("recipes")
@@ -2370,6 +2511,7 @@ export const copyPublicRecipeToMine = async (ownerId: string, recipeId: string):
   if (seedTemplate) {
     const payload = {
       owner_id: ownerId,
+      author_id: ownerId,
       title: seedTemplate.title,
       short_description: seedTemplate.shortDescription || "",
       description: seedTemplate.description || "",
@@ -2384,11 +2526,23 @@ export const copyPublicRecipeToMine = async (ownerId: string, recipeId: string):
     const existing = await findOwnedRecipeByTitleSafe(ownerId, payload.title);
     if (existing) return existing;
 
-    const { data, error } = await supabase
+    let copySeedResponse = await supabase
       .from("recipes")
       .insert(payload)
       .select(RECIPE_COLUMNS)
       .single();
+
+    if (copySeedResponse.error && isMissingColumnError(copySeedResponse.error, "author_id")) {
+      const { author_id, ...legacyPayload } = payload;
+      void author_id;
+      copySeedResponse = await supabase
+        .from("recipes")
+        .insert(legacyPayload)
+        .select(RECIPE_COLUMNS)
+        .single();
+    }
+
+    const { data, error } = copySeedResponse;
 
     if (error) {
       if (isMissingRelationError(error, "recipes")) {
@@ -2400,6 +2554,7 @@ export const copyPublicRecipeToMine = async (ownerId: string, recipeId: string):
         const created: RecipeModel = {
           id: crypto.randomUUID(),
           ownerId,
+          authorId: ownerId,
           type: "user",
           isTemplate: false,
           title: payload.title || "Рецепт",
@@ -2440,12 +2595,23 @@ export const copyPublicRecipeToMine = async (ownerId: string, recipeId: string):
     return mapRow(data as RecipeRow);
   }
 
-  const { data: sourceData, error: sourceError } = await supabase
+  let sourceResponse = await supabase
     .from("recipes")
-    .select(RECIPE_COLUMNS)
+    .select(RECIPE_COLUMNS_WITH_AUTHOR)
     .eq("id", recipeId)
     .eq("visibility", "public")
     .single();
+
+  if (sourceResponse.error && isMissingColumnError(sourceResponse.error, "author_id")) {
+    sourceResponse = await supabase
+      .from("recipes")
+      .select(RECIPE_COLUMNS)
+      .eq("id", recipeId)
+      .eq("visibility", "public")
+      .single() as typeof sourceResponse;
+  }
+
+  const { data: sourceData, error: sourceError } = sourceResponse;
 
   if (sourceError) {
     throw sourceError;
@@ -2454,6 +2620,7 @@ export const copyPublicRecipeToMine = async (ownerId: string, recipeId: string):
   const source = sourceData as RecipeRow;
   const payload = {
     owner_id: ownerId,
+    author_id: source.author_id || source.owner_id || ownerId,
     title: source.title,
     short_description: source.short_description || "",
     description: source.description || "",
@@ -2468,11 +2635,23 @@ export const copyPublicRecipeToMine = async (ownerId: string, recipeId: string):
   const existing = await findOwnedRecipeByTitleSafe(ownerId, payload.title);
   if (existing) return existing;
 
-  const { data, error } = await supabase
+  let copyPublicResponse = await supabase
     .from("recipes")
     .insert(payload)
     .select(RECIPE_COLUMNS)
     .single();
+
+  if (copyPublicResponse.error && isMissingColumnError(copyPublicResponse.error, "author_id")) {
+    const { author_id, ...legacyPayload } = payload;
+    void author_id;
+    copyPublicResponse = await supabase
+      .from("recipes")
+      .insert(legacyPayload)
+      .select(RECIPE_COLUMNS)
+      .single();
+  }
+
+  const { data, error } = copyPublicResponse;
 
   if (error) {
     if (isMissingRelationError(error, "recipes")) {
@@ -2484,6 +2663,7 @@ export const copyPublicRecipeToMine = async (ownerId: string, recipeId: string):
       const created: RecipeModel = {
         id: crypto.randomUUID(),
         ownerId,
+        authorId: String(payload.author_id || ownerId).trim() || ownerId,
         type: "user",
         isTemplate: false,
         title: payload.title || "Рецепт",

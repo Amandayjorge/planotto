@@ -1111,6 +1111,27 @@ function RecipesPageContent() {
     return Array.from(counts.values()).sort((a, b) => b.count - a.count || a.value.localeCompare(b.value, "ru"));
   }, [recipes, viewMode]);
 
+  const existingMineTitleSet = useMemo(() => {
+    if (typeof window === "undefined") return new Set<string>();
+
+    const source = (viewMode === "mine" ? recipes : loadLocalRecipes()).filter((item) => !isSeedTemplateId(item.id));
+    return new Set(
+      source.map((item) => normalizeRecipeTitle(getRecipeCanonicalTitle(item))).filter(Boolean)
+    );
+  }, [mineSyncVersion, recipes, viewMode]);
+
+  const existingMineByTitle = useMemo(() => {
+    if (typeof window === "undefined") return new Map<string, string>();
+    const source = loadLocalRecipes().filter((item) => !isSeedTemplateId(item.id));
+    const map = new Map<string, string>();
+    source.forEach((item) => {
+      const key = normalizeRecipeTitle(getRecipeCanonicalTitle(item));
+      if (!key || !item.id || map.has(key)) return;
+      map.set(key, item.id);
+    });
+    return map;
+  }, [mineSyncVersion, recipes, viewMode]);
+
   const filteredRecipes = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     const sortLocale = uiRecipeLanguage === "es" ? "es" : uiRecipeLanguage === "en" ? "en" : "ru";
@@ -1193,7 +1214,15 @@ function RecipesPageContent() {
       }
     });
 
-    const decorated = filtered.map((item, index) => {
+    type DecoratedRow = {
+      item: RecipeModel;
+      index: number;
+      matchCount: number;
+      coverageRatio: number;
+      dislikeCount: number;
+    };
+
+    const decorated: DecoratedRow[] = filtered.map((item, index) => {
       const coverage = recipePantryCoverageMap.get(item.id);
       const totalIngredients = coverage?.totalIngredients || 0;
       const matchedIngredients = coverage?.matchedIngredients || 0;
@@ -1222,10 +1251,10 @@ function RecipesPageContent() {
       .filter((row) => row.matchCount === 0)
       .sort((a, b) => a.dislikeCount - b.dislikeCount || b.coverageRatio - a.coverageRatio || a.index - b.index);
 
-    const prioritizeRowsByLanguage = (rows: typeof decorated[]): typeof decorated[] => {
+    const prioritizeRowsByLanguage = (rows: DecoratedRow[]): DecoratedRow[] => {
       if (effectivePreferredRecipeLanguages.length <= 1) return rows;
-      const buckets = effectivePreferredRecipeLanguages.map(() => [] as typeof decorated[]);
-      const fallback: typeof decorated[] = [];
+      const buckets = effectivePreferredRecipeLanguages.map(() => [] as DecoratedRow[]);
+      const fallback: DecoratedRow[] = [];
 
       rows.forEach((row) => {
         const language = getPreferredRecipeLanguage(row.item);
@@ -1237,7 +1266,7 @@ function RecipesPageContent() {
         }
       });
 
-      const ordered = buckets.reduce<typeof decorated[]>((acc, bucket) => acc.concat(bucket), []);
+      const ordered = buckets.reduce<DecoratedRow[]>((acc, bucket) => acc.concat(bucket), []);
       return [...ordered, ...fallback];
     };
 
@@ -1305,31 +1334,6 @@ function RecipesPageContent() {
     () => recipes.filter((recipe) => Boolean(selectedRecipeIds[recipe.id])),
     [recipes, selectedRecipeIds]
   );
-
-  const existingMineTitleSet = useMemo(() => {
-    if (typeof window === "undefined") return new Set<string>();
-
-    const source = (viewMode === "mine" ? recipes : loadLocalRecipes()).filter(
-      (item) => !isSeedTemplateId(item.id)
-    );
-    return new Set(
-      source
-        .map((item) => normalizeRecipeTitle(getRecipeCanonicalTitle(item)))
-        .filter(Boolean)
-    );
-  }, [mineSyncVersion, recipes, viewMode]);
-
-  const existingMineByTitle = useMemo(() => {
-    if (typeof window === "undefined") return new Map<string, string>();
-    const source = loadLocalRecipes().filter((item) => !isSeedTemplateId(item.id));
-    const map = new Map<string, string>();
-    source.forEach((item) => {
-      const key = normalizeRecipeTitle(getRecipeCanonicalTitle(item));
-      if (!key || !item.id || map.has(key)) return;
-      map.set(key, item.id);
-    });
-    return map;
-  }, [mineSyncVersion, recipes, viewMode]);
 
   const openMenuWithRecipe = (recipeId: string) => {
     const recipeFromState = recipes.find((item) => item.id === recipeId) || null;
