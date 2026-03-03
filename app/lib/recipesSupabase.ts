@@ -204,7 +204,7 @@ const buildSeedTranslations = (translations: {
 const SEED_TEMPLATE_RECIPES: RecipeModel[] = [
   {
     id: "seed-omelet-vegetables",
-    ownerId: null,
+    ownerId: "system",
     type: "template",
     isTemplate: true,
     title: "Омлет с овощами",
@@ -247,7 +247,7 @@ const SEED_TEMPLATE_RECIPES: RecipeModel[] = [
   },
   {
     id: "seed-oatmeal-fruits",
-    ownerId: null,
+    ownerId: "system",
     type: "template",
     isTemplate: true,
     title: "Овсяная каша с фруктами",
@@ -290,7 +290,7 @@ const SEED_TEMPLATE_RECIPES: RecipeModel[] = [
   },
   {
     id: "seed-chicken-rice",
-    ownerId: null,
+    ownerId: "system",
     type: "template",
     isTemplate: true,
     title: "Курица с рисом",
@@ -333,7 +333,7 @@ const SEED_TEMPLATE_RECIPES: RecipeModel[] = [
   },
   {
     id: "seed-baked-fish-potatoes",
-    ownerId: null,
+    ownerId: "system",
     type: "template",
     isTemplate: true,
     title: "Запеченная рыба с картофелем",
@@ -375,7 +375,7 @@ const SEED_TEMPLATE_RECIPES: RecipeModel[] = [
   },
   {
     id: "seed-pasta-tomato",
-    ownerId: null,
+    ownerId: "system",
     type: "template",
     isTemplate: true,
     title: "Паста с томатным соусом",
@@ -417,7 +417,7 @@ const SEED_TEMPLATE_RECIPES: RecipeModel[] = [
   },
   {
     id: "seed-tuna-salad",
-    ownerId: null,
+    ownerId: "system",
     type: "template",
     isTemplate: true,
     title: "Салат с тунцом",
@@ -460,7 +460,7 @@ const SEED_TEMPLATE_RECIPES: RecipeModel[] = [
   },
   {
     id: "seed-oladi-kefir",
-    ownerId: null,
+    ownerId: "system",
     type: "template",
     isTemplate: true,
     title: "Оладьи на кефире",
@@ -503,7 +503,7 @@ const SEED_TEMPLATE_RECIPES: RecipeModel[] = [
   },
   {
     id: "seed-greek-yogurt-granola",
-    ownerId: null,
+    ownerId: "system",
     type: "template",
     isTemplate: true,
     title: "Йогурт с гранолой",
@@ -545,7 +545,7 @@ const SEED_TEMPLATE_RECIPES: RecipeModel[] = [
   },
   {
     id: "seed-buckwheat-mushrooms",
-    ownerId: null,
+    ownerId: "system",
     type: "template",
     isTemplate: true,
     title: "Гречка с грибами",
@@ -588,7 +588,7 @@ const SEED_TEMPLATE_RECIPES: RecipeModel[] = [
   },
   {
     id: "seed-mashed-potatoes",
-    ownerId: null,
+    ownerId: "system",
     type: "template",
     isTemplate: true,
     title: "Картофельное пюре",
@@ -630,7 +630,7 @@ const SEED_TEMPLATE_RECIPES: RecipeModel[] = [
   },
   {
     id: "seed-vegetable-soup",
-    ownerId: null,
+    ownerId: "system",
     type: "template",
     isTemplate: true,
     title: "Овощной суп",
@@ -673,7 +673,7 @@ const SEED_TEMPLATE_RECIPES: RecipeModel[] = [
   },
   {
     id: "seed-fried-rice-egg",
-    ownerId: null,
+    ownerId: "system",
     type: "template",
     isTemplate: true,
     title: "Жареный рис с яйцом",
@@ -716,7 +716,7 @@ const SEED_TEMPLATE_RECIPES: RecipeModel[] = [
   },
   {
     id: "seed-turkey-sandwich",
-    ownerId: null,
+    ownerId: "system",
     type: "template",
     isTemplate: true,
     title: "Сэндвич с индейкой",
@@ -759,7 +759,7 @@ const SEED_TEMPLATE_RECIPES: RecipeModel[] = [
   },
   {
     id: "seed-cottage-cheese-berries",
-    ownerId: null,
+    ownerId: "system",
     type: "template",
     isTemplate: true,
     title: "Творог с ягодами",
@@ -800,7 +800,7 @@ const SEED_TEMPLATE_RECIPES: RecipeModel[] = [
   },
   {
     id: "seed-roasted-vegetables",
-    ownerId: null,
+    ownerId: "system",
     type: "template",
     isTemplate: true,
     title: "Запеченные овощи",
@@ -843,7 +843,7 @@ const SEED_TEMPLATE_RECIPES: RecipeModel[] = [
   },
   {
     id: "seed-lentil-soup",
-    ownerId: null,
+    ownerId: "system",
     type: "template",
     isTemplate: true,
     title: "Суп из чечевицы",
@@ -886,7 +886,7 @@ const SEED_TEMPLATE_RECIPES: RecipeModel[] = [
   },
   {
     id: "seed-chicken-noodle-soup",
-    ownerId: null,
+    ownerId: "system",
     type: "template",
     isTemplate: true,
     title: "Куриный суп с лапшой",
@@ -929,7 +929,7 @@ const SEED_TEMPLATE_RECIPES: RecipeModel[] = [
   },
   {
     id: "seed-rice-vegetables",
-    ownerId: null,
+    ownerId: "system",
     type: "template",
     isTemplate: true,
     title: "Рис с овощами",
@@ -972,7 +972,7 @@ const SEED_TEMPLATE_RECIPES: RecipeModel[] = [
   },
   {
     id: "seed-crepes-milk",
-    ownerId: null,
+    ownerId: "system",
     type: "template",
     isTemplate: true,
     title: "Блины на молоке",
@@ -1015,7 +1015,7 @@ const SEED_TEMPLATE_RECIPES: RecipeModel[] = [
   },
   {
     id: "seed-tuna-pasta-creamy",
-    ownerId: null,
+    ownerId: "system",
     type: "template",
     isTemplate: true,
     title: "Паста с тунцом",
@@ -1616,7 +1616,7 @@ const mapRow = (row: RecipeRow, notes?: string | null, personalTags?: string[] |
   const baseLanguage: RecipeLanguage = "ru";
   return {
     id: row.id,
-    ownerId: row.owner_id ?? null,
+    ownerId: row.owner_id ?? "system",
     authorId: row.author_id ?? row.owner_id ?? undefined,
     type: isTemplate ? "template" : "user",
     isTemplate,
