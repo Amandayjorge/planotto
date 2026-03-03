@@ -1398,7 +1398,6 @@ function RecipesPageContent() {
       index: number;
       activeMatchCount: number;
       pantryMatchedIngredients: number;
-      pantryTotalIngredients: number;
       coverageRatio: number;
       isFullyCovered: boolean;
       dislikeCount: number;
@@ -1430,7 +1429,6 @@ function RecipesPageContent() {
         index,
         activeMatchCount,
         pantryMatchedIngredients: matchedIngredients,
-        pantryTotalIngredients: totalIngredients,
         coverageRatio,
         isFullyCovered: coverage?.isFullyCovered || false,
         dislikeCount,
