@@ -672,7 +672,11 @@
         "optionInterface": "Solo idioma de la interfaz",
         "optionAdditional": "Agregar idiomas",
         "optionAll": "Todos los idiomas",
-        "alsoLabel": "Mostrar tambien:",
+        "alsoLabel": "Mostrar recetas en:",
+        "modalTitle": "Idioma de recetas",
+        "defaultHint": "Por defecto mostramos recetas en el idioma de la interfaz.",
+        "interfaceLocked": "Idioma de la interfaz (siempre activo)",
+        "done": "Listo",
         "languageNames": {
           "ru": "Ruso",
           "en": "Ingles",

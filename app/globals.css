@@ -4524,6 +4524,65 @@ body {
   height: 14px;
 }
 
+.recipes-language-modal {
+  width: min(460px, 100%);
+  min-width: 0;
+}
+
+.recipes-language-modal__title {
+  margin: 0 0 8px;
+  font-size: 20px;
+  line-height: 1.25;
+}
+
+.recipes-language-modal__hint {
+  margin: 0 0 12px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.recipes-language-modal__label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+.recipes-language-modal__list {
+  display: grid;
+  gap: 8px;
+}
+
+.recipes-language-modal__item {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 6px 8px;
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+  background: var(--background-secondary);
+  padding: 8px 10px;
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.recipes-language-modal__item input {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+}
+
+.recipes-language-modal__item--locked {
+  background: color-mix(in srgb, var(--background-secondary) 84%, var(--background-primary) 16%);
+}
+
+.recipes-language-modal__item-hint {
+  grid-column: 2 / 3;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
 .recipes-filters-quick .input[type="text"] {
   max-width: 520px;
   flex: 1;
@@ -4955,6 +5014,10 @@ body:has(.shopping-print-page-marker) .main {
   .recipes-language-filter {
     min-width: 100%;
     max-width: none;
+  }
+
+  .recipes-language-modal {
+    width: min(94vw, 460px);
   }
 
   .recipes-list-card {

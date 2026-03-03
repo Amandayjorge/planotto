@@ -672,7 +672,11 @@
           "optionInterface": "Interface language only",
           "optionAdditional": "Add languages",
           "optionAll": "All languages",
-          "alsoLabel": "Also show:",
+          "alsoLabel": "Show recipes in:",
+          "modalTitle": "Recipe language",
+          "defaultHint": "By default, recipes are shown in the interface language.",
+          "interfaceLocked": "Interface language (always enabled)",
+          "done": "Done",
           "languageNames": {
             "ru": "Russian",
             "en": "English",

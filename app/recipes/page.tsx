@@ -590,7 +590,6 @@ function RecipesPageContent() {
   const [languageFilterUiMode, setLanguageFilterUiMode] = useState<LanguageFilterUiMode>("interface");
   const [isLanguageFilterOpen, setIsLanguageFilterOpen] = useState(false);
   const languageFilterLoaded = useRef(false);
-  const languageFilterRef = useRef<HTMLDivElement | null>(null);
   const [onlyWithPhoto, setOnlyWithPhoto] = useState(false);
   const [onlyWithNotes, setOnlyWithNotes] = useState(false);
   const [onlyWithActiveProducts, setOnlyWithActiveProducts] = useState(false);
@@ -649,41 +648,37 @@ function RecipesPageContent() {
     [uiRecipeLanguage]
   );
 
-  const applyLanguageFilterUiMode = useCallback((mode: LanguageFilterUiMode) => {
-    setLanguageFilterUiMode(mode);
-    if (mode === "all") {
-      setShowAllRecipeLanguages(true);
-      return;
-    }
-
-    setShowAllRecipeLanguages(false);
-    if (mode === "interface") {
-      setSelectedAdditionalLanguages([]);
-    }
-  }, []);
-
-  const selectedAdditionalLanguageNames = useMemo(
-    () =>
-      selectedAdditionalLanguages
-        .map((language) => t(`recipes.filters.languageFilter.languageNames.${language}`))
-        .filter(Boolean),
-    [selectedAdditionalLanguages, t]
-  );
+  const selectedAdditionalLanguageNames = useMemo(() => {
+    const effectiveAdditionalLanguages = showAllRecipeLanguages
+      ? additionalLanguageOptions
+      : selectedAdditionalLanguages;
+    return normalizeStoredRecipeLanguages(effectiveAdditionalLanguages)
+      .map((language) => t(`recipes.filters.languageFilter.languageNames.${language}`))
+      .filter(Boolean);
+  }, [additionalLanguageOptions, selectedAdditionalLanguages, showAllRecipeLanguages, t]);
 
   const languageFilterSummary = useMemo(() => {
-    if (languageFilterUiMode === "all") {
-      return t("recipes.filters.languageFilter.summaryAll");
-    }
-    if (languageFilterUiMode === "additional") {
-      if (selectedAdditionalLanguageNames.length === 0) {
-        return t("recipes.filters.languageFilter.summaryAdditionalEmpty");
-      }
-      return t("recipes.filters.languageFilter.summaryAdditional", {
-        languages: selectedAdditionalLanguageNames.join(", "),
+    if (selectedAdditionalLanguageNames.length === 0) return t("recipes.filters.languageFilter.summaryInterface");
+    return selectedAdditionalLanguageNames.join(", ");
+  }, [selectedAdditionalLanguageNames, t]);
+
+  const handleLanguageCheckboxChange = useCallback(
+    (language: RecipeLanguage, checked: boolean) => {
+      if (language === uiRecipeLanguage) return;
+
+      setShowAllRecipeLanguages(false);
+      setSelectedAdditionalLanguages((prev) => {
+        const baseline = showAllRecipeLanguages
+          ? additionalLanguageOptions
+          : prev.filter((item) => item !== uiRecipeLanguage);
+        const next = checked
+          ? [...baseline, language]
+          : baseline.filter((item) => item !== language);
+        return normalizeStoredRecipeLanguages(next).filter((item) => item !== uiRecipeLanguage);
       });
-    }
-    return t("recipes.filters.languageFilter.summaryInterface");
-  }, [languageFilterUiMode, selectedAdditionalLanguageNames, t]);
+    },
+    [additionalLanguageOptions, showAllRecipeLanguages, uiRecipeLanguage]
+  );
 
   const effectivePreferredRecipeLanguages = useMemo(
     () =>
@@ -773,6 +768,14 @@ function RecipesPageContent() {
       )
     );
   }, [uiRecipeLanguage]);
+
+  useEffect(() => {
+    if (showAllRecipeLanguages) {
+      setLanguageFilterUiMode("all");
+      return;
+    }
+    setLanguageFilterUiMode(selectedAdditionalLanguages.length > 0 ? "additional" : "interface");
+  }, [selectedAdditionalLanguages, showAllRecipeLanguages]);
 
   useEffect(() => {
     if (canUseAdvancedFilters) return;
@@ -1099,24 +1102,14 @@ function RecipesPageContent() {
   useEffect(() => {
     if (!isLanguageFilterOpen) return;
 
-    const handleOutsideClick = (event: MouseEvent) => {
-      const target = event.target as Node | null;
-      if (!languageFilterRef.current || !target) return;
-      if (!languageFilterRef.current.contains(target)) {
-        setIsLanguageFilterOpen(false);
-      }
-    };
-
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         setIsLanguageFilterOpen(false);
       }
     };
 
-    document.addEventListener("mousedown", handleOutsideClick);
     document.addEventListener("keydown", handleEscape);
     return () => {
-      document.removeEventListener("mousedown", handleOutsideClick);
       document.removeEventListener("keydown", handleEscape);
     };
   }, [isLanguageFilterOpen]);
@@ -2310,12 +2303,13 @@ function RecipesPageContent() {
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder={t("recipes.filters.searchPlaceholder")}
             />
-            <div className="recipes-language-filter" ref={languageFilterRef}>
+            <div className="recipes-language-filter">
               <button
                 type="button"
                 className="recipes-language-filter__trigger"
                 aria-expanded={isLanguageFilterOpen}
-                onClick={() => setIsLanguageFilterOpen((prev) => !prev)}
+                aria-controls="recipes-language-filter-modal"
+                onClick={() => setIsLanguageFilterOpen(true)}
               >
                 <span className="recipes-language-filter__trigger-title">
                   {t("recipes.filters.languageFilter.title")}:
@@ -2325,74 +2319,6 @@ function RecipesPageContent() {
                   {isLanguageFilterOpen ? "▴" : "▾"}
                 </span>
               </button>
-
-              {isLanguageFilterOpen ? (
-                <div className="recipes-language-filter__panel">
-                  <button
-                    type="button"
-                    className={`recipes-language-filter__mode-option ${
-                      languageFilterUiMode === "interface" ? "recipes-language-filter__mode-option--active" : ""
-                    }`.trim()}
-                    onClick={() => {
-                      applyLanguageFilterUiMode("interface");
-                      setIsLanguageFilterOpen(false);
-                    }}
-                  >
-                    {t("recipes.filters.languageFilter.optionInterface")}
-                  </button>
-                  <button
-                    type="button"
-                    className={`recipes-language-filter__mode-option ${
-                      languageFilterUiMode === "additional" ? "recipes-language-filter__mode-option--active" : ""
-                    }`.trim()}
-                    onClick={() => applyLanguageFilterUiMode("additional")}
-                  >
-                    {t("recipes.filters.languageFilter.optionAdditional")}
-                  </button>
-                  <button
-                    type="button"
-                    className={`recipes-language-filter__mode-option ${
-                      languageFilterUiMode === "all" ? "recipes-language-filter__mode-option--active" : ""
-                    }`.trim()}
-                    onClick={() => {
-                      applyLanguageFilterUiMode("all");
-                      setIsLanguageFilterOpen(false);
-                    }}
-                  >
-                    {t("recipes.filters.languageFilter.optionAll")}
-                  </button>
-
-                  {languageFilterUiMode === "additional" ? (
-                    <div className="recipes-language-filter__extra">
-                      <span className="recipes-language-filter__extra-label">
-                        {t("recipes.filters.languageFilter.alsoLabel")}
-                      </span>
-                      <div className="recipes-language-filter__checkbox-group">
-                        {additionalLanguageOptions.map((language) => (
-                          <label key={language} className="recipes-language-filter__checkbox">
-                            <input
-                              type="checkbox"
-                              checked={selectedAdditionalLanguages.includes(language)}
-                              onChange={(event) => {
-                                const checked = event.target.checked;
-                                setSelectedAdditionalLanguages((prev) => {
-                                  if (checked) {
-                                    return normalizeStoredRecipeLanguages([...prev, language]).filter(
-                                      (item) => item !== uiRecipeLanguage
-                                    );
-                                  }
-                                  return prev.filter((item) => item !== language);
-                                });
-                              }}
-                            />
-                            <span>{t(`recipes.filters.languageFilter.languageNames.${language}`)}</span>
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
             </div>
             <select
               className="input"
@@ -2539,6 +2465,63 @@ function RecipesPageContent() {
             </div>
           ) : null}
         </>
+      ) : null}
+
+      {isLanguageFilterOpen ? (
+        <div className="menu-dialog-overlay" onClick={() => setIsLanguageFilterOpen(false)}>
+          <div
+            id="recipes-language-filter-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label={t("recipes.filters.languageFilter.modalTitle")}
+            className="menu-dialog recipes-language-modal"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h3 className="recipes-language-modal__title">{t("recipes.filters.languageFilter.modalTitle")}</h3>
+            <p className="recipes-language-modal__hint">
+              {t("recipes.filters.languageFilter.defaultHint")}
+            </p>
+            <div className="recipes-language-modal__label">{t("recipes.filters.languageFilter.alsoLabel")}</div>
+            <div className="recipes-language-modal__list">
+              {AVAILABLE_RECIPE_LANGUAGES.map((language) => {
+                const isInterfaceLanguage = language === uiRecipeLanguage;
+                const checked = isInterfaceLanguage
+                  || showAllRecipeLanguages
+                  || selectedAdditionalLanguages.includes(language);
+                return (
+                  <label
+                    key={language}
+                    className={`recipes-language-modal__item ${
+                      isInterfaceLanguage ? "recipes-language-modal__item--locked" : ""
+                    }`.trim()}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      disabled={isInterfaceLanguage}
+                      onChange={(event) => handleLanguageCheckboxChange(language, event.target.checked)}
+                    />
+                    <span>{t(`recipes.filters.languageFilter.languageNames.${language}`)}</span>
+                    {isInterfaceLanguage ? (
+                      <span className="recipes-language-modal__item-hint">
+                        {t("recipes.filters.languageFilter.interfaceLocked")}
+                      </span>
+                    ) : null}
+                  </label>
+                );
+              })}
+            </div>
+            <div className="menu-dialog__actions">
+              <button
+                type="button"
+                className="menu-dialog__confirm"
+                onClick={() => setIsLanguageFilterOpen(false)}
+              >
+                {t("recipes.filters.languageFilter.done")}
+              </button>
+            </div>
+          </div>
+        </div>
       ) : null}
 
       {actionMessage && (
