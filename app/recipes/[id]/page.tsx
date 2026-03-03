@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import LinkifiedText from "../../components/LinkifiedText";
 import ProductAutocompleteInput from "../../components/ProductAutocompleteInput";
+import NutritionSection from "../../components/NutritionSection";
 import { appendProductSuggestions, loadProductSuggestions } from "../../lib/productSuggestions";
 import { usePlanTier } from "../../lib/usePlanTier";
 import { isPaidFeatureEnabled } from "../../lib/subscription";
@@ -42,6 +43,12 @@ import {
   normalizeUnitId,
   type UnitId,
 } from "../../lib/ingredientUnits";
+import {
+  buildNutritionFormValues,
+  buildNutritionInfoFromForm,
+  type NutritionFormValues,
+  type NutritionMode,
+} from "../../lib/nutrition";
 import { isSupabaseConfigured } from "../../lib/supabaseClient";
 import { RECIPE_TAGS, localizeRecipeTag, normalizeRecipeTags } from "../../lib/recipeTags";
 import {
@@ -52,7 +59,9 @@ import {
   getTagHints,
 } from "../../lib/aiAssistantClient";
 import { downloadPdfExport } from "../../lib/pdfExportClient";
+import RecipeCardImage from "../../components/RecipeCardImage";
 import { resolveRecipeImageForCard } from "../../lib/recipeImageCatalog";
+import { hasInappropriateRecipeContent, INAPPROPRIATE_CONTENT_MESSAGE } from "../../lib/contentModeration";
 
 type IngredientHintsMap = Record<number, string[]>;
 const RECIPE_LANGUAGES: RecipeLanguage[] = ["ru", "en", "es"];
@@ -256,6 +265,8 @@ export default function RecipeDetailPage() {
   const [image, setImage] = useState("");
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [nutritionMode, setNutritionMode] = useState<NutritionMode>("per_serving");
+  const [nutritionValues, setNutritionValues] = useState<NutritionFormValues>(() => buildNutritionFormValues());
   const [productSuggestions, setProductSuggestions] = useState<string[]>([]);
   const [aiAction, setAiAction] = useState<"ingredients" | "tags" | "servings" | "image" | null>(null);
   const [aiMessage, setAiMessage] = useState("");
@@ -289,6 +300,10 @@ export default function RecipeDetailPage() {
   const handleVisibilityChange = (next: RecipeVisibility) => {
     if (next !== "private" && (!recipe?.ownerId || !currentUserId || recipe.ownerId !== currentUserId)) return;
     setVisibility(next);
+  };
+
+  const handleNutritionChange = (field: keyof NutritionFormValues, value: string) => {
+    setNutritionValues((prev) => ({ ...prev, [field]: value }));
   };
 
   useEffect(() => {
@@ -333,6 +348,8 @@ export default function RecipeDetailPage() {
     setImage(source.image || "");
     setIngredients(source.ingredients || []);
     setSelectedTags(normalizeRecipeTags(source.tags || source.categories || []));
+    setNutritionMode(source.nutrition?.mode || "per_serving");
+    setNutritionValues(buildNutritionFormValues(source.nutrition));
     setTranslationNotice("");
   };
 
@@ -654,6 +671,7 @@ export default function RecipeDetailPage() {
           optional: Boolean(item.optional),
         };
       });
+    const nutritionInfo = buildNutritionInfoFromForm(nutritionMode, nutritionValues);
     const normalizedTags = normalizeRecipeTags(selectedTags);
     const normalizedRecipeLink = normalizeLink(recipeLink);
     const baseLanguage = normalizeRecipeLanguage(recipe.baseLanguage);
@@ -702,6 +720,22 @@ export default function RecipeDetailPage() {
       const invitedEmails =
         normalizedVisibility === "invited" ? parseInvitedEmails(invitedEmailsDraft) : [];
 
+      if (
+        normalizedVisibility === "public" &&
+        hasInappropriateRecipeContent({
+          title: nextBaseTitle,
+          shortDescription: nextBaseShortDescription,
+          description: nextBaseDescription,
+          instructions: nextBaseInstructions,
+          notes: notes.trim(),
+          tags: normalizedTags,
+          ingredients: normalizedIngredients,
+        })
+      ) {
+        alert(t("recipes.new.messages.inappropriateContent") || INAPPROPRIATE_CONTENT_MESSAGE);
+        return;
+      }
+
       if (!isSupabaseConfigured() || isLocalRecipe) {
         const updated: RecipeModel = {
           ...recipe,
@@ -740,6 +774,7 @@ export default function RecipeDetailPage() {
         ingredients: normalizedIngredients,
         servings: servings > 0 ? servings : 2,
         image: image.trim(),
+        nutrition: nutritionInfo,
         baseLanguage,
         translations: nextTranslations,
         visibility: normalizedVisibility,
@@ -801,6 +836,7 @@ export default function RecipeDetailPage() {
           ingredients: normalizedIngredients,
           servings: servings > 0 ? servings : 2,
           image: image.trim(),
+          nutrition: nutritionInfo,
           baseLanguage,
           translations: nextTranslations,
           visibility: "private",
@@ -1202,13 +1238,9 @@ export default function RecipeDetailPage() {
     }
   };
 
-  const submitReport = () => {
+  const submitReport = async () => {
     if (!recipe) return;
-    reportRecipeForReview(
-      recipe.id,
-      reportReason,
-      reportDetails
-    );
+    await reportRecipeForReview(recipe.id, reportReason, reportDetails);
     setShowReportForm(false);
     setIsReportedHidden(true);
   };
@@ -1635,6 +1667,13 @@ export default function RecipeDetailPage() {
               <button className="btn btn-add" onClick={addIngredient}>{t("recipes.new.actions.addIngredient")}</button>
             </div>
 
+            <NutritionSection
+              mode={nutritionMode}
+              values={nutritionValues}
+              onModeChange={setNutritionMode}
+              onChange={handleNutritionChange}
+            />
+
             <div style={{ marginBottom: "0" }}>
               <label style={{ display: "block", marginBottom: "8px", fontWeight: "bold" }}>{t("recipes.new.fields.instructions")}</label>
               <textarea
@@ -1824,15 +1863,18 @@ export default function RecipeDetailPage() {
         </div>
       ) : (
         <div>
-          {recipeImage && (
-            <div style={{ marginBottom: "20px", textAlign: "center" }}>
-              <img
-                src={recipeImage}
-                alt={displayTitle || recipe.title || t("menu.fallback.recipeTitle")}
-                style={{ maxWidth: "100%", maxHeight: "400px", borderRadius: "12px", boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }}
-              />
-            </div>
-          )}
+              {recipeImage && (
+                <div style={{ marginBottom: "20px", textAlign: "center" }}>
+                  <RecipeCardImage
+                    imageUrl={recipeImage || undefined}
+                    label={displayTitle || recipe.title || t("menu.fallback.recipeTitle")}
+                    width="min(100%, 400px)"
+                    height="min(100%, 400px)"
+                    radius="12px"
+                    style={{ boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }}
+                  />
+                </div>
+              )}
 
           <h1 className="h1" style={{ marginBottom: "10px" }}>{displayTitle}</h1>
 

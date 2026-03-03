@@ -4,6 +4,7 @@
 create table if not exists public.recipes (
   id uuid primary key default gen_random_uuid(),
   owner_id uuid not null references auth.users(id) on delete cascade,
+  author_id uuid null references auth.users(id) on delete set null,
   title text not null,
   short_description text null,
   description text null,
@@ -13,6 +14,8 @@ create table if not exists public.recipes (
   tags text[] not null default '{}',
   servings integer not null default 2,
   image text null,
+  is_official boolean not null default false,
+  nutrition jsonb null,
   visibility text not null default 'private' check (visibility in ('private', 'public', 'link', 'invited')),
   share_token text null,
   created_at timestamptz not null default now(),
@@ -20,6 +23,7 @@ create table if not exists public.recipes (
 );
 
 create index if not exists recipes_owner_id_idx on public.recipes(owner_id);
+create index if not exists recipes_author_id_idx on public.recipes(author_id);
 create index if not exists recipes_visibility_idx on public.recipes(visibility);
 create index if not exists recipes_updated_at_idx on public.recipes(updated_at desc);
 create index if not exists recipes_tags_idx on public.recipes using gin(tags);
@@ -29,8 +33,15 @@ create unique index if not exists recipes_share_token_unique_idx
   where share_token is not null;
 
 -- Backward-compatible migration for existing projects
+alter table public.recipes add column if not exists author_id uuid null references auth.users(id) on delete set null;
 alter table public.recipes add column if not exists tags text[] not null default '{}';
 alter table public.recipes add column if not exists share_token text null;
+alter table public.recipes add column if not exists nutrition jsonb null;
+alter table public.recipes add column if not exists is_official boolean not null default false;
+
+update public.recipes
+set author_id = owner_id
+where author_id is null;
 
 update public.recipes
 set tags = categories
@@ -83,7 +94,25 @@ create table if not exists public.recipe_access (
 create index if not exists recipe_access_user_id_idx on public.recipe_access(user_id);
 create index if not exists recipe_access_recipe_id_idx on public.recipe_access(recipe_id);
 
--- 4) Weekly menus table
+-- 4) Recipe reports table for moderation
+create table if not exists public.recipe_reports (
+  id uuid primary key default gen_random_uuid(),
+  recipe_id uuid not null references public.recipes(id) on delete cascade,
+  reporter_id uuid null references auth.users(id) on delete set null,
+  reason text not null default 'other' check (reason in ('copyright', 'foreign_without_source', 'other')),
+  details text not null default '',
+  status text not null default 'open' check (status in ('open', 'reviewed', 'dismissed', 'action_taken')),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists recipe_reports_recipe_id_idx on public.recipe_reports(recipe_id);
+create index if not exists recipe_reports_created_at_idx on public.recipe_reports(created_at desc);
+create unique index if not exists recipe_reports_recipe_reporter_unique_idx
+  on public.recipe_reports(recipe_id, reporter_id)
+  where reporter_id is not null;
+
+-- 5) Weekly menus table
 create table if not exists public.weekly_menus (
   id uuid primary key default gen_random_uuid(),
   owner_id uuid not null references auth.users(id) on delete cascade,
@@ -163,6 +192,11 @@ create trigger recipe_access_set_updated_at
 before update on public.recipe_access
 for each row execute function public.set_updated_at();
 
+drop trigger if exists recipe_reports_set_updated_at on public.recipe_reports;
+create trigger recipe_reports_set_updated_at
+before update on public.recipe_reports
+for each row execute function public.set_updated_at();
+
 drop trigger if exists weekly_menus_set_updated_at on public.weekly_menus;
 create trigger weekly_menus_set_updated_at
 before update on public.weekly_menus
@@ -177,6 +211,7 @@ for each row execute function public.set_updated_at();
 alter table public.recipes enable row level security;
 alter table public.recipe_notes enable row level security;
 alter table public.recipe_access enable row level security;
+alter table public.recipe_reports enable row level security;
 alter table public.weekly_menus enable row level security;
 alter table public.weekly_menu_access enable row level security;
 
@@ -289,6 +324,44 @@ using (
   public.is_recipe_owner(recipe_access.recipe_id)
   or public.is_admin()
 );
+
+-- recipe_reports policies
+drop policy if exists "recipe_reports_insert_authenticated" on public.recipe_reports;
+create policy "recipe_reports_insert_authenticated"
+on public.recipe_reports
+for insert
+to anon, authenticated
+with check (
+  (
+    reporter_id is null
+    or reporter_id = auth.uid()
+  )
+  and exists (
+    select 1
+    from public.recipes r
+    where r.id = recipe_reports.recipe_id
+      and r.visibility = 'public'
+  )
+);
+
+drop policy if exists "recipe_reports_select_admin" on public.recipe_reports;
+create policy "recipe_reports_select_admin"
+on public.recipe_reports
+for select
+using (public.is_admin());
+
+drop policy if exists "recipe_reports_update_admin" on public.recipe_reports;
+create policy "recipe_reports_update_admin"
+on public.recipe_reports
+for update
+using (public.is_admin())
+with check (public.is_admin());
+
+drop policy if exists "recipe_reports_delete_admin" on public.recipe_reports;
+create policy "recipe_reports_delete_admin"
+on public.recipe_reports
+for delete
+using (public.is_admin());
 
 -- recipe_access helpers (email-based invitations)
 create or replace function public.replace_recipe_access_by_email(
@@ -752,10 +825,11 @@ as $$
     select distinct unnest(coalesce(p_user_ids, array[]::uuid[])) as user_id
   ),
   public_recipe_counts as (
-    select r.owner_id as user_id, count(*)::integer as recipe_count
+    select coalesce(r.author_id, r.owner_id) as user_id, count(*)::integer as recipe_count
     from public.recipes r
     where r.visibility = 'public'
-    group by r.owner_id
+      and coalesce(r.author_id, r.owner_id) is not null
+    group by coalesce(r.author_id, r.owner_id)
   )
   select
     t.user_id,

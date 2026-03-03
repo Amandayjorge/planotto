@@ -27,10 +27,32 @@ const VISION_FALLBACK_MODELS = (process.env.OPENROUTER_VISION_FALLBACK_MODELS ||
   .map((item) => item.trim())
   .filter(Boolean);
 const FOOD_IMAGE_URL = "https://loremflickr.com";
-const FAL_OCR_ENDPOINT = process.env.FAL_OCR_ENDPOINT || "https://queue.fal.run/fal-ai/got-ocr/v2";
-const FAL_IMAGE_ENDPOINT = process.env.FAL_IMAGE_ENDPOINT || "https://queue.fal.run/fal-ai/flux/schnell";
+const normalizeFalEndpointUrl = (raw: string | undefined, fallbackUrl: string): string => {
+  const value = (raw || fallbackUrl).trim();
+  if (!value) return fallbackUrl;
+  if (/^https?:\/\//i.test(value)) return value;
+  if (/^queue\.fal\.run\//i.test(value)) return `https://${value}`;
+  return `https://queue.fal.run/${value.replace(/^\/+/, "")}`;
+};
+const isQueueFalUrl = (url: string): boolean => /^https?:\/\/queue\.fal\.run\//i.test(url);
+const toDirectFalUrl = (url: string): string =>
+  isQueueFalUrl(url) ? url.replace(/^https?:\/\/queue\.fal\.run\//i, "https://fal.run/") : url;
+const parsePositiveIntEnv = (raw: string | undefined, fallback: number): number => {
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
+};
+const FAL_OCR_ENDPOINT = normalizeFalEndpointUrl(
+  process.env.FAL_OCR_ENDPOINT,
+  "https://queue.fal.run/fal-ai/got-ocr/v2"
+);
+const FAL_IMAGE_ENDPOINT = normalizeFalEndpointUrl(
+  process.env.FAL_IMAGE_ENDPOINT,
+  "https://queue.fal.run/fal-ai/flux/schnell"
+);
 const FAL_OCR_POLL_ATTEMPTS = 20;
 const FAL_OCR_POLL_DELAY_MS = 1200;
+const FAL_IMAGE_POLL_ATTEMPTS = parsePositiveIntEnv(process.env.FAL_IMAGE_POLL_ATTEMPTS, 45);
+const FAL_IMAGE_POLL_DELAY_MS = parsePositiveIntEnv(process.env.FAL_IMAGE_POLL_DELAY_MS, 1500);
 const FUSIONBRAIN_BASE_URL = process.env.FUSIONBRAIN_BASE_URL || "https://api-key.fusionbrain.ai/key/api/v1";
 const FUSIONBRAIN_POLL_ATTEMPTS = 15;
 const FUSIONBRAIN_POLL_DELAY_MS = 1500;
@@ -482,6 +504,7 @@ const fetchRecipePageHtml = async (url: string): Promise<string | null> => {
 const getFalKey = (): string => {
   const key =
     process.env.FAL_KEY ||
+    process.env.Fal_KEY ||
     process.env.FAL_API_KEY ||
     process.env.FAL_TOKEN ||
     process.env.FALKEY ||
@@ -674,6 +697,148 @@ const extractFalImageUrl = (payload: unknown): string => {
   return "";
 };
 
+const buildFalImageInputVariants = (prompt: string): Array<Record<string, unknown>> => [
+  { prompt, image_size: "square_hd", num_images: 1 },
+  { prompt, image_size: "square_hd" },
+  { prompt, size: "1024x1024", num_images: 1 },
+  { prompt, size: "1024x1024" },
+  { prompt, num_images: 1 },
+  { prompt },
+];
+
+const extractFalErrorDetail = (payload: unknown): string => {
+  if (!payload) return "";
+  if (typeof payload === "string") return safeString(payload);
+  if (typeof payload === "number" || typeof payload === "boolean") return String(payload);
+  if (Array.isArray(payload)) {
+    for (const item of payload) {
+      const text = extractFalErrorDetail(item);
+      if (text) return text;
+    }
+    return "";
+  }
+  if (typeof payload === "object") {
+    const record = payload as Record<string, unknown>;
+    const candidates = [
+      record.detail,
+      record.message,
+      record.msg,
+      record.error,
+      record.reason,
+      record.hint,
+      record.errors,
+      record.validation_errors,
+    ];
+    for (const candidate of candidates) {
+      const text = extractFalErrorDetail(candidate);
+      if (text) return text;
+    }
+  }
+  return "";
+};
+
+const formatFalStatusError = (status: number, payload: unknown): string => {
+  const detail = extractFalErrorDetail(payload);
+  return detail ? `FAL image status ${status}: ${detail}` : `FAL image status ${status}`;
+};
+
+const unwrapFalPayload = (payload: Record<string, unknown>): unknown =>
+  payload.response ?? payload.output ?? payload.result ?? payload;
+
+type FalQueuePollResult = {
+  payload: unknown | null;
+  error: string | null;
+  timedOut: boolean;
+};
+
+const pollFalQueuePayload = async ({
+  statusUrl,
+  responseUrl,
+  falKey,
+  attempts,
+  delayMs,
+}: {
+  statusUrl: string;
+  responseUrl: string;
+  falKey: string;
+  attempts: number;
+  delayMs: number;
+}): Promise<FalQueuePollResult> => {
+  let latestResponseUrl = responseUrl;
+  let sawCompleted = false;
+
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const pollTarget = statusUrl || latestResponseUrl;
+    if (!pollTarget) break;
+
+    const status = await falFetchJson(
+      pollTarget,
+      {
+        method: "GET",
+      },
+      falKey
+    );
+    if (!status.ok && status.status !== 202) {
+      return { payload: null, error: formatFalStatusError(status.status, status.json), timedOut: false };
+    }
+    if (status.ok) {
+      const statusData = (status.json || {}) as Record<string, unknown>;
+      const candidateResponseUrl = safeString(statusData.response_url);
+      if (candidateResponseUrl) {
+        latestResponseUrl = candidateResponseUrl;
+      }
+
+      const statusValue = safeString(statusData.status).toUpperCase();
+      if (statusValue === "FAILED" || statusValue === "ERROR") {
+        return { payload: null, error: formatFalStatusError(status.status, status.json), timedOut: false };
+      }
+
+      if (!statusValue || statusValue === "COMPLETED" || statusValue === "DONE") {
+        sawCompleted = true;
+        if (!statusUrl || !latestResponseUrl || pollTarget === latestResponseUrl) {
+          return { payload: unwrapFalPayload(statusData), error: null, timedOut: false };
+        }
+
+        const response = await falFetchJson(
+          latestResponseUrl,
+          {
+            method: "GET",
+          },
+          falKey
+        );
+        if (!response.ok && response.status !== 202) {
+          return { payload: null, error: formatFalStatusError(response.status, response.json), timedOut: false };
+        }
+        if (response.ok) {
+          const responseData = (response.json || {}) as Record<string, unknown>;
+          return { payload: unwrapFalPayload(responseData), error: null, timedOut: false };
+        }
+      }
+    }
+
+    await sleep(delayMs);
+  }
+
+  if (sawCompleted && latestResponseUrl) {
+    const response = await falFetchJson(
+      latestResponseUrl,
+      {
+        method: "GET",
+      },
+      falKey
+    );
+    if (!response.ok && response.status !== 202) {
+      return { payload: null, error: formatFalStatusError(response.status, response.json), timedOut: false };
+    }
+    if (response.ok) {
+      const responseData = (response.json || {}) as Record<string, unknown>;
+      return { payload: unwrapFalPayload(responseData), error: null, timedOut: false };
+    }
+  }
+
+  return { payload: null, error: null, timedOut: true };
+};
+
 const generateImageWithFal = async (
   prompt: string
 ): Promise<{ imageUrl: string | null; error: string | null }> => {
@@ -682,59 +847,70 @@ const generateImageWithFal = async (
     return { imageUrl: null, error: "FAL key missing" };
   }
 
-  const enqueue = await falFetchJson(
-    FAL_IMAGE_ENDPOINT,
-    {
-      method: "POST",
-      body: {
-        input: {
-          prompt,
-          image_size: "square_hd",
-          num_images: 1,
+  const endpointCandidates = isQueueFalUrl(FAL_IMAGE_ENDPOINT)
+    ? [toDirectFalUrl(FAL_IMAGE_ENDPOINT), FAL_IMAGE_ENDPOINT]
+    : [FAL_IMAGE_ENDPOINT];
+  let lastValidationError: { status: number; json: unknown } | null = null;
+  for (const endpointUrl of endpointCandidates) {
+    const queueMode = isQueueFalUrl(endpointUrl);
+    for (const input of buildFalImageInputVariants(prompt)) {
+      const enqueue = await falFetchJson(
+        endpointUrl,
+        {
+          method: "POST",
+          body: queueMode ? { input } : input,
         },
-      },
-    },
-    falKey
-  );
+        falKey
+      );
 
-  if (!enqueue.ok) {
-    return { imageUrl: null, error: `FAL image status ${enqueue.status}` };
-  }
-
-  const enqueueData = (enqueue.json || {}) as Record<string, unknown>;
-  const immediate = extractFalImageUrl(enqueueData);
-  if (immediate) {
-    return { imageUrl: immediate, error: null };
-  }
-
-  const statusUrl = safeString(enqueueData.status_url);
-  const responseUrl = safeString(enqueueData.response_url);
-  const pollUrl = statusUrl || responseUrl;
-  if (!pollUrl) {
-    return { imageUrl: null, error: "FAL image missing poll url" };
-  }
-
-  for (let attempt = 0; attempt < FAL_OCR_POLL_ATTEMPTS; attempt += 1) {
-    const poll = await falFetchJson(
-      pollUrl,
-      { method: "GET" },
-      falKey
-    );
-    if (poll.ok) {
-      const payload = (poll.json || {}) as Record<string, unknown>;
-      const status = safeString(payload.status).toUpperCase();
-      if (!status || status === "COMPLETED" || status === "DONE") {
-        const url =
-          extractFalImageUrl(payload.response ?? payload.output ?? payload.result ?? payload);
-        if (url) return { imageUrl: url, error: null };
+      if (!enqueue.ok) {
+        if (enqueue.status === 422) {
+          lastValidationError = { status: enqueue.status, json: enqueue.json };
+          continue;
+        }
+        return { imageUrl: null, error: formatFalStatusError(enqueue.status, enqueue.json) };
       }
-      if (status === "FAILED" || status === "ERROR") {
-        return { imageUrl: null, error: "FAL image generation failed" };
+
+      const enqueueData = (enqueue.json || {}) as Record<string, unknown>;
+      const immediate = extractFalImageUrl(enqueueData);
+      if (immediate) {
+        return { imageUrl: immediate, error: null };
+      }
+      if (!queueMode) {
+        continue;
+      }
+
+      const statusUrl = safeString(enqueueData.status_url);
+      const responseUrl = safeString(enqueueData.response_url);
+      if (!statusUrl && !responseUrl) {
+        return { imageUrl: null, error: "FAL image missing poll url" };
+      }
+
+      const poll = await pollFalQueuePayload({
+        statusUrl,
+        responseUrl,
+        falKey,
+        attempts: FAL_IMAGE_POLL_ATTEMPTS,
+        delayMs: FAL_IMAGE_POLL_DELAY_MS,
+      });
+      if (poll.error) {
+        return { imageUrl: null, error: poll.error };
+      }
+      if (poll.payload) {
+        const url = extractFalImageUrl(poll.payload);
+        if (url) {
+          return { imageUrl: url, error: null };
+        }
       }
     }
-    await sleep(FAL_OCR_POLL_DELAY_MS);
   }
 
+  if (lastValidationError) {
+    return {
+      imageUrl: null,
+      error: formatFalStatusError(lastValidationError.status, lastValidationError.json),
+    };
+  }
   return { imageUrl: null, error: "FAL image timeout" };
 };
 
@@ -1851,47 +2027,22 @@ const runFalOcrForRecipeImport = async (
   const responseUrl = safeString(enqueueData.response_url);
 
   if (statusUrl || responseUrl) {
-    for (let attempt = 0; attempt < FAL_OCR_POLL_ATTEMPTS; attempt += 1) {
-      const pollUrl = statusUrl || responseUrl;
-      if (!pollUrl) break;
-      const status = await falFetchJson(
-        pollUrl,
-        {
-          method: "GET",
-        },
-        falKey
-      );
-      if (status.ok) {
-        const statusData = (status.json || {}) as Record<string, unknown>;
-        const statusValue = safeString(statusData.status).toUpperCase();
-        const maybePayload = statusData.response ?? statusData.output ?? statusData.result ?? statusData;
-        if (!statusValue || statusValue === "COMPLETED" || statusValue === "DONE") {
-          let finalPayload: unknown = maybePayload;
-          if (!extractFalOcrText(finalPayload) && responseUrl && pollUrl !== responseUrl) {
-            const responseFetch = await falFetchJson(
-              responseUrl,
-              {
-                method: "GET",
-              },
-              falKey
-            );
-            if (responseFetch.ok) {
-              const responseData = (responseFetch.json || {}) as Record<string, unknown>;
-              finalPayload = responseData.response ?? responseData.output ?? responseData.result ?? responseData;
-            }
-          }
-          ocrPayload = finalPayload;
-          break;
-        }
-        if (statusValue === "FAILED" || statusValue === "ERROR") {
-          return {
-            parsed: null,
-            message: "",
-            issues: [BASE_OCR_FALLBACK_ISSUE, "Не удалось распознать часть фото. Используем базовый режим."],
-          };
-        }
-      }
-      await sleep(FAL_OCR_POLL_DELAY_MS);
+    const poll = await pollFalQueuePayload({
+      statusUrl,
+      responseUrl,
+      falKey,
+      attempts: FAL_OCR_POLL_ATTEMPTS,
+      delayMs: FAL_OCR_POLL_DELAY_MS,
+    });
+    if (poll.error) {
+      return {
+        parsed: null,
+        message: "",
+        issues: [BASE_OCR_FALLBACK_ISSUE, "Не удалось распознать часть фото. Используем базовый режим."],
+      };
+    }
+    if (poll.payload) {
+      ocrPayload = poll.payload;
     }
   }
 

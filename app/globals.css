@@ -4230,6 +4230,73 @@ body {
   flex-wrap: wrap;
 }
 
+.recipes-topbar__right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.recipes-topbar-overflow {
+  position: relative;
+}
+
+.recipes-topbar-overflow__btn {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  border: 1px solid var(--border-default);
+  background: var(--background-secondary);
+  color: var(--text-primary);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.recipes-topbar-overflow__btn:hover {
+  background: color-mix(in srgb, var(--background-secondary) 78%, var(--accent-primary) 22%);
+}
+
+.recipes-topbar-overflow__menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 210px;
+  z-index: 50;
+  border-radius: 12px;
+  border: 1px solid var(--border-default);
+  background: var(--background-primary);
+  box-shadow: 0 8px 24px rgba(16, 24, 40, 0.16);
+  padding: 6px;
+}
+
+.recipes-topbar-overflow__item {
+  width: 100%;
+  border: none;
+  background: transparent;
+  text-align: left;
+  border-radius: 8px;
+  padding: 9px 10px;
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.recipes-topbar-overflow__item:hover {
+  background: var(--background-secondary);
+}
+
+.recipes-topbar-overflow__item--danger {
+  color: #8f4f42;
+}
+
+.recipes-topbar-overflow__item--danger:hover {
+  background: color-mix(in srgb, #b66b57 16%, var(--background-primary) 84%);
+}
+
 .recipes-clear-link-wrapper {
   margin-top: 8px;
   text-align: center;

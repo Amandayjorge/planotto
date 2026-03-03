@@ -3609,7 +3609,7 @@ function MenuPageContent() {
 
   const clearWeek = async () => {
     const confirmed = await confirm({
-      message: t("menu.confirm.clearCurrentMenu"),
+      message: t("menu.confirm.clearCurrentMenu", { days: Math.max(periodDays, 1) }),
       tone: "danger",
     });
     if (!confirmed) return;
@@ -4421,45 +4421,50 @@ function MenuPageContent() {
         </div>
       )}
       <section className="card">
-      <div className="menu-header">
-        <h1 className="h1">{t("menu.title")}</h1>
-        <div className="week-navigation week-navigation--compact">
-          <button
-            className="week-nav-btn week-nav-btn--icon"
-            onClick={goToPreviousWeek}
-            aria-label={t("menu.period.previousAria")}
-            title={t("menu.period.previousAria")}
-          >
-            ‹
-          </button>
-          <div className="week-range-compact">
-            <span className="week-range">{getRangeDisplay(weekStart, periodEnd, locale)}</span>
-            <span className="week-range-meta">{t("menu.period.daysCount", { count: periodDays })}</span>
+        <div className="menu-header">
+          <div className="menu-period">
+            <h1 className="h1">{t("menu.title")}</h1>
+            <div className="week-navigation week-navigation--compact">
+              <button
+                className="week-nav-btn week-nav-btn--icon"
+                onClick={goToPreviousWeek}
+                aria-label={t("menu.period.previousAria")}
+                title={t("menu.period.previousAria")}
+              >
+                ‹
+              </button>
+              <div className="week-range-compact">
+                <span className="week-range">{getRangeDisplay(weekStart, periodEnd, locale)}</span>
+                <span className="week-range-meta">{t("menu.period.daysCount", { count: periodDays })}</span>
+              </div>
+              <button
+                className="week-nav-btn week-nav-btn--icon"
+                onClick={goToNextWeek}
+                aria-label={t("menu.period.nextAria")}
+                title={t("menu.period.nextAria")}
+              >
+                ›
+              </button>
+            </div>
+            <div className="menu-period__clear">
+              <button
+                type="button"
+                className="menu-period__clear-link"
+                onClick={clearWeek}
+                disabled={Object.keys(mealData).length === 0}
+                aria-label={t("menu.actions.clearPeriod")}
+                title={t("menu.confirm.clearCurrentMenu", { days: Math.max(periodDays, 1) })}
+              >
+                {t("menu.actions.clearPeriod")}
+              </button>
+            </div>
           </div>
-          <button
-            className="week-nav-btn week-nav-btn--icon"
-            onClick={goToNextWeek}
-            aria-label={t("menu.period.nextAria")}
-            title={t("menu.period.nextAria")}
-          >
-            ›
-          </button>
-        </div>
-      </div>
 
-      {profileGoal === "menu" ? (
-        <p className="muted" style={{ marginTop: "0", marginBottom: "10px" }}>
-          {t("menu.goalHints.planning")}
-        </p>
-      ) : null}
-
-      <div className="card" style={{ marginBottom: "10px", padding: "8px 10px" }}>
-        <div style={{ display: "grid", gap: "4px" }}>
-          <div className="menu-toolbar-main">
-            <div className="menu-toolbar-selector">
-              <strong style={{ fontSize: "15px" }}>{t("menu.selector.label")}</strong>
+          <div className="menu-selection">
+            <div className="menu-selection__control">
+              <span className="menu-selection__label">{t("menu.selector.label")}</span>
               <select
-                className="input menu-toolbar-selector__input"
+                className="input menu-selection__select"
                 value={activeMenuId}
                 onChange={(e) => handleSelectMenuProfile(e.target.value)}
                 title={t("menu.selector.aria")}
@@ -4471,29 +4476,9 @@ function MenuPageContent() {
                   </option>
                 ))}
               </select>
-            </div>
-            <div className="menu-toolbar-actions">
               <button
                 type="button"
-                className="btn"
-                style={{ whiteSpace: "nowrap", padding: "6px 10px" }}
-                onClick={() => setIsCreateMenuDialogOpen(true)}
-                title={additionalMenusLocked ? t("subscription.locks.multipleMenus") : undefined}
-              >
-                {t("menu.templates.newMenu")}
-              </button>
-              <button
-                type="button"
-                className="btn"
-                style={{ whiteSpace: "nowrap", padding: "6px 10px" }}
-                onClick={() => setShowMenuTemplatesPanel((prev) => !prev)}
-              >
-                {t("menu.templates.button")}
-              </button>
-              <button
-                type="button"
-                className="btn"
-                style={{ minWidth: "36px", padding: "6px 10px" }}
+                className="menu-settings-toggle"
                 title={t("menu.settings.title")}
                 aria-label={t("menu.settings.title")}
                 onClick={() => setShowMenuSettingsDialog(true)}
@@ -4501,59 +4486,68 @@ function MenuPageContent() {
                 ⚙
               </button>
             </div>
+            <div className="menu-selection__links">
+              <button
+                type="button"
+                className="menu-secondary-link"
+                onClick={() => setIsCreateMenuDialogOpen(true)}
+                title={additionalMenusLocked ? t("subscription.locks.multipleMenus") : undefined}
+              >
+                {t("menu.templates.newMenu")}
+              </button>
+              <button
+                type="button"
+                className="menu-secondary-link"
+                onClick={() => setShowMenuTemplatesPanel((prev) => !prev)}
+              >
+                {t("menu.templates.button")}
+              </button>
+            </div>
           </div>
-          <div style={{ display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" }}>
-            <span className="muted" style={{ fontSize: "12px" }}>
-              {t("menu.mode.label")}
-            </span>
+
+          <div className="menu-mode">
+            <span className="muted menu-mode__label">{t("menu.mode.label")}</span>
             <div
               role="group"
               aria-label={t("menu.mode.aria")}
-              style={{
-                display: "inline-flex",
-                border: "1px solid var(--border-default)",
-                borderRadius: "999px",
-                padding: "2px",
-                background: "var(--background-primary)",
-              }}
+              className="menu-mode__group"
             >
               <button
                 type="button"
-                className={dayStructureMode === "list" ? "btn btn-primary" : "btn"}
-                style={{ padding: "4px 10px", fontSize: "12px", minHeight: "30px" }}
+                className={`menu-mode__pill ${dayStructureMode === "list" ? "menu-mode__pill--active" : ""}`}
                 onClick={() => setDayStructureMode("list")}
               >
                 {t("menu.mode.list")}
               </button>
               <button
                 type="button"
-                className={dayStructureMode === "meals" ? "btn btn-primary" : "btn"}
-                style={{ padding: "4px 10px", fontSize: "12px", minHeight: "30px" }}
+                className={`menu-mode__pill ${dayStructureMode === "meals" ? "menu-mode__pill--active" : ""}`}
                 onClick={() => setDayStructureMode("meals")}
               >
                 {t("menu.mode.meals")}
               </button>
             </div>
           </div>
-          {isActiveMenuEmpty && (
-            <div className="menu-empty-actions">
-              <span className="muted">{t("menu.templates.emptyPrompt")}</span>
-              <div className="menu-empty-actions__buttons">
-                <button type="button" className="btn" onClick={() => setIsCreateMenuDialogOpen(true)}>
-                  {t("menu.templates.createMenu")}
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  onClick={() => setShowMenuTemplatesPanel(true)}
-                >
-                  {t("menu.templates.loadExample")}
-                </button>
-              </div>
-            </div>
-          )}
         </div>
-      </div>
+
+        {isActiveMenuEmpty && (
+          <div className="menu-empty-actions">
+            <span className="muted">{t("menu.templates.emptyPrompt")}</span>
+            <div className="menu-empty-actions__buttons">
+              <button type="button" className="btn" onClick={() => setIsCreateMenuDialogOpen(true)}>
+                {t("menu.templates.createMenu")}
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => setShowMenuTemplatesPanel(true)}
+              >
+                {t("menu.templates.loadExample")}
+              </button>
+            </div>
+          </div>
+        )}
+      </section>
 
       {shouldShowMenuTemplatesPanel && (
         <div className="card menu-templates-panel">
@@ -5359,12 +5353,7 @@ function MenuPageContent() {
         >
           {t("menu.actions.generateShoppingList")}
         </button>
-
-        <button className="menu-actions__clear-btn" onClick={clearWeek} disabled={Object.keys(mealData).length === 0}>
-          {t("menu.actions.clearPeriod")}
-        </button>
       </div>
-      </section>
       {confirmDialog}
     </>
   );

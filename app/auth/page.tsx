@@ -558,7 +558,12 @@ export default function AuthPage() {
     effectiveBillingPlanTier === "pro"
       ? t("subscription.manage.plan.pro")
       : t("subscription.manage.plan.free");
-  const billingStatusLabel = t(`subscription.manage.statuses.${billingStatus}`);
+  const isTestMode = !billingConfigured;
+  const billingStatusLabel = isTestMode
+    ? ""
+    : billingStatus === "inactive"
+      ? t("subscription.manage.proAvailable")
+      : t(`subscription.manage.statuses.${billingStatus}`);
   const proExpiresAtLabel = formatIsoDate(proExpiresAt, locale);
   const canOpenBillingPortal = billingConfigured && hasStripeCustomer;
   const canActivatePro = billingConfigured && effectiveBillingPlanTier !== "pro";
@@ -653,7 +658,7 @@ export default function AuthPage() {
             </div>
             {billingLoading ? (
               <div className="muted">{t("subscription.manage.loading")}</div>
-            ) : (
+            ) : billingConfigured ? (
               <>
                 <div style={{ fontSize: "14px", color: "var(--text-secondary)" }}>
                   {t("subscription.manage.currentPlan")}: <strong>{billingPlanLabel}</strong>
@@ -666,11 +671,9 @@ export default function AuthPage() {
                   <strong>{proExpiresAtLabel || t("subscription.manage.noDate")}</strong>
                 </div>
               </>
+            ) : (
+              <div className="muted">{t("subscription.manage.testMode")}</div>
             )}
-
-            {!billingConfigured ? (
-              <div className="muted">{t("subscription.manage.unavailable")}</div>
-            ) : null}
 
             <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
               {canActivatePro ? (

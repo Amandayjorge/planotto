@@ -9,6 +9,7 @@ import {
   getPrimaryRouteByProfileGoal,
   readProfileGoalFromStorage,
 } from "./lib/profileGoal";
+import { getSupportMailto } from "./lib/support";
 
 const SHOPPING_HIGHLIGHT_KEY = "planottoHighlightShoppingNav";
 interface NavItem {
@@ -96,6 +97,8 @@ export default function Header() {
   };
 
   const mascotSrc = "/mascot/pages/auth.png";
+  const contactMailto = getSupportMailto("Planotto feedback");
+  const bugMailto = getSupportMailto("Planotto bug report");
 
   return (
     <header className="header">
@@ -178,6 +181,18 @@ export default function Header() {
                 </Link>
               ))}
             </nav>
+            <div className="mobile-menu__section">
+              <span className="mobile-menu__section-title">{t("header.support.title")}</span>
+              <Link className="mobile-menu__support-link" href="/how-it-works" onClick={closeMobileMenu}>
+                {t("header.support.help")}
+              </Link>
+              <a className="mobile-menu__support-link" href={contactMailto} onClick={closeMobileMenu}>
+                {t("header.support.contact")}
+              </a>
+              <a className="mobile-menu__support-link" href={bugMailto} onClick={closeMobileMenu}>
+                {t("header.support.reportBug")}
+              </a>
+            </div>
           </div>
         </div>
       )}

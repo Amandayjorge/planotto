@@ -59,8 +59,15 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     if (typeof window === "undefined") return;
     const stored = window.localStorage.getItem(LOCALE_STORAGE_KEY);
     if (!isLocale(stored)) return;
-    setLocaleState((current) => (current === stored ? current : stored));
-    persistLocale(stored);
+
+    const timerId = window.setTimeout(() => {
+      setLocaleState((current) => (current === stored ? current : stored));
+      persistLocale(stored);
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timerId);
+    };
   }, []);
 
   useEffect(() => {

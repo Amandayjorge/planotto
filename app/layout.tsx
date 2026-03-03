@@ -2,6 +2,7 @@ import "./globals.css";
 import Header from "./header";
 import HouseAssistant from "./components/HouseAssistant";
 import ProActivationToast from "./components/ProActivationToast";
+import AppFooter from "./components/AppFooter";
 import { I18nProvider } from "./components/I18nProvider";
 import type { Metadata, Viewport } from "next";
 
@@ -43,11 +44,7 @@ export default function RootLayout({
           <ProActivationToast />
           <main className="container main">{children}</main>
           <HouseAssistant />
-          <footer className="footer">
-            <div className="container footer__inner">
-              <span>Planotto</span>
-            </div>
-          </footer>
+          <AppFooter />
         </I18nProvider>
       </body>
     </html>

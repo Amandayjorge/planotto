@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState, type ChangeEvent } from "react";
+import { useEffect, useId, useRef, useState, type ChangeEvent } from "react";
 import { useRouter } from "next/navigation";
 import { appendProductSuggestions, loadProductSuggestions } from "../../lib/productSuggestions";
 import ProductAutocompleteInput from "../../components/ProductAutocompleteInput";
+import NutritionSection from "../../components/NutritionSection";
 import { useI18n } from "../../components/I18nProvider";
 import { usePlanTier } from "../../lib/usePlanTier";
 import { isPaidFeatureEnabled } from "../../lib/subscription";
@@ -16,6 +17,12 @@ import {
   normalizeUnitId,
   type UnitId,
 } from "../../lib/ingredientUnits";
+import {
+  buildNutritionFormValues,
+  buildNutritionInfoFromForm,
+  type NutritionFormValues,
+  type NutritionMode,
+} from "../../lib/nutrition";
 import {
   createRecipe,
   getCurrentUserId,
@@ -139,6 +146,8 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
   const [image, setImage] = useState("");
   const [servings, setServings] = useState(2);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [nutritionMode, setNutritionMode] = useState<NutritionMode>("per_serving");
+  const [nutritionValues, setNutritionValues] = useState<NutritionFormValues>(() => buildNutritionFormValues());
   const [ingredients, setIngredients] = useState<Ingredient[]>([
     {
       name: "",
@@ -153,6 +162,7 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
   const [aiAction, setAiAction] = useState<
     "ingredients" | "tags" | "servings" | "image" | "import_url" | "import_photo" | null
   >(null);
+  const imageFileInputId = useId();
   const [aiMessage, setAiMessage] = useState("");
   const [ingredientHints, setIngredientHints] = useState<IngredientHintsMap>({});
   const [suggestedTags, setSuggestedTags] = useState<string[]>([]);
@@ -162,6 +172,7 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
   const [showAdvancedFields, setShowAdvancedFields] = useState(false);
   const [showTagFields, setShowTagFields] = useState(false);
   const [showAllTagOptions, setShowAllTagOptions] = useState(false);
+  const [showImageUpsell, setShowImageUpsell] = useState(false);
   const [importMode, setImportMode] = useState<ImportMode>("url");
   const [importUrl, setImportUrl] = useState("");
   const [importPhotoDataUrls, setImportPhotoDataUrls] = useState<string[]>([]);
@@ -169,6 +180,7 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
   const [importIssues, setImportIssues] = useState<string[]>([]);
   const [importStatus, setImportStatus] = useState<ImportStatus>("idle");
   const [importStatusMessage, setImportStatusMessage] = useState("");
+  const [importFailureReason, setImportFailureReason] = useState<"urlFailed" | "">("");
   const [isPreparingImportPhotos, setIsPreparingImportPhotos] = useState(false);
   const [reviewHints, setReviewHints] = useState<ReviewHintsMap>({});
   const photoInputRef = useRef<HTMLInputElement | null>(null);
@@ -177,6 +189,9 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
   const importRequestIdRef = useRef(0);
   const importPhotosTaskIdRef = useRef(0);
   const hasCoreInput = title.trim().length > 0 || ingredients.some((item) => item.name.trim().length > 0);
+  const handleNutritionChange = (field: keyof NutritionFormValues, value: string) => {
+    setNutritionValues((prev) => ({ ...prev, [field]: value }));
+  };
   const hasTitle = title.trim().length > 0;
 
   const optimizeImageFile = (file: File): Promise<string> =>
@@ -270,6 +285,7 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
       return;
     }
 
+      setImportFailureReason("");
     try {
       setAiAction("ingredients");
       const data = await getIngredientHints({
@@ -420,6 +436,10 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
     const allowed = new Set(RECIPE_TAGS as readonly string[]);
     const tags = normalizeRecipeTags(draft.tags || []).filter((tag) => allowed.has(tag));
     if (tags.length > 0) setSelectedTags(tags);
+    if (draft.nutrition) {
+      setNutritionMode(draft.nutrition.mode || "per_serving");
+      setNutritionValues(buildNutritionFormValues(draft.nutrition));
+    }
   };
 
   const scrollToStepOne = () => {
@@ -504,13 +524,15 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
       } else {
         setImportStatus("error");
         setImportStatusMessage(t("recipes.new.import.urlFailed"));
+        setImportFailureReason("urlFailed");
         if (backendMessage) setImportStatusMessage(backendMessage);
       }
     } catch (error) {
       if (requestId !== importRequestIdRef.current) return;
       console.error("[recipes/new] import by URL failed", error);
       setImportStatus("error");
-      setImportStatusMessage(t("recipes.new.import.urlFailed"));
+        setImportStatusMessage(t("recipes.new.import.urlFailed"));
+        setImportFailureReason("urlFailed");
     } finally {
       if (requestId === importRequestIdRef.current) {
         setAiAction(null);
@@ -688,6 +710,7 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
         };
       });
 
+    const nutritionInfo = buildNutritionInfoFromForm(nutritionMode, nutritionValues);
     const baseLanguage = normalizeRecipeLanguage(locale);
     const baseTranslation: RecipeTranslation = {
       language: baseLanguage,
@@ -727,6 +750,7 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
           image: image.trim(),
           ingredients: normalizedIngredients,
           servings: servings > 0 ? servings : 2,
+          nutrition: nutritionInfo,
           visibility: "private",
           categories: normalizedTags,
           tags: normalizedTags,
@@ -754,6 +778,7 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
         image: image.trim(),
         ingredients: normalizedIngredients,
         servings: servings > 0 ? servings : 2,
+        nutrition: nutritionInfo,
         visibility: "private",
         categories: normalizedTags,
         tags: normalizedTags,
@@ -794,7 +819,7 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
 
   return (
     <div style={{ padding: "20px", maxWidth: "860px", margin: "0 auto" }}>
-      <div style={{ marginBottom: "20px" }}>
+      <div className="recipes-new-header">
         <button
           type="button"
           className="recipes-nav-back-link"
@@ -802,9 +827,16 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
         >
           ← {t("recipes.new.actions.backToRecipes")}
         </button>
+        <button
+          className="btn btn-primary"
+          onClick={saveRecipe}
+          disabled={isSaving || !hasTitle}
+        >
+          {isSaving ? t("recipes.new.actions.saving") : t("recipes.new.actions.saveRecipe")}
+        </button>
       </div>
 
-      <h1 className="h1" style={{ marginBottom: "20px" }}>
+      <h1 className="h1" style={{ margin: "18px 0 14px" }}>
         {t("recipes.new.title")}
       </h1>
 
@@ -961,6 +993,19 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
                 {importStatusMessage}
               </p>
             ) : null}
+            {importStatus === "error" && importFailureReason === "urlFailed" ? (
+              <div style={{ marginTop: "6px" }}>
+                <p className="muted" style={{ margin: 0 }}>
+                  {t("recipes.new.import.urlFailedDetails")}
+                </p>
+                <p className="muted" style={{ margin: "4px 0 0" }}>
+                  {t("recipes.new.import.supportedSitesTitle")}: {t("recipes.new.import.supportedSites")}
+                </p>
+                <p className="muted" style={{ margin: "4px 0 0" }}>
+                  {t("recipes.new.import.tryAlternative")}
+                </p>
+              </div>
+            ) : null}
 
             {importIssues.length > 0 ? (
               <div style={{ marginTop: "8px" }}>
@@ -985,9 +1030,11 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
             {t("recipes.new.fields.title")}
           </label>
           <input className="input" type="text" value={title} onChange={(e) => setTitle(e.target.value)} />
-          <p className="muted" style={{ marginTop: "8px" }}>
-            {t("recipes.new.fields.privateByDefaultHint")}
-          </p>
+          {t("recipes.new.fields.privateByDefaultHint") ? (
+            <p className="muted" style={{ marginTop: "8px" }}>
+              {t("recipes.new.fields.privateByDefaultHint")}
+            </p>
+          ) : null}
         </div>
 
         <div style={{ marginBottom: "16px" }}>
@@ -995,7 +1042,7 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
             {t("recipes.new.fields.image")}
           </label>
           {image ? (
-            <div>
+            <div style={{ marginBottom: "10px" }}>
               <img
                 src={image}
                 alt={t("recipes.new.fields.imagePreviewAlt")}
@@ -1005,9 +1052,42 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
                 {t("recipes.new.actions.deleteImage")}
               </button>
             </div>
-          ) : (
-            <input type="file" accept="image/*" onChange={handleImageUpload} className="input" />
-          )}
+          ) : null}
+          <input
+            id={imageFileInputId}
+            type="file"
+            accept="image/*"
+            onChange={handleImageUpload}
+            style={{ display: "none" }}
+          />
+          <p className="muted" style={{ margin: "8px 0 4px", fontSize: "13px" }}>
+            {t("recipes.new.fields.imageChoiceHint")}
+          </p>
+          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+            {canUseImageGeneration ? (
+              <button
+                className="btn"
+                onClick={requestRecipeImage}
+                disabled={aiAction === "image" || !hasCoreInput}
+                type="button"
+              >
+                {aiAction === "image" ? t("recipes.new.ai.generating") : t("recipes.new.image.generateLabel")}
+              </button>
+            ) : (
+              <button
+                className="btn btn-outline"
+                type="button"
+                onClick={() => setShowImageUpsell(true)}
+              >
+                🔒 {t("recipes.new.image.generateLocked")}
+              </button>
+            )}
+          </div>
+          {showImageUpsell ? (
+            <p className="muted" style={{ marginTop: "6px" }}>
+              {t("recipes.new.image.upsell")}
+            </p>
+          ) : null}
         </div>
 
         <div style={{ marginBottom: "16px" }}>
@@ -1090,6 +1170,13 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
             {t("recipes.new.actions.addIngredient")}
           </button>
         </div>
+
+        <NutritionSection
+          mode={nutritionMode}
+          values={nutritionValues}
+          onModeChange={setNutritionMode}
+          onChange={handleNutritionChange}
+        />
 
         <div style={{ marginBottom: "0" }}>
           <label style={{ display: "block", marginBottom: "8px", fontWeight: "bold" }}>
@@ -1290,15 +1377,10 @@ export default function NewRecipeForm({ initialFirstCreate }: NewRecipeFormProps
         ) : null}
       </div>
 
-      <div style={{ display: "flex", gap: "10px", marginTop: "24px" }}>
-        <button
-          className="btn btn-primary"
-          onClick={saveRecipe}
-          disabled={isSaving || !hasTitle}
-        >
-          {isSaving ? t("recipes.new.actions.saving") : t("recipes.new.actions.saveRecipe")}
+      <div className="recipes-secondary-actions" style={{ marginTop: "24px" }}>
+        <button className="recipes-secondary-link" onClick={() => router.push("/recipes")}>
+          {t("recipes.new.actions.cancel")}
         </button>
-        <button className="btn" onClick={() => router.push("/recipes")}>{t("recipes.new.actions.cancel")}</button>
       </div>
     </div>
   );

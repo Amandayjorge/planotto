@@ -5,10 +5,12 @@ import { getSupabaseClient, isSupabaseConfigured, SUPABASE_UNAVAILABLE_MESSAGE }
 import {
   bulkUpdateRecipes,
   createIngredient,
+  deleteAdminRecipe,
   ensureCurrentUserProfile,
   grantTestProAccess,
   isCurrentUserAdmin,
   loadAdminIngredients,
+  loadAdminRecipeReports,
   loadAdminRecipes,
   loadAdminUserProfiles,
   mergeIngredientInto,
@@ -19,6 +21,7 @@ import {
   type AdminIngredientCategory,
   type AdminLanguage,
   type AdminRecipe,
+  type AdminRecipeReport,
   type AdminSubscriptionStatus,
   type AdminUserProfile,
 } from "../lib/adminSupabase";
@@ -65,6 +68,7 @@ export default function AdminPage() {
   const [ingredients, setIngredients] = useState<AdminIngredient[]>([]);
   const [ingredientCategories, setIngredientCategories] = useState<AdminIngredientCategory[]>([]);
   const [profiles, setProfiles] = useState<AdminUserProfile[]>([]);
+  const [recipeReports, setRecipeReports] = useState<AdminRecipeReport[]>([]);
 
   const [recipeLanguageFilter, setRecipeLanguageFilter] = useState<LanguageFilter>("all");
   const [recipeVisibilityFilter, setRecipeVisibilityFilter] = useState<VisibilityFilter>("all");
@@ -104,16 +108,18 @@ export default function AdminPage() {
         return;
       }
 
-      const [loadedRecipes, loadedIngredients, loadedProfiles] = await Promise.all([
+      const [loadedRecipes, loadedIngredients, loadedProfiles, loadedReports] = await Promise.all([
         loadAdminRecipes(),
         loadAdminIngredients(),
         loadAdminUserProfiles(),
+        loadAdminRecipeReports(),
       ]);
 
       setRecipes(loadedRecipes);
       setIngredients(loadedIngredients.ingredients);
       setIngredientCategories(loadedIngredients.categories);
       setProfiles(loadedProfiles);
+      setRecipeReports(loadedReports);
     } catch (error) {
       const text = error instanceof Error ? error.message : "Не удалось загрузить данные админки.";
       setErrorMessage(text);
@@ -173,6 +179,56 @@ export default function AdminPage() {
       }
       return prev.filter((item) => item !== recipeId);
     });
+  };
+
+  const deleteRecipeByIdAsAdmin = async (recipeId: string, recipeTitle: string) => {
+    const normalizedId = String(recipeId || "").trim();
+    if (!normalizedId) return;
+    if (!window.confirm(`Удалить рецепт "${recipeTitle || normalizedId}"?`)) return;
+
+    setBusy(true);
+    setErrorMessage("");
+    setSuccessMessage("");
+    try {
+      await deleteAdminRecipe(normalizedId);
+      const [loadedRecipes, loadedReports] = await Promise.all([loadAdminRecipes(), loadAdminRecipeReports()]);
+      setRecipes(loadedRecipes);
+      setRecipeReports(loadedReports);
+      setSuccessMessage(`Рецепт удален: ${recipeTitle || normalizedId}.`);
+    } catch (error) {
+      const text = error instanceof Error ? error.message : "Не удалось удалить рецепт.";
+      setErrorMessage(text);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const deleteRecipeAsAdmin = async (recipe: AdminRecipe) => {
+    await deleteRecipeByIdAsAdmin(recipe.id, recipe.title || recipe.id);
+  };
+
+  const blockUserById = async (userId: string) => {
+    const normalizedUserId = String(userId || "").trim();
+    if (!normalizedUserId) {
+      setErrorMessage("У рецепта не указан владелец. Блокировка недоступна.");
+      return;
+    }
+
+    if (!window.confirm(`Заблокировать пользователя ${normalizedUserId}?`)) return;
+
+    setBusy(true);
+    setErrorMessage("");
+    setSuccessMessage("");
+    try {
+      await updateAdminUserProfile(normalizedUserId, { isBlocked: true });
+      setProfiles(await loadAdminUserProfiles());
+      setSuccessMessage(`Пользователь ${normalizedUserId} заблокирован.`);
+    } catch (error) {
+      const text = error instanceof Error ? error.message : "Не удалось заблокировать пользователя.";
+      setErrorMessage(text);
+    } finally {
+      setBusy(false);
+    }
   };
 
   const toggleSelectAllFilteredRecipes = () => {
@@ -436,6 +492,7 @@ export default function AdminPage() {
                     <th style={{ textAlign: "left", padding: "8px", borderBottom: "1px solid var(--border-default)" }}>Переводы</th>
                     <th style={{ textAlign: "left", padding: "8px", borderBottom: "1px solid var(--border-default)" }}>Нет переводов</th>
                     <th style={{ textAlign: "left", padding: "8px", borderBottom: "1px solid var(--border-default)" }}>Обновлен</th>
+                    <th style={{ textAlign: "left", padding: "8px", borderBottom: "1px solid var(--border-default)" }}>Действия</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -461,8 +518,92 @@ export default function AdminPage() {
                         {recipe.missingTranslations.length > 0 ? recipe.missingTranslations.map((lang) => lang.toUpperCase()).join(", ") : "—"}
                       </td>
                       <td style={{ padding: "8px", borderBottom: "1px solid var(--border-default)" }}>{formatDateTime(recipe.updatedAt)}</td>
+                      <td style={{ padding: "8px", borderBottom: "1px solid var(--border-default)" }}>
+                        {recipe.visibility === "public" ? (
+                          <button
+                            type="button"
+                            className="btn btn-danger"
+                            onClick={() => void deleteRecipeAsAdmin(recipe)}
+                            disabled={busy}
+                          >
+                            Удалить публичный
+                          </button>
+                        ) : (
+                          <span className="muted">—</span>
+                        )}
+                      </td>
                     </tr>
                   ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section className="card" style={{ display: "grid", gap: "12px" }}>
+            <h2 style={{ margin: 0 }}>1.1) Жалобы на контент</h2>
+            <div className="muted">Здесь отображаются жалобы пользователей на публичные рецепты.</div>
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "1020px" }}>
+                <thead>
+                  <tr>
+                    <th style={{ textAlign: "left", padding: "8px", borderBottom: "1px solid var(--border-default)" }}>Когда</th>
+                    <th style={{ textAlign: "left", padding: "8px", borderBottom: "1px solid var(--border-default)" }}>Причина</th>
+                    <th style={{ textAlign: "left", padding: "8px", borderBottom: "1px solid var(--border-default)" }}>Комментарий</th>
+                    <th style={{ textAlign: "left", padding: "8px", borderBottom: "1px solid var(--border-default)" }}>Рецепт</th>
+                    <th style={{ textAlign: "left", padding: "8px", borderBottom: "1px solid var(--border-default)" }}>Владелец</th>
+                    <th style={{ textAlign: "left", padding: "8px", borderBottom: "1px solid var(--border-default)" }}>Действия</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {recipeReports.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} style={{ padding: "10px", color: "var(--text-secondary)" }}>
+                        Жалоб пока нет.
+                      </td>
+                    </tr>
+                  ) : (
+                    recipeReports.map((report) => (
+                      <tr key={report.id}>
+                        <td style={{ padding: "8px", borderBottom: "1px solid var(--border-default)" }}>{formatDateTime(report.createdAt)}</td>
+                        <td style={{ padding: "8px", borderBottom: "1px solid var(--border-default)" }}>{report.reason}</td>
+                        <td style={{ padding: "8px", borderBottom: "1px solid var(--border-default)" }}>{report.details || "—"}</td>
+                        <td style={{ padding: "8px", borderBottom: "1px solid var(--border-default)" }}>
+                          <div style={{ fontWeight: 600 }}>{report.recipeTitle}</div>
+                          <div className="muted" style={{ fontSize: "12px" }}>{report.recipeId || "—"}</div>
+                        </td>
+                        <td style={{ padding: "8px", borderBottom: "1px solid var(--border-default)" }}>
+                          <div>{report.recipeOwnerId || "—"}</div>
+                          <div className="muted" style={{ fontSize: "12px" }}>
+                            visibility: {report.recipeVisibility}
+                          </div>
+                        </td>
+                        <td style={{ padding: "8px", borderBottom: "1px solid var(--border-default)" }}>
+                          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                            {report.recipeId ? (
+                              <button
+                                type="button"
+                                className="btn btn-danger"
+                                onClick={() => void deleteRecipeByIdAsAdmin(report.recipeId, report.recipeTitle || report.recipeId)}
+                                disabled={busy}
+                              >
+                                Удалить рецепт
+                              </button>
+                            ) : null}
+                            {report.recipeOwnerId ? (
+                              <button
+                                type="button"
+                                className="btn"
+                                onClick={() => void blockUserById(report.recipeOwnerId)}
+                                disabled={busy}
+                              >
+                                Блокировать автора
+                              </button>
+                            ) : null}
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>

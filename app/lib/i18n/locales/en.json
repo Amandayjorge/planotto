@@ -680,6 +680,7 @@
     },
     "actions": {
       "backToMenu": "← Back to menu",
+      "more": "More actions",
       "addRecipe": "+ Add recipe",
       "clearMine": "Clear my recipes",
       "goToMine": "Go to my recipes",
@@ -726,6 +727,7 @@
       "moveLeftAria": "Move tag {{tag}} left",
       "moveRightAria": "Move tag {{tag}} right",
       "bulkInputHint": "You can add several tags separated by comma. Max: {{max}} tags, up to {{maxLength}} chars each.",
+      "editInRecipeCardHint": "You can edit tags only in the recipe card.",
       "limitCount": "You can keep up to {{max}} personal tags per recipe.",
       "limitLength": "One tag is too long. Max length is {{max}} characters.",
       "saveFailed": "Failed to save personal tags."
@@ -736,8 +738,9 @@
       "later": "Later"
     },
     "guestMode": {
-      "notice": "Some features are available after registration.",
-      "addToMineLocked": "Add to mine after sign up"
+      "notice": "You can add recipes without signing up. Without an account, recipes are stored only on this device.",
+      "addToMineLocked": "Add to mine after sign up",
+      "localOnlyWarning": "Recipe added locally. Create an account to avoid losing it when you change devices."
     },
     "success": {
       "firstAddedAria": "First recipe added",

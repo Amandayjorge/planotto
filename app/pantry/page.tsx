@@ -59,7 +59,7 @@ const DEFAULT_PANTRY_CATEGORY_ID: PantryCategoryId = "other";
 const PANTRY_CATEGORIES: readonly PantryCategory[] = [
   { id: "vegetablesFruits", emoji: "🥦", labelKey: "pantry.categories.vegetablesFruits" },
   { id: "meatFish", emoji: "🥩", labelKey: "pantry.categories.meatFish" },
-  { id: "dairy", emoji: "🧀", labelKey: "pantry.categories.dairy" },
+  { id: "dairy", emoji: "🥛", labelKey: "pantry.categories.dairy" },
   { id: "dryGoods", emoji: "🥫", labelKey: "pantry.categories.dryGoods" },
   { id: "frozen", emoji: "🧊", labelKey: "pantry.categories.frozen" },
   { id: "drinks", emoji: "🧃", labelKey: "pantry.categories.drinks" },
@@ -71,7 +71,7 @@ const CATEGORY_EMOJI_BY_INGREDIENT_CATEGORY: Record<IngredientCategoryId, string
   vegetables: "🥬",
   fruits: "🍎",
   protein: "🍗",
-  dairy: "🧀",
+  dairy: "🥛",
   grocery: "🥫",
   bakery: "🥖",
   drinks: "🧃",

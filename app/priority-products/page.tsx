@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import ProductAutocompleteInput from "../components/ProductAutocompleteInput";
+import { useI18n } from "../components/I18nProvider";
 import { appendProductSuggestions, loadProductSuggestions } from "../lib/productSuggestions";
 import {
   addPriorityProduct,
@@ -44,6 +45,7 @@ const getDaysForEditor = (item: PriorityProduct): number => {
 
 export default function PriorityProductsPage() {
   const router = useRouter();
+  const { t } = useI18n();
   const [products, setProducts] = useState(() => loadPriorityProducts());
   const [name, setName] = useState("");
   const [periodMode, setPeriodMode] = useState<PriorityPeriodMode>("week");
@@ -147,6 +149,9 @@ export default function PriorityProductsPage() {
       <h1 className="h1" style={{ marginBottom: "10px" }}>
         Активные продукты
       </h1>
+      <p className="muted" style={{ marginTop: 0, marginBottom: "16px", maxWidth: "720px" }}>
+        {t("menu.activeProducts.explanation")}
+      </p>
 
       <div className="card" style={{ marginBottom: "16px" }}>
         <div style={{ display: "grid", gap: "12px" }}>

@@ -60,6 +60,16 @@ interface UserProfileRow {
   updated_at: string | null;
 }
 
+interface AdminRecipeReportRow {
+  id: string;
+  recipe_id: string | null;
+  reporter_id: string | null;
+  reason: string | null;
+  details: string | null;
+  status: string | null;
+  created_at: string | null;
+}
+
 export interface AdminRecipe {
   id: string;
   ownerId: string;
@@ -95,11 +105,32 @@ export interface AdminUserProfile {
   updatedAt: string;
 }
 
+export interface AdminRecipeReport {
+  id: string;
+  recipeId: string;
+  recipeTitle: string;
+  recipeOwnerId: string;
+  recipeVisibility: "private" | "public" | "link" | "invited";
+  reporterId: string;
+  reason: string;
+  details: string;
+  status: string;
+  createdAt: string;
+}
+
 const isNotFoundError = (error: unknown): boolean => {
   if (!error || typeof error !== "object") return false;
   const code = String((error as { code?: unknown }).code || "");
   const message = String((error as { message?: unknown }).message || "").toLowerCase();
   return code === "PGRST116" || message.includes("0 rows");
+};
+
+const isMissingRelationError = (error: unknown, relationName: string): boolean => {
+  if (!error || typeof error !== "object") return false;
+  const code = String((error as { code?: unknown }).code || "");
+  const message = String((error as { message?: unknown }).message || "").toLowerCase();
+  const relation = relationName.toLowerCase();
+  return code === "42P01" || (message.includes(relation) && message.includes("does not exist"));
 };
 
 const resolveUserName = (user: User | null | undefined): string => {
@@ -457,6 +488,78 @@ export const loadAdminUserProfiles = async (): Promise<AdminUserProfile[]> => {
       updatedAt: toIsoDateTime(typed.updated_at),
     };
   });
+};
+
+export const loadAdminRecipeReports = async (): Promise<AdminRecipeReport[]> => {
+  const supabase = getSupabaseClient();
+  const { data: reportRows, error: reportError } = await supabase
+    .from("recipe_reports")
+    .select("id,recipe_id,reporter_id,reason,details,status,created_at")
+    .order("created_at", { ascending: false });
+
+  if (reportError) {
+    if (isMissingRelationError(reportError, "recipe_reports")) return [];
+    throw new Error(reportError.message || "Failed to load recipe reports");
+  }
+
+  const normalizedReportRows = (reportRows || []) as AdminRecipeReportRow[];
+  const recipeIds = Array.from(
+    new Set(
+      normalizedReportRows
+        .map((row) => String(row.recipe_id || "").trim())
+        .filter(Boolean)
+    )
+  );
+
+  const recipeMap = new Map<string, AdminRecipeRow>();
+  if (recipeIds.length > 0) {
+    const { data: recipeRows, error: recipeError } = await supabase
+      .from("recipes")
+      .select("id,owner_id,title,base_language,visibility,updated_at")
+      .in("id", recipeIds);
+
+    if (recipeError) {
+      if (!isMissingRelationError(recipeError, "recipes")) {
+        throw new Error(recipeError.message || "Failed to load reported recipes");
+      }
+    }
+    (recipeRows || []).forEach((row) => {
+      const typed = row as AdminRecipeRow;
+      const id = String(typed.id || "").trim();
+      if (!id) return;
+      recipeMap.set(id, typed);
+    });
+  }
+
+  return normalizedReportRows.map((row) => {
+    const recipeId = String(row.recipe_id || "").trim();
+    const linkedRecipe = recipeMap.get(recipeId);
+    return {
+      id: String(row.id || "").trim(),
+      recipeId,
+      recipeTitle: String(linkedRecipe?.title || "").trim() || "—",
+      recipeOwnerId: String(linkedRecipe?.owner_id || "").trim(),
+      recipeVisibility: toVisibility(linkedRecipe?.visibility || "private"),
+      reporterId: String(row.reporter_id || "").trim(),
+      reason: String(row.reason || "").trim() || "other",
+      details: String(row.details || "").trim(),
+      status: String(row.status || "").trim() || "open",
+      createdAt: toIsoDateTime(row.created_at),
+    };
+  });
+};
+
+export const deleteAdminRecipe = async (recipeId: string): Promise<void> => {
+  const normalizedRecipeId = String(recipeId || "").trim();
+  if (!normalizedRecipeId) return;
+
+  const supabase = getSupabaseClient();
+  const { error } = await supabase
+    .from("recipes")
+    .delete()
+    .eq("id", normalizedRecipeId);
+
+  if (error) throw new Error(error.message || "Failed to delete recipe");
 };
 
 export const updateAdminUserProfile = async (

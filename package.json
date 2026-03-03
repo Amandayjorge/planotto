@@ -9,7 +9,9 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@fal-ai/client": "^1.0.0",
     "@supabase/supabase-js": "^2.95.3",
+    "dotenv": "^17.3.1",
     "next": "16.1.6",
     "pdf-lib": "^1.17.1",
     "pdfmake": "^0.3.5",

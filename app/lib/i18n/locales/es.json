@@ -16,7 +16,17 @@
       "closeMenu": "Cerrar menú",
       "navigation": "Navegación",
       "logoAlt": "Mascota de Planotto"
+    },
+    "support": {
+      "title": "Ayuda",
+      "help": "Ayuda",
+      "contact": "Escribirnos",
+      "reportBug": "Reportar un error"
     }
+  },
+  "appFooter": {
+    "help": "Ayuda",
+    "contact": "Contacto"
   },
   "common": {
     "confirmDialog": {
@@ -358,6 +368,7 @@
     },
     "activeProducts": {
       "allTitle": "Todos los productos activos",
+      "explanation": "Añade productos que quieras usar con más frecuencia en tu menú. Se tendrán en cuenta al planificar.",
       "count": "Activos: {{count}}",
       "addPlaceholder": "Añadir producto",
       "searchPlaceholder": "Buscar por nombre y nota",
@@ -524,7 +535,6 @@
       "planningDaysHelp": "Puedes elegir un preset o activar/desactivar días manualmente."
     },
     "goalHints": {
-      "planning": "Objetivo: planificar menú. Elige período y añade platos con el botón +."
     },
     "mealsConfig": {
       "title": "Configurar comidas",
@@ -563,8 +573,8 @@
       "saveFailed": "Error al guardar menú."
     },
     "confirm": {
-      "clearPeriod": "¿Seguro que quieres limpiar el menú de este período?",
-      "clearCurrentMenu": "¿Seguro que quieres limpiar el menú actual?"
+    "clearPeriod": "¿Seguro que quieres limpiar el menú de este período?",
+    "clearCurrentMenu": "¿Eliminar todos los platos de {{days}} días? Esta acción no se puede deshacer."
     },
     "fallback": {
       "recipeTitle": "receta",
@@ -653,12 +663,24 @@
       "pantryEmpty": "La despensa está vacía",
       "onlyFromPantryTooltip": "Mostrar solo recetas posibles con despensa",
       "onlyFromPantry": "Solo de despensa",
+      "languageFilter": {
+        "label": "Idioma",
+        "interface": "Solo el idioma de la interfaz",
+        "interfaceEnglish": "Interfaz + inglés",
+        "all": "Todos los idiomas"
+      },
+      "languagePreference": {
+        "label": "Idiomas de recetas",
+        "description": "Elige los idiomas que se mostrarán por defecto en tu biblioteca.",
+        "interfaceHint": "Idioma de la interfaz (siempre incluido)"
+      },
       "resetAll": "Restablecer todo",
       "tags": "Etiquetas",
       "resetTags": "Restablecer etiquetas"
     },
     "actions": {
       "backToMenu": "← Volver al menú",
+      "more": "Más acciones",
       "addRecipe": "+ Añadir receta",
       "clearMine": "Limpiar mis recetas",
       "goToMine": "Ir a mis recetas",
@@ -705,6 +727,7 @@
       "moveLeftAria": "Mover etiqueta {{tag}} a la izquierda",
       "moveRightAria": "Mover etiqueta {{tag}} a la derecha",
       "bulkInputHint": "Puedes anadir varias etiquetas separadas por coma. Maximo: {{max}} etiquetas, hasta {{maxLength}} caracteres cada una.",
+      "editInRecipeCardHint": "Puedes editar etiquetas solo en la tarjeta de receta.",
       "limitCount": "Puedes guardar hasta {{max}} etiquetas personales por receta.",
       "limitLength": "Una etiqueta es demasiado larga. Maximo {{max}} caracteres.",
       "saveFailed": "No se pudieron guardar las etiquetas personales."
@@ -715,8 +738,9 @@
       "later": "Después"
     },
     "guestMode": {
-      "notice": "Algunas funciones están disponibles después del registro.",
-      "addToMineLocked": "Añadir a las mías tras registro"
+      "notice": "Puedes añadir recetas sin registrarte. Sin cuenta, se guardan solo en este dispositivo.",
+      "addToMineLocked": "Añadir a las mías tras registro",
+      "localOnlyWarning": "Receta añadida localmente. Crea una cuenta para no perderla al cambiar de dispositivo."
     },
     "success": {
       "firstAddedAria": "Primera receta añadida",
@@ -805,12 +829,23 @@
         "servings": "Porciones",
         "source": "Fuente (opcional)",
         "sourceHint": "Si la receta viene de un libro o sitio, indique la fuente.",
-        "privateByDefaultHint": "La receta se guardará como Privado. Podrás compartirla después de guardar.",
+        "privateByDefaultHint": "",
         "sourceWarning": "Si no se indica la fuente, la responsabilidad de publicacion es suya.",
         "tags": "Etiquetas (opcional)",
         "image": "Imagen",
+        "imageChoiceHint": "Elige un archivo o genera con IA.",
         "imagePreviewAlt": "Vista previa de receta",
-        "notes": "Notas personales"
+      "notes": "Notas personales"
+      },
+      "nutrition": {
+        "title": "Valor nutricional (opcional)",
+        "modePerServing": "Por porción",
+        "modePer100g": "Por 100 g",
+        "calories": "Calorías",
+        "protein": "Proteínas",
+        "fat": "Grasas",
+        "carbs": "Carbohidratos",
+        "hint": "Deja los campos vacíos si no deseas registrar los datos."
       },
       "tags": {
         "showMore": "Mostrar más",
@@ -854,6 +889,10 @@
         "urlUnsupported": "Este enlace no esta soportado.",
         "urlSuccess": "Importado. Revise y guarde.",
         "urlFailed": "No se pudo importar por enlace. Pruebe otro enlace o complete manualmente.",
+        "urlFailedDetails": "No se pudo reconocer la receta desde ese enlace. Se admiten sitios con marcado estructurado de receta.",
+        "supportedSitesTitle": "Sitios compatibles",
+        "supportedSites": "allrecipes.com, foodnetwork.com, nytimes.com/recipes, bbcgoodfood.com",
+        "tryAlternative": "Prueba importar con foto o pega la receta manualmente.",
         "photoRequired": "Seleccione una foto de receta.",
         "preparingPhoto": "Preparando foto...",
         "photoLoaded": "Fotos cargadas: {{count}}. Pulse \"Reconocer\".",
@@ -874,6 +913,11 @@
         "removePhoto": "Eliminar foto",
         "photoN": "Foto {{index}}",
         "reviewAfterImport": "Revise despues de importar:"
+      },
+      "image": {
+        "generateLabel": "Generar con IA",
+        "generateLocked": "Generar con IA (solo Pro)",
+        "upsell": "Pro activa la generación de imágenes. Suscríbete para probarla."
       },
       "ai": {
         "needIngredient": "Primero agregue al menos un ingrediente.",
@@ -914,6 +958,7 @@
       "messages": {
         "titleRequired": "El nombre de la receta es obligatorio",
         "saveFailed": "No se pudo guardar la receta.",
+        "inappropriateContent": "Este contenido no es apropiado",
         "invitesPartial": "No se enviaron algunas invitaciones: {{emails}}",
         "checkAmountAndUnit": "Revise cantidad y unidad despues de importar."
       }
@@ -936,7 +981,7 @@
         "edit": "Editar",
         "share": "Compartir",
         "delete": "Eliminar",
-        "report": "Reportar"
+        "report": "Reportar contenido"
       },
       "notFound": "Receta no encontrada",
       "translation": {

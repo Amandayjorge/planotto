@@ -10,15 +10,14 @@ import {
   deleteAllMyRecipes,
   getCurrentUserId,
   importLocalRecipesIfNeeded,
+  listPublicRecipes,
   listPublicAuthorProfiles,
   type PublicAuthorProfile,
-  listSeedTemplateRecipes,
   listMyRecipes,
   loadLocalRecipes,
   removeRecipeFromLocalCache,
   syncRecipesToLocalCache,
   updateRecipe,
-  updateRecipePersonalTags,
   upsertRecipeInLocalCache,
   type RecipeModel,
   type RecipeLanguage,
@@ -31,6 +30,7 @@ import { RECIPE_TAGS, localizeRecipeTag, normalizeRecipeTags } from "../lib/reci
 import { useI18n } from "../components/I18nProvider";
 import { usePlanottoConfirm } from "../components/usePlanottoConfirm";
 import { downloadPdfExport } from "../lib/pdfExportClient";
+import RecipeCardImage from "../components/RecipeCardImage";
 import { resolveRecipeImageForCard } from "../lib/recipeImageCatalog";
 import { readProfileGoalFromStorage, type ProfileGoal } from "../lib/profileGoal";
 import { encodeRecipeShareBundle } from "../lib/recipeShareBundle";
@@ -56,8 +56,6 @@ const MENU_RANGE_STATE_KEY = "selectedMenuRange";
 const MENU_ADD_TO_MENU_PROMPT_KEY = "menuAddToMenuPromptEnabled";
 const ACTIVE_PRODUCTS_STORAGE_PREFIX = "activeProducts:";
 const PANTRY_STORAGE_KEY = "pantry";
-const PERSONAL_TAGS_HINT_SEEN_KEY = "recipes:personal-tags-hint-seen";
-const PERSONAL_TAG_MAX_LENGTH = 32;
 const PERSONAL_TAG_MAX_COUNT = 12;
 const ADD_TO_MENU_PROMPT_AUTO_CLOSE_MS = 4000;
 const LEGACY_RECIPE_LANGUAGE_PREFERENCE_KEY = "recipes:language-preference";
@@ -100,22 +98,6 @@ function normalizePersonalTag(value: string): string {
 
 function normalizePersonalTagKey(value: string): string {
   return normalizePersonalTag(value).toLocaleLowerCase("ru-RU");
-}
-
-function parsePersonalTagsInput(raw: string): string[] {
-  const seen = new Set<string>();
-  const result: string[] = [];
-  raw
-    .split(/[,\n;]+/g)
-    .map((item) => normalizePersonalTag(item))
-    .filter(Boolean)
-    .forEach((tag) => {
-      const key = normalizePersonalTagKey(tag);
-      if (!key || seen.has(key)) return;
-      seen.add(key);
-      result.push(tag);
-    });
-  return result;
 }
 
 function normalizeRecipeLanguage(value: unknown): RecipeLanguage {
@@ -462,10 +444,6 @@ function isMissingRecipesTableError(error: unknown): boolean {
   return false;
 }
 
-function isSeedTemplateId(recipeId: string | null | undefined): boolean {
-  return String(recipeId || "").trim().toLowerCase().startsWith("seed-");
-}
-
 function resolveRecipeCardImage(recipe: RecipeModel): string | null {
   const resolved = resolveRecipeImageForCard({
     id: recipe.id,
@@ -586,15 +564,11 @@ function RecipesPageContent() {
   const [isSendingSelectionLink, setIsSendingSelectionLink] = useState(false);
   const [publicAuthorProfiles, setPublicAuthorProfiles] = useState<Record<string, PublicAuthorProfile>>({});
   const [selectedPersonalTagFilters, setSelectedPersonalTagFilters] = useState<string[]>([]);
-  const [personalTagEditorRecipeId, setPersonalTagEditorRecipeId] = useState<string | null>(null);
-  const [personalTagDraft, setPersonalTagDraft] = useState("");
-  const [savingPersonalTagsRecipeId, setSavingPersonalTagsRecipeId] = useState<string | null>(null);
-  const [showPersonalTagsHint, setShowPersonalTagsHint] = useState(false);
   const [isExportingRecipesPdf, setIsExportingRecipesPdf] = useState(false);
-  const [showPdfProPrompt, setShowPdfProPrompt] = useState(false);
+  const [isTopbarOverflowOpen, setIsTopbarOverflowOpen] = useState(false);
+  const topbarOverflowRef = useRef<HTMLDivElement | null>(null);
   const [profileGoal, setProfileGoal] = useState<ProfileGoal>("menu");
   const canUseAdvancedFilters = isPaidFeatureEnabled(planTier, "advanced_filters");
-  const canUsePdfExport = isPaidFeatureEnabled(planTier, "pdf_export");
   const effectiveSelectedTags = canUseAdvancedFilters ? selectedTags : [];
   const effectiveOnlyWithPhoto = canUseAdvancedFilters ? onlyWithPhoto : false;
   const effectiveOnlyWithNotes = canUseAdvancedFilters && viewMode === "mine" ? onlyWithNotes : false;
@@ -667,18 +641,10 @@ function RecipesPageContent() {
   }, [canUseAdvancedFilters, sortBy]);
 
   useEffect(() => {
-    if (canUsePdfExport) {
-      setShowPdfProPrompt(false);
-    }
-  }, [canUsePdfExport]);
-
-  useEffect(() => {
     if (viewMode === "mine") return;
     setIsSelectionMode(false);
     setSelectedRecipeIds({});
     setSelectedPersonalTagFilters([]);
-    setPersonalTagEditorRecipeId(null);
-    setPersonalTagDraft("");
   }, [viewMode]);
 
   useEffect(() => {
@@ -697,13 +663,6 @@ function RecipesPageContent() {
       return changed ? next : prev;
     });
   }, [recipes, viewMode]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (viewMode !== "mine" || isLoading || recipes.length === 0) return;
-    if (localStorage.getItem(PERSONAL_TAGS_HINT_SEEN_KEY) === "1") return;
-    setShowPersonalTagsHint(true);
-  }, [isLoading, recipes.length, viewMode]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -726,11 +685,11 @@ function RecipesPageContent() {
 
   const refreshRecipes = async (mode: ViewMode, userId: string | null): Promise<void> => {
     setIsLoading(true);
-    const localMine = () => loadLocalRecipes().filter((item) => !isSeedTemplateId(item.id));
+    const localMine = () => loadLocalRecipes();
 
     try {
       if (!isSupabaseConfigured()) {
-        setRecipes(mode === "public" ? listSeedTemplateRecipes() : localMine());
+        setRecipes(mode === "public" ? [] : localMine());
         return;
       }
 
@@ -765,10 +724,20 @@ function RecipesPageContent() {
         }
       }
 
-      setRecipes(listSeedTemplateRecipes());
+      try {
+        const publicRecipes = await listPublicRecipes();
+        setRecipes(publicRecipes);
+      } catch (publicError) {
+        if (isMissingRecipesTableError(publicError)) {
+          setRecipes([]);
+          setActionMessage(t("recipes.messages.localMode"));
+          return;
+        }
+        throw publicError;
+      }
     } catch (requestError) {
       console.error("[recipes] failed to load recipes", requestError);
-      setRecipes(mode === "public" ? listSeedTemplateRecipes() : localMine());
+      setRecipes(mode === "public" ? [] : localMine());
     } finally {
       setIsLoading(false);
     }
@@ -948,6 +917,35 @@ function RecipesPageContent() {
   }, [currentUserId, viewMode]);
 
   useEffect(() => {
+    if (!isTopbarOverflowOpen) return;
+
+    const handleOutsideClick = (event: MouseEvent) => {
+      const target = event.target as Node | null;
+      if (!topbarOverflowRef.current || !target) return;
+      if (!topbarOverflowRef.current.contains(target)) {
+        setIsTopbarOverflowOpen(false);
+      }
+    };
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsTopbarOverflowOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleOutsideClick);
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("mousedown", handleOutsideClick);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [isTopbarOverflowOpen]);
+
+  useEffect(() => {
+    setIsTopbarOverflowOpen(false);
+  }, [viewMode, isSelectionMode]);
+
+  useEffect(() => {
     if (typeof window === "undefined") return;
     if (isLoading) return;
 
@@ -1114,7 +1112,7 @@ function RecipesPageContent() {
   const existingMineTitleSet = useMemo(() => {
     if (typeof window === "undefined") return new Set<string>();
 
-    const source = (viewMode === "mine" ? recipes : loadLocalRecipes()).filter((item) => !isSeedTemplateId(item.id));
+    const source = viewMode === "mine" ? recipes : loadLocalRecipes();
     return new Set(
       source.map((item) => normalizeRecipeTitle(getRecipeCanonicalTitle(item))).filter(Boolean)
     );
@@ -1122,7 +1120,7 @@ function RecipesPageContent() {
 
   const existingMineByTitle = useMemo(() => {
     if (typeof window === "undefined") return new Map<string, string>();
-    const source = loadLocalRecipes().filter((item) => !isSeedTemplateId(item.id));
+    const source = loadLocalRecipes();
     const map = new Map<string, string>();
     source.forEach((item) => {
       const key = normalizeRecipeTitle(getRecipeCanonicalTitle(item));
@@ -1151,7 +1149,12 @@ function RecipesPageContent() {
       if (effectiveOnlyWithActiveProducts && (recipeActiveMatchMap.get(item.id)?.matchCount || 0) === 0) return false;
       if (effectiveOnlyFromPantry && !recipePantryCoverageMap.get(item.id)?.isFullyCovered) return false;
       const canonicalTitleKey = normalizeRecipeTitle(getRecipeCanonicalTitle(item));
-      if (viewMode === "public" && canonicalTitleKey && existingMineTitleSet.has(canonicalTitleKey)) {
+      if (
+        viewMode === "public" &&
+        Boolean(currentUserId) &&
+        canonicalTitleKey &&
+        existingMineTitleSet.has(canonicalTitleKey)
+      ) {
         return false;
       }
       if (!passesPreferredLanguages(item)) return false;
@@ -1293,7 +1296,9 @@ function RecipesPageContent() {
     effectivePreferredRecipeLanguages,
     getPreferredRecipeLanguage,
     publicAuthorProfiles,
+    currentUserId,
     currentUserName,
+    passesPreferredLanguages,
   ]);
 
   useEffect(() => {
@@ -1303,8 +1308,8 @@ function RecipesPageContent() {
       new Set(
         recipes
           .filter((recipe) => recipe.visibility === "public")
-          .map((recipe) => String(recipe.authorId || recipe.ownerId || "").trim())
-          .filter((authorId) => authorId.length > 0 && authorId !== "system" && isUuidLike(authorId))
+        .map((recipe) => String(recipe.authorId || recipe.ownerId || "").trim())
+        .filter((authorId) => authorId.length > 0 && isUuidLike(authorId))
       )
     );
 
@@ -1504,12 +1509,12 @@ function RecipesPageContent() {
     }
     setPendingCopyRecipeId(recipeId);
     const showOverlayForThisCopy = shouldShowFirstRecipeOverlay();
+    const guestLocalWarning = t("recipes.guestMode.localOnlyWarning");
     const sourceTitleKey = normalizeRecipeTitle(getRecipeCanonicalTitle(source));
     const findExistingMineLocal = (): RecipeModel | null => {
-      const existing = loadLocalRecipes().find((item) => {
-        if (isSeedTemplateId(item.id)) return false;
-        return normalizeRecipeTitle(getRecipeCanonicalTitle(item)) === sourceTitleKey;
-      });
+      const existing = loadLocalRecipes().find(
+        (item) => normalizeRecipeTitle(getRecipeCanonicalTitle(item)) === sourceTitleKey
+      );
       return existing || null;
     };
 
@@ -1527,6 +1532,7 @@ function RecipesPageContent() {
       if (!targetUserId) {
         const existingLocal = findExistingMineLocal();
         if (existingLocal) {
+          setActionMessage(guestLocalWarning);
           if (showOverlayForThisCopy) {
             showFirstRecipeOverlay(existingLocal.id);
           } else {
@@ -1546,10 +1552,10 @@ function RecipesPageContent() {
         };
 
         upsertRecipeInLocalCache(localCopy);
+        setActionMessage(guestLocalWarning);
         if (showOverlayForThisCopy) {
           showFirstRecipeOverlay(localCopy.id);
         } else {
-          setActionMessage("");
           showAddedFeedback(source.title || "", localCopy.id);
         }
         return;
@@ -1612,6 +1618,7 @@ function RecipesPageContent() {
   };
 
   const handleClearAllRecipes = async () => {
+    setIsTopbarOverflowOpen(false);
     const ok = await confirm({
       message: t("recipes.messages.clearAllConfirm"),
       tone: "danger",
@@ -1686,114 +1693,12 @@ function RecipesPageContent() {
     }
   };
 
-  const markPersonalTagsHintSeen = () => {
-    if (typeof window !== "undefined") {
-      localStorage.setItem(PERSONAL_TAGS_HINT_SEEN_KEY, "1");
-    }
-    setShowPersonalTagsHint(false);
-  };
-
-  const savePersonalTagsForRecipe = async (recipe: RecipeModel, nextTagsRaw: string[]) => {
-    const nextTags = Array.from(
-      new Set(
-        nextTagsRaw
-          .map((item) => normalizePersonalTag(item))
-          .filter((item) => item.length > 0)
-      )
-    );
-
-    setSavingPersonalTagsRecipeId(recipe.id);
-    try {
-      let savedTags = nextTags;
-      const canUseSupabaseMeta =
-        isSupabaseConfigured() &&
-        Boolean(currentUserId) &&
-        recipe.ownerId === currentUserId;
-
-      if (canUseSupabaseMeta) {
-        savedTags = await updateRecipePersonalTags(currentUserId as string, recipe.id, nextTags);
-      }
-
-      const applyUpdate = (item: RecipeModel): RecipeModel =>
-        item.id === recipe.id ? { ...item, personalTags: savedTags } : item;
-
-      setRecipes((prev) => prev.map(applyUpdate));
-
-      const localSnapshot = findRecipeInLocalCacheById(recipe.id);
-      if (localSnapshot) {
-        upsertRecipeInLocalCache({ ...localSnapshot, personalTags: savedTags });
-      } else {
-        upsertRecipeInLocalCache({ ...recipe, personalTags: savedTags });
-      }
-    } catch (error) {
-      const text = error instanceof Error ? error.message : t("recipes.personalTags.saveFailed");
-      setActionMessage(text);
-    } finally {
-      setSavingPersonalTagsRecipeId(null);
-    }
-  };
-
-  const handleSavePersonalTag = async (recipe: RecipeModel) => {
-    const parsed = parsePersonalTagsInput(personalTagDraft);
-    if (parsed.length === 0) return;
-
-    const tooLong = parsed.find((tag) => tag.length > PERSONAL_TAG_MAX_LENGTH);
-    if (tooLong) {
-      setActionMessage(t("recipes.personalTags.limitLength", { max: PERSONAL_TAG_MAX_LENGTH }));
-      return;
-    }
-
-    const current = recipe.personalTags || [];
-    const currentKeys = new Set(current.map((item) => normalizePersonalTagKey(item)));
-    const toAdd = parsed.filter((tag) => !currentKeys.has(normalizePersonalTagKey(tag)));
-    if (toAdd.length === 0) {
-      setPersonalTagDraft("");
-      setPersonalTagEditorRecipeId(null);
-      markPersonalTagsHintSeen();
-      return;
-    }
-
-    if (current.length + toAdd.length > PERSONAL_TAG_MAX_COUNT) {
-      setActionMessage(t("recipes.personalTags.limitCount", { max: PERSONAL_TAG_MAX_COUNT }));
-      return;
-    }
-
-    await savePersonalTagsForRecipe(recipe, [...current, ...toAdd]);
-    setActionMessage("");
-    setPersonalTagDraft("");
-    setPersonalTagEditorRecipeId(null);
-    markPersonalTagsHintSeen();
-  };
-
-  const handleRemovePersonalTag = async (recipe: RecipeModel, tagToRemove: string) => {
-    const removeKey = normalizePersonalTagKey(tagToRemove);
-    const next = (recipe.personalTags || []).filter((item) => normalizePersonalTagKey(item) !== removeKey);
-    await savePersonalTagsForRecipe(recipe, next);
-  };
-
-  const handleMovePersonalTag = async (
-    recipe: RecipeModel,
-    tag: string,
-    direction: "left" | "right"
-  ) => {
-    const current = [...(recipe.personalTags || [])];
-    const targetKey = normalizePersonalTagKey(tag);
-    const index = current.findIndex((item) => normalizePersonalTagKey(item) === targetKey);
-    if (index < 0) return;
-
-    const swapIndex = direction === "left" ? index - 1 : index + 1;
-    if (swapIndex < 0 || swapIndex >= current.length) return;
-
-    const next = [...current];
-    [next[index], next[swapIndex]] = [next[swapIndex], next[index]];
-    await savePersonalTagsForRecipe(recipe, next);
-  };
-
   const accountNameView = currentUserName || t("recipes.account.guestName");
   const accountEmailView = currentUserEmail || t("recipes.account.tapToLogin");
   const accountInitial = accountNameView.charAt(0).toUpperCase() || "G";
   const isGuest = !currentUserId;
   const hasAnyRecipes = recipes.length > 0;
+  const showTopbarOverflow = viewMode === "mine" && hasAnyRecipes;
   const hasActiveFilters =
     effectiveSelectedTags.length > 0 ||
     effectiveOnlyWithPhoto ||
@@ -1814,14 +1719,28 @@ function RecipesPageContent() {
     }
   };
 
-  const exportSelectedRecipesPdf = async () => {
-    if (!canUsePdfExport) {
-      setShowPdfProPrompt(true);
-      setActionMessage("");
-      return;
-    }
-    setShowPdfProPrompt(false);
-    if (selectedMineRecipes.length === 0) {
+  const mapRecipeToPdfEntry = (recipe: RecipeModel) => {
+    const localized = getRecipeLocalizedContent(recipe, uiRecipeLanguage);
+    const stepLines = String(localized.instructions || localized.description || "")
+      .split(/\n+/g)
+      .map((line) => line.trim())
+      .filter(Boolean);
+    return {
+      title: String(localized.title || recipe.title || t("menu.fallback.recipeTitle")).trim(),
+      servings: recipe.servings || 2,
+      cookingTime:
+        [...(recipe.tags || []), ...(recipe.categories || [])].find((value) =>
+          /\d+\s*(мин|min|ч|hour|hr)/i.test(value || "")
+        ) || undefined,
+      ingredients: (recipe.ingredients || []).map((item) =>
+        `${item.amount} ${item.unit} ${item.name}`.trim()
+      ),
+      steps: stepLines.length > 0 ? stepLines : [t("pdf.fallback.noSteps")],
+    };
+  };
+
+  const exportRecipesPdf = async (items: RecipeModel[]) => {
+    if (items.length === 0) {
       setActionMessage(t("pdf.errors.selectRecipes"));
       return;
     }
@@ -1833,25 +1752,7 @@ function RecipesPageContent() {
         kind: "recipes",
         coverTitle: t("pdf.cover.recipes"),
         fileName: "planotto-recipes.pdf",
-        recipes: selectedMineRecipes.map((recipe) => {
-          const localized = getRecipeLocalizedContent(recipe, uiRecipeLanguage);
-          const stepLines = String(localized.instructions || localized.description || "")
-            .split(/\n+/g)
-            .map((line) => line.trim())
-            .filter(Boolean);
-          return {
-            title: String(localized.title || recipe.title || t("menu.fallback.recipeTitle")).trim(),
-            servings: recipe.servings || 2,
-            cookingTime:
-              [...(recipe.tags || []), ...(recipe.categories || [])].find((value) =>
-                /\d+\s*(мин|min|ч|hour|hr)/i.test(value || "")
-              ) || undefined,
-            ingredients: (recipe.ingredients || []).map((item) =>
-              `${item.amount} ${item.unit} ${item.name}`.trim()
-            ),
-            steps: stepLines.length > 0 ? stepLines : [t("pdf.fallback.noSteps")],
-          };
-        }),
+        recipes: items.map(mapRecipeToPdfEntry),
       });
     } catch (error) {
       const text = toErrorText(error, t("pdf.errors.exportFailed"));
@@ -1859,6 +1760,14 @@ function RecipesPageContent() {
     } finally {
       setIsExportingRecipesPdf(false);
     }
+  };
+
+  const exportSelectedRecipesPdf = async () => {
+    await exportRecipesPdf(selectedMineRecipes);
+  };
+
+  const exportSingleRecipePdf = async (recipe: RecipeModel) => {
+    await exportRecipesPdf([recipe]);
   };
 
   const toggleRecipeSelection = (recipeId: string, checked: boolean) => {
@@ -2042,43 +1951,74 @@ function RecipesPageContent() {
             </button>
           ) : null}
           </div>
-        <button className="recipes-account-chip" onClick={() => router.push("/auth")}>
-          <span
-            className={`recipes-account-chip__avatar ${
-              currentUserFrame ? "recipes-account-chip__avatar--has-frame" : ""
-            }`.trim()}
-          >
-            {currentUserAvatar ? (
-              <img
-                src={currentUserAvatar}
-                alt={t("recipes.account.avatarAlt")}
-                className={`recipes-account-chip__avatar-image ${
-                  currentUserFrame ? "recipes-account-chip__avatar-image--framed" : ""
-                }`}
-              />
-            ) : (
-              <span className="recipes-account-chip__avatar-initial">{accountInitial}</span>
-            )}
-            {currentUserFrame ? (
-              <img
-                src={currentUserFrame}
-                alt={t("recipes.account.frameAlt")}
-                className="recipes-account-chip__avatar-frame"
-              />
-            ) : null}
-          </span>
-          <span className="recipes-account-chip__content">
-            <span className="recipes-account-chip__meta">
-              {currentUserEmail ? t("recipes.account.accountLabel") : t("recipes.account.authLabel")}
+        <div className="recipes-topbar__right">
+          <button className="recipes-account-chip" onClick={() => router.push("/auth")}>
+            <span
+              className={`recipes-account-chip__avatar ${
+                currentUserFrame ? "recipes-account-chip__avatar--has-frame" : ""
+              }`.trim()}
+            >
+              {currentUserAvatar ? (
+                <img
+                  src={currentUserAvatar}
+                  alt={t("recipes.account.avatarAlt")}
+                  className={`recipes-account-chip__avatar-image ${
+                    currentUserFrame ? "recipes-account-chip__avatar-image--framed" : ""
+                  }`}
+                />
+              ) : (
+                <span className="recipes-account-chip__avatar-initial">{accountInitial}</span>
+              )}
+              {currentUserFrame ? (
+                <img
+                  src={currentUserFrame}
+                  alt={t("recipes.account.frameAlt")}
+                  className="recipes-account-chip__avatar-frame"
+                />
+              ) : null}
             </span>
-            <span className="recipes-account-chip__name" title={accountNameView}>
-              {accountNameView}
+            <span className="recipes-account-chip__content">
+              <span className="recipes-account-chip__meta">
+                {currentUserEmail ? t("recipes.account.accountLabel") : t("recipes.account.authLabel")}
+              </span>
+              <span className="recipes-account-chip__name" title={accountNameView}>
+                {accountNameView}
+              </span>
+              <span className="recipes-account-chip__email" title={accountEmailView}>
+                {accountEmailView}
+              </span>
             </span>
-            <span className="recipes-account-chip__email" title={accountEmailView}>
-              {accountEmailView}
-            </span>
-          </span>
-        </button>
+          </button>
+
+          {showTopbarOverflow ? (
+            <div className="recipes-topbar-overflow" ref={topbarOverflowRef}>
+              <button
+                type="button"
+                className="recipes-topbar-overflow__btn"
+                aria-haspopup="menu"
+                aria-expanded={isTopbarOverflowOpen}
+                aria-label={t("recipes.actions.more")}
+                onClick={() => setIsTopbarOverflowOpen((prev) => !prev)}
+              >
+                ⋯
+              </button>
+              {isTopbarOverflowOpen ? (
+                <div className="recipes-topbar-overflow__menu" role="menu">
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="recipes-topbar-overflow__item recipes-topbar-overflow__item--danger"
+                    onClick={() => {
+                      void handleClearAllRecipes();
+                    }}
+                  >
+                    {t("recipes.actions.clearMine")}
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
       </div>
 
       <h1 className="h1" style={{ marginBottom: "20px" }}>
@@ -2106,7 +2046,7 @@ function RecipesPageContent() {
       {isGuest ? (
         <div className="card" style={{ marginTop: "-4px", marginBottom: "12px", padding: "10px 12px" }}>
           <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
-            <span className="muted">🔒 {t("recipes.guestMode.notice")}</span>
+            <span className="muted">{t("recipes.guestMode.notice")}</span>
             <button type="button" className="btn btn-primary" onClick={() => router.push("/auth")}>
               {t("recipes.guestReminder.createAccount")}
             </button>
@@ -2165,17 +2105,6 @@ function RecipesPageContent() {
           </div>
         )
       ) : null}
-      {viewMode === "mine" && showPdfProPrompt ? (
-        <div className="card" style={{ marginTop: "-4px", marginBottom: "12px", padding: "10px 12px" }}>
-          <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
-            <span className="muted">🔒 {t("subscription.availableInPro")}</span>
-            <button type="button" className="btn btn-primary" onClick={() => router.push("/auth")}>
-              {t("subscription.goToPro")}
-            </button>
-          </div>
-        </div>
-      ) : null}
-
       {viewMode === "mine" && personalTagFilterOptions.length > 0 ? (
         <div className="recipes-filters-chips" style={{ marginTop: "-4px", marginBottom: "12px" }}>
           <span className="muted" style={{ alignSelf: "center" }}>{t("recipes.personalTags.filterLabel")}</span>
@@ -2506,17 +2435,6 @@ function RecipesPageContent() {
               </button>
             </div>
         ) : null}
-          {viewMode === "mine" && hasAnyRecipes ? (
-            <div className="recipes-clear-link-wrapper">
-              <button
-                type="button"
-                className="recipes-clear-link"
-                onClick={handleClearAllRecipes}
-              >
-                {t("recipes.actions.clearMine")}
-              </button>
-            </div>
-          ) : null}
       </div>
       ) : (
         <div style={{ display: "grid", gap: "12px" }}>
@@ -2533,7 +2451,6 @@ function RecipesPageContent() {
               viewMode === "public" &&
               existingMineTitleSet.has(normalizeRecipeTitle(getRecipeCanonicalTitle(recipe)));
             const isPublicSourceRecipe = viewMode === "public" && !isOwner;
-            const isGuestPublicViewer = isPublicSourceRecipe && !currentUserId;
             const recipeTitleKey = normalizeRecipeTitle(getRecipeCanonicalTitle(recipe));
             const existingMineRecipeId = isPublicSourceRecipe ? existingMineByTitle.get(recipeTitleKey) || null : null;
             const openTargetId = duplicateExists && existingMineRecipeId ? existingMineRecipeId : recipe.id;
@@ -2588,16 +2505,14 @@ function RecipesPageContent() {
                   })
                 : "";
             const mainActionLabel = isPublicSourceRecipe
-              ? isGuestPublicViewer
-                ? t("recipes.card.open")
-                : addDone
-                  ? t("recipes.card.alreadyMine")
-                  : isAdding
-                    ? t("recipes.card.adding")
-                    : t("recipes.card.addToMine")
+              ? addDone
+                ? t("recipes.card.alreadyMine")
+                : isAdding
+                  ? t("recipes.card.adding")
+                  : t("recipes.card.addToMine")
               : t("recipes.card.open");
             const mainActionClassName = `btn ${
-              isPublicSourceRecipe && !isGuestPublicViewer
+              isPublicSourceRecipe
                 ? addDone
                   ? "recipes-card__add-btn--disabled"
                   : "btn-primary"
@@ -2605,18 +2520,12 @@ function RecipesPageContent() {
             }`.trim();
             const menuTargetRecipeId = !isPublicSourceRecipe
               ? recipe.id
-              : isGuestPublicViewer
-                ? null
               : addDone
                 ? existingMineRecipeId
                 : null;
             const canQuickAddToMenu = profileGoal === "menu" && Boolean(menuTargetRecipeId);
             const handleMainAction = () => {
               if (isPublicSourceRecipe) {
-                if (isGuestPublicViewer) {
-                  router.push(`/recipes/${recipe.id}`);
-                  return;
-                }
                 if (addDone) {
                   return;
                 }
@@ -2638,19 +2547,14 @@ function RecipesPageContent() {
                 }}
               >
                 <div style={{ display: "flex", gap: "16px", alignItems: "flex-start" }}>
-                  {cardImage ? (
-                    <img
-                      src={cardImage}
-                      alt={recipeCardTitle}
-                      style={{
-                        width: "84px",
-                        height: "84px",
-                        borderRadius: "10px",
-                        objectFit: "cover",
-                        flexShrink: 0,
-                      }}
-                    />
-                  ) : null}
+                  <RecipeCardImage
+                    imageUrl={cardImage || undefined}
+                    label={recipeCardTitle}
+                    width={84}
+                    height={84}
+                    radius="10px"
+                    style={{ flexShrink: 0 }}
+                  />
 
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "flex-start" }}>
@@ -2829,11 +2733,6 @@ function RecipesPageContent() {
 
                     {isMineCard ? (
                       <div style={{ marginTop: "10px", display: "grid", gap: "8px" }}>
-                        <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
-                          <strong>📝 {t("recipes.personalTags.noteLabel")}:</strong>{" "}
-                          {recipe.notes?.trim() ? recipe.notes.trim() : t("recipes.personalTags.noteEmpty")}
-                        </div>
-
                         <div>
                           <div style={{ fontSize: "12px", color: "var(--text-secondary)", marginBottom: "6px" }}>
                             <strong>🏷 {t("recipes.personalTags.myTagsLabel")}:</strong>
@@ -2843,13 +2742,12 @@ function RecipesPageContent() {
                             </span>
                           </div>
                           <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
-                            {(recipe.personalTags || []).map((tag, index, list) => (
+                            {(recipe.personalTags || []).map((tag) => (
                               <span
                                 key={`${recipe.id}-${tag}`}
                                 style={{
                                   display: "inline-flex",
                                   alignItems: "center",
-                                  gap: "4px",
                                   border: "1px solid var(--border-default)",
                                   borderRadius: "999px",
                                   padding: "2px 8px",
@@ -2858,118 +2756,12 @@ function RecipesPageContent() {
                                 }}
                               >
                                 {tag}
-                                <button
-                                  type="button"
-                                  className="btn"
-                                  style={{ padding: "0 4px", minHeight: "auto", lineHeight: 1 }}
-                                  aria-label={t("recipes.personalTags.moveLeftAria", { tag })}
-                                  onClick={() => {
-                                    void handleMovePersonalTag(recipe, tag, "left");
-                                  }}
-                                  disabled={savingPersonalTagsRecipeId === recipe.id || index === 0}
-                                >
-                                  ‹
-                                </button>
-                                <button
-                                  type="button"
-                                  className="btn"
-                                  style={{ padding: "0 4px", minHeight: "auto", lineHeight: 1 }}
-                                  aria-label={t("recipes.personalTags.moveRightAria", { tag })}
-                                  onClick={() => {
-                                    void handleMovePersonalTag(recipe, tag, "right");
-                                  }}
-                                  disabled={savingPersonalTagsRecipeId === recipe.id || index === list.length - 1}
-                                >
-                                  ›
-                                </button>
-                                <button
-                                  type="button"
-                                  className="btn"
-                                  style={{ padding: "0 4px", minHeight: "auto", lineHeight: 1 }}
-                                  aria-label={t("recipes.personalTags.removeTagAria", { tag })}
-                                  onClick={() => {
-                                    void handleRemovePersonalTag(recipe, tag);
-                                  }}
-                                  disabled={savingPersonalTagsRecipeId === recipe.id}
-                                >
-                                  ×
-                                </button>
                               </span>
                             ))}
-                            <button
-                              type="button"
-                              className="btn"
-                              aria-label={t("recipes.personalTags.addTag")}
-                              title={t("recipes.personalTags.addTag")}
-                              style={{
-                                minHeight: "24px",
-                                lineHeight: 1.1,
-                                borderRadius: "999px",
-                                padding: "2px 9px",
-                                fontSize: "14px",
-                                fontWeight: 700,
-                                color: showPersonalTagsHint ? "var(--accent-primary)" : "var(--text-secondary)",
-                                borderColor: showPersonalTagsHint
-                                  ? "color-mix(in srgb, var(--accent-primary) 58%, var(--border-default) 42%)"
-                                  : "var(--border-default)",
-                                background: "var(--background-primary)",
-                              }}
-                              onClick={() => {
-                                setPersonalTagEditorRecipeId(recipe.id);
-                                setPersonalTagDraft("");
-                                markPersonalTagsHintSeen();
-                              }}
-                              disabled={savingPersonalTagsRecipeId === recipe.id}
-                            >
-                              +
-                            </button>
                           </div>
-                          {personalTagEditorRecipeId === recipe.id ? (
-                            <div style={{ marginTop: "8px", display: "grid", gap: "6px" }}>
-                              <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-                                <input
-                                  className="input"
-                                  type="text"
-                                  value={personalTagDraft}
-                                  onChange={(event) => setPersonalTagDraft(event.target.value)}
-                                  placeholder={t("recipes.personalTags.addPlaceholder")}
-                                  style={{ maxWidth: "240px" }}
-                                  onKeyDown={(event) => {
-                                    if (event.key === "Enter") {
-                                    event.preventDefault();
-                                    void handleSavePersonalTag(recipe);
-                                    }
-                                  }}
-                                />
-                                <button
-                                  type="button"
-                                  className="btn btn-primary"
-                                  onClick={() => {
-                                    void handleSavePersonalTag(recipe);
-                                  }}
-                                  disabled={savingPersonalTagsRecipeId === recipe.id}
-                                >
-                                  {t("recipes.personalTags.addAction")}
-                                </button>
-                                <button
-                                  type="button"
-                                  className="btn"
-                                  onClick={() => {
-                                    setPersonalTagEditorRecipeId(null);
-                                    setPersonalTagDraft("");
-                                  }}
-                                >
-                                  {t("recipes.personalTags.cancel")}
-                                </button>
-                              </div>
-                              <div className="muted" style={{ marginTop: "2px", fontSize: "12px" }}>
-                                {t("recipes.personalTags.bulkInputHint", {
-                                  max: PERSONAL_TAG_MAX_COUNT,
-                                  maxLength: PERSONAL_TAG_MAX_LENGTH,
-                                })}
-                              </div>
-                            </div>
-                          ) : null}
+                          <div className="muted" style={{ marginTop: "6px", fontSize: "12px" }}>
+                            {t("recipes.personalTags.editInRecipeCardHint")}
+                          </div>
                         </div>
                       </div>
                     ) : null}
@@ -2978,18 +2770,13 @@ function RecipesPageContent() {
                       <button
                         className={mainActionClassName}
                         onClick={handleMainAction}
-                        disabled={isPublicSourceRecipe && !isGuestPublicViewer && (isAdding || addDone)}
+                        disabled={isPublicSourceRecipe && (isAdding || addDone)}
                       >
                         {mainActionLabel}
                       </button>
-                      {isPublicSourceRecipe && !isGuestPublicViewer ? (
+                      {isPublicSourceRecipe ? (
                         <button className="btn" onClick={() => router.push(`/recipes/${openTargetId}`)}>
                           {t("recipes.card.open")}
-                        </button>
-                      ) : null}
-                      {isGuestPublicViewer ? (
-                        <button className="btn" onClick={() => router.push("/auth")}>
-                          🔒 {t("recipes.guestMode.addToMineLocked")}
                         </button>
                       ) : null}
                       {canQuickAddToMenu ? (
@@ -2998,6 +2785,17 @@ function RecipesPageContent() {
                           onClick={() => openMenuWithRecipe(menuTargetRecipeId as string)}
                         >
                           {t("recipes.success.addToMenu")}
+                        </button>
+                      ) : null}
+                      {isMineCard && !isSelectionMode ? (
+                        <button
+                          className="btn"
+                          onClick={() => {
+                            void exportSingleRecipePdf(recipe);
+                          }}
+                          disabled={isExportingRecipesPdf}
+                        >
+                          {isExportingRecipesPdf ? t("pdf.actions.exporting") : t("recipes.selection.exportPdf")}
                         </button>
                       ) : null}
                     </div>

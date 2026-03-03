@@ -1,3 +1,5 @@
+import type { NutritionInfo } from "./nutrition";
+
 export type AiAssistAction =
   | "ingredient_hints"
   | "tag_hints"
@@ -63,6 +65,7 @@ export interface ImportedRecipeDraft {
   image?: string;
   tags?: string[];
   ingredients: ImportedIngredient[];
+  nutrition?: NutritionInfo;
 }
 
 export interface RecipeImportResponse {

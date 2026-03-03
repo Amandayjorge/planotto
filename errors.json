@@ -1,0 +1,250 @@
+[
+  {
+    "recipeId": "b54c15e6-8855-4cca-83f8-d1362f602106",
+    "error": "Failed to parse URL from fal-ai/recraft/v2/text-to-image"
+  },
+  {
+    "recipeId": "9d2f8f7b-c05a-4016-a10d-b72fabb6eac5",
+    "error": "Failed to parse URL from fal-ai/recraft/v2/text-to-image"
+  },
+  {
+    "recipeId": "b7921ae7-76e9-493e-9554-d43e84bdd1aa",
+    "error": "Fal.ai responded with status 422"
+  },
+  {
+    "recipeId": "1b994cb7-dade-4dd2-9702-5fa4661bd0ee",
+    "error": "Fal.ai responded with status 422"
+  },
+  {
+    "recipeId": "dc0daed3-ddf8-4b3a-8075-512c07632c29",
+    "error": "Fal.ai responded with status 422"
+  },
+  {
+    "recipeId": "e96d186d-e497-4e3e-8ecd-5ab4f2b4dd96",
+    "error": "Fal.ai responded with status 422"
+  },
+  {
+    "recipeId": "69256f18-19de-431f-a100-f01f6b6a3fb7",
+    "error": "Fal.ai responded with status 422"
+  },
+  {
+    "recipeId": "dea8aad3-e303-4a02-9299-6f86ea3f77dc",
+    "error": "Fal.ai responded with status 422"
+  },
+  {
+    "recipeId": "9cf95da9-ab7f-4d4b-af7a-0d9d7d136cb6",
+    "error": "Fal.ai responded with status 422"
+  },
+  {
+    "recipeId": "b7921ae7-76e9-493e-9554-d43e84bdd1aa",
+    "error": "Fal.ai responded with status 422"
+  },
+  {
+    "recipeId": "1b994cb7-dade-4dd2-9702-5fa4661bd0ee",
+    "error": "Fal.ai responded with status 422"
+  },
+  {
+    "recipeId": "dc0daed3-ddf8-4b3a-8075-512c07632c29",
+    "error": "Fal.ai responded with status 422"
+  },
+  {
+    "recipeId": "e96d186d-e497-4e3e-8ecd-5ab4f2b4dd96",
+    "error": "Fal.ai responded with status 422"
+  },
+  {
+    "recipeId": "69256f18-19de-431f-a100-f01f6b6a3fb7",
+    "error": "Fal.ai responded with status 422"
+  },
+  {
+    "recipeId": "dea8aad3-e303-4a02-9299-6f86ea3f77dc",
+    "error": "Fal.ai responded with status 422"
+  },
+  {
+    "recipeId": "9cf95da9-ab7f-4d4b-af7a-0d9d7d136cb6",
+    "error": "Fal.ai responded with status 422"
+  },
+  {
+    "recipeId": "b7921ae7-76e9-493e-9554-d43e84bdd1aa",
+    "error": "Fal.ai responded with status 422"
+  },
+  {
+    "recipeId": "1b994cb7-dade-4dd2-9702-5fa4661bd0ee",
+    "error": "Fal.ai responded with status 422"
+  },
+  {
+    "recipeId": "dc0daed3-ddf8-4b3a-8075-512c07632c29",
+    "error": "Fal.ai responded with status 422"
+  },
+  {
+    "recipeId": "e96d186d-e497-4e3e-8ecd-5ab4f2b4dd96",
+    "error": "Fal.ai responded with status 422"
+  },
+  {
+    "recipeId": "69256f18-19de-431f-a100-f01f6b6a3fb7",
+    "error": "Fal.ai responded with status 422"
+  },
+  {
+    "recipeId": "dea8aad3-e303-4a02-9299-6f86ea3f77dc",
+    "error": "Fal.ai responded with status 422"
+  },
+  {
+    "recipeId": "9cf95da9-ab7f-4d4b-af7a-0d9d7d136cb6",
+    "error": "Fal.ai responded with status 422"
+  },
+  {
+    "at": "2026-03-02T19:34:26.743Z",
+    "recipeId": "b7921ae7-76e9-493e-9554-d43e84bdd1aa",
+    "endpoint": "https://fal.run/fal-ai/recraft/v2/text-to-image",
+    "error": "Fal.ai responded with status 422"
+  },
+  {
+    "at": "2026-03-02T19:34:49.066Z",
+    "recipeId": "1b994cb7-dade-4dd2-9702-5fa4661bd0ee",
+    "endpoint": "https://fal.run/fal-ai/recraft/v2/text-to-image",
+    "error": "Fal.ai responded with status 422"
+  },
+  {
+    "at": "2026-03-02T19:35:13.794Z",
+    "recipeId": "dc0daed3-ddf8-4b3a-8075-512c07632c29",
+    "endpoint": "https://fal.run/fal-ai/recraft/v2/text-to-image",
+    "error": "Fal.ai responded with status 422"
+  },
+  {
+    "at": "2026-03-02T19:35:37.808Z",
+    "recipeId": "e96d186d-e497-4e3e-8ecd-5ab4f2b4dd96",
+    "endpoint": "https://fal.run/fal-ai/recraft/v2/text-to-image",
+    "error": "Fal.ai responded with status 422"
+  },
+  {
+    "at": "2026-03-02T19:35:51.427Z",
+    "recipeId": "69256f18-19de-431f-a100-f01f6b6a3fb7",
+    "endpoint": "https://fal.run/fal-ai/recraft/v2/text-to-image",
+    "error": "Fal.ai responded with status 422"
+  },
+  {
+    "at": "2026-03-02T19:36:09.039Z",
+    "recipeId": "dea8aad3-e303-4a02-9299-6f86ea3f77dc",
+    "endpoint": "https://fal.run/fal-ai/recraft/v2/text-to-image",
+    "error": "Fal.ai responded with status 422"
+  },
+  {
+    "at": "2026-03-02T19:36:25.218Z",
+    "recipeId": "9cf95da9-ab7f-4d4b-af7a-0d9d7d136cb6",
+    "endpoint": "https://fal.run/fal-ai/recraft/v2/text-to-image",
+    "error": "Fal.ai responded with status 422"
+  },
+  {
+    "at": "2026-03-02T20:34:23.006Z",
+    "recipeId": "b7921ae7-76e9-493e-9554-d43e84bdd1aa",
+    "endpoint": "https://queue.fal.run/fal-ai/flux/schnell",
+    "error": "Fal.ai responded with status 422"
+  },
+  {
+    "at": "2026-03-02T20:34:30.681Z",
+    "recipeId": "1b994cb7-dade-4dd2-9702-5fa4661bd0ee",
+    "endpoint": "https://queue.fal.run/fal-ai/flux/schnell",
+    "error": "Fal.ai responded with status 422"
+  },
+  {
+    "at": "2026-03-02T20:34:38.391Z",
+    "recipeId": "dc0daed3-ddf8-4b3a-8075-512c07632c29",
+    "endpoint": "https://queue.fal.run/fal-ai/flux/schnell",
+    "error": "Fal.ai responded with status 422"
+  },
+  {
+    "at": "2026-03-02T20:34:46.075Z",
+    "recipeId": "e96d186d-e497-4e3e-8ecd-5ab4f2b4dd96",
+    "endpoint": "https://queue.fal.run/fal-ai/flux/schnell",
+    "error": "Fal.ai responded with status 422"
+  },
+  {
+    "at": "2026-03-02T20:34:53.749Z",
+    "recipeId": "69256f18-19de-431f-a100-f01f6b6a3fb7",
+    "endpoint": "https://queue.fal.run/fal-ai/flux/schnell",
+    "error": "Fal.ai responded with status 422"
+  },
+  {
+    "at": "2026-03-02T20:35:04.537Z",
+    "recipeId": "dea8aad3-e303-4a02-9299-6f86ea3f77dc",
+    "endpoint": "https://queue.fal.run/fal-ai/flux/schnell",
+    "error": "Fal.ai responded with status 422"
+  },
+  {
+    "at": "2026-03-02T20:35:10.375Z",
+    "recipeId": "9cf95da9-ab7f-4d4b-af7a-0d9d7d136cb6",
+    "endpoint": "https://queue.fal.run/fal-ai/flux/schnell",
+    "error": "Fal.ai responded with status 422"
+  },
+  {
+    "at": "2026-03-02T20:45:28.571Z",
+    "recipeId": "b7921ae7-76e9-493e-9554-d43e84bdd1aa",
+    "endpoint": "https://queue.fal.run/fal-ai/flux/schnell",
+    "error": "Fal.ai responded with status 422: Field required"
+  },
+  {
+    "at": "2026-03-02T20:45:52.723Z",
+    "recipeId": "1b994cb7-dade-4dd2-9702-5fa4661bd0ee",
+    "endpoint": "https://queue.fal.run/fal-ai/flux/schnell",
+    "error": "Fal.ai responded with status 422: Field required"
+  },
+  {
+    "at": "2026-03-02T20:46:13.180Z",
+    "recipeId": "dc0daed3-ddf8-4b3a-8075-512c07632c29",
+    "endpoint": "https://queue.fal.run/fal-ai/flux/schnell",
+    "error": "Fal.ai responded with status 422: Field required"
+  },
+  {
+    "at": "2026-03-02T20:46:45.907Z",
+    "recipeId": "e96d186d-e497-4e3e-8ecd-5ab4f2b4dd96",
+    "endpoint": "https://queue.fal.run/fal-ai/flux/schnell",
+    "error": "Fal.ai responded with status 422: Field required"
+  },
+  {
+    "at": "2026-03-02T20:47:28.624Z",
+    "recipeId": "69256f18-19de-431f-a100-f01f6b6a3fb7",
+    "endpoint": "https://queue.fal.run/fal-ai/flux/schnell",
+    "error": "Fal.ai responded with status 422: Field required"
+  },
+  {
+    "at": "2026-03-02T20:47:33.340Z",
+    "recipeId": "b7921ae7-76e9-493e-9554-d43e84bdd1aa",
+    "endpoint": "https://queue.fal.run/fal-ai/flux/schnell",
+    "error": "Fal.ai responded with status 422: Field required"
+  },
+  {
+    "at": "2026-03-02T20:48:00.065Z",
+    "recipeId": "1b994cb7-dade-4dd2-9702-5fa4661bd0ee",
+    "endpoint": "https://queue.fal.run/fal-ai/flux/schnell",
+    "error": "Fal.ai responded with status 422: Field required"
+  },
+  {
+    "at": "2026-03-02T20:48:25.022Z",
+    "recipeId": "dc0daed3-ddf8-4b3a-8075-512c07632c29",
+    "endpoint": "https://queue.fal.run/fal-ai/flux/schnell",
+    "error": "Fal.ai responded with status 422: Field required"
+  },
+  {
+    "at": "2026-03-02T20:48:54.927Z",
+    "recipeId": "e96d186d-e497-4e3e-8ecd-5ab4f2b4dd96",
+    "endpoint": "https://queue.fal.run/fal-ai/flux/schnell",
+    "error": "Fal.ai responded with status 422: Field required"
+  },
+  {
+    "at": "2026-03-02T20:49:13.875Z",
+    "recipeId": "69256f18-19de-431f-a100-f01f6b6a3fb7",
+    "endpoint": "https://queue.fal.run/fal-ai/flux/schnell",
+    "error": "Fal.ai responded with status 422: Field required"
+  },
+  {
+    "at": "2026-03-02T20:49:44.511Z",
+    "recipeId": "dea8aad3-e303-4a02-9299-6f86ea3f77dc",
+    "endpoint": "https://queue.fal.run/fal-ai/flux/schnell",
+    "error": "Fal.ai responded with status 422: Field required"
+  },
+  {
+    "at": "2026-03-02T20:50:02.680Z",
+    "recipeId": "9cf95da9-ab7f-4d4b-af7a-0d9d7d136cb6",
+    "endpoint": "https://queue.fal.run/fal-ai/flux/schnell",
+    "error": "Fal.ai responded with status 422: Field required"
+  }
+]

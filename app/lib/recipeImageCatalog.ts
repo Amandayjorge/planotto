@@ -31,6 +31,17 @@ const LEGACY_TEMPLATE_IMAGE_URLS = new Set<string>([
   "/recipes/templates/pasta-tomato.jpg",
   "/recipes/templates/tuna-salad.jpg",
   "/recipes/templates/oladi-kefir.jpg",
+  "/recipes/templates/yogurt-granola.jpg",
+  "/recipes/templates/buckwheat-mushrooms.jpg",
+  "/recipes/templates/mashed-potatoes.jpg",
+  "/recipes/templates/vegetable-soup.jpg",
+  "/recipes/templates/fried-rice-egg.jpg",
+  "/recipes/templates/turkey-sandwich.jpg",
+  "/recipes/templates/cottage-cheese-berries.jpg",
+  "/recipes/templates/roasted-vegetables.jpg",
+  "/recipes/templates/rice-vegetables.jpg",
+  "/recipes/templates/crepes-milk.jpg",
+  "/recipes/templates/tuna-pasta.jpg",
 ]);
 
 const isUnstableExternalRecipeImageUrl = (value: string): boolean => {
@@ -77,42 +88,42 @@ const TEMPLATE_RECIPE_IMAGE_ENTRIES: TemplateRecipeImageEntry[] = [
   },
   {
     id: "seed-greek-yogurt-granola",
-    image: null,
+    image: "/recipes/templates/yogurt-granola.jpg",
     titles: ["Йогурт с гранолой", "Yogurt with granola", "Yogur con granola"],
   },
   {
     id: "seed-buckwheat-mushrooms",
-    image: null,
+    image: "/recipes/templates/buckwheat-mushrooms.jpg",
     titles: ["Гречка с грибами", "Buckwheat with mushrooms", "Trigo sarraceno con champinones"],
   },
   {
     id: "seed-mashed-potatoes",
-    image: null,
+    image: "/recipes/templates/mashed-potatoes.jpg",
     titles: ["Картофельное пюре", "Mashed potatoes", "Pure de patatas"],
   },
   {
     id: "seed-vegetable-soup",
-    image: null,
+    image: "/recipes/templates/vegetable-soup.jpg",
     titles: ["Овощной суп", "Vegetable soup", "Sopa de verduras"],
   },
   {
     id: "seed-fried-rice-egg",
-    image: null,
+    image: "/recipes/templates/fried-rice-egg.jpg",
     titles: ["Жареный рис с яйцом", "Fried rice with egg", "Arroz frito con huevo"],
   },
   {
     id: "seed-turkey-sandwich",
-    image: null,
+    image: "/recipes/templates/turkey-sandwich.jpg",
     titles: ["Сэндвич с индейкой", "Turkey sandwich", "Sandwich de pavo"],
   },
   {
     id: "seed-cottage-cheese-berries",
-    image: null,
+    image: "/recipes/templates/cottage-cheese-berries.jpg",
     titles: ["Творог с ягодами", "Cottage cheese with berries", "Requeson con frutos rojos"],
   },
   {
     id: "seed-roasted-vegetables",
-    image: null,
+    image: "/recipes/templates/roasted-vegetables.jpg",
     titles: ["Запеченные овощи", "Roasted vegetables", "Verduras al horno"],
   },
   {
@@ -127,17 +138,17 @@ const TEMPLATE_RECIPE_IMAGE_ENTRIES: TemplateRecipeImageEntry[] = [
   },
   {
     id: "seed-rice-vegetables",
-    image: null,
+    image: "/recipes/templates/rice-vegetables.jpg",
     titles: ["Рис с овощами", "Rice with vegetables", "Arroz con verduras"],
   },
   {
     id: "seed-crepes-milk",
-    image: null,
+    image: "/recipes/templates/crepes-milk.jpg",
     titles: ["Блины на молоке", "Milk crepes", "Crepes con leche"],
   },
   {
     id: "seed-tuna-pasta-creamy",
-    image: null,
+    image: "/recipes/templates/tuna-pasta.jpg",
     titles: ["Паста с тунцом", "Pasta with tuna", "Pasta con atun"],
   },
 ];
@@ -192,11 +203,10 @@ export const resolveRecipeImageForCard = (recipe: RecipeImageCandidate): string 
     String(recipe.title || "")
   );
   const direct = String(recipe.image || "").trim();
-
   if (!mapped.matched) return direct;
 
   if (recipe.isTemplate === true || recipe.type === "template") {
-    return mapped.image || "";
+    return mapped.image || direct || "";
   }
 
   if (!direct) return mapped.image || "";
