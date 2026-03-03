@@ -26,7 +26,6 @@ const NAV_ITEMS: NavItem[] = [
   { path: "/pantry", labelKey: "header.nav.pantry" },
   { path: "/shopping-list", labelKey: "header.nav.shopping" },
   { path: "/how-it-works", labelKey: "header.nav.howIcon", mobileLabelKey: "header.nav.how" },
-  { path: "/auth", labelKey: "header.nav.account" },
 ];
 
 export default function Header() {
@@ -89,6 +88,8 @@ export default function Header() {
 
   const mobileLinkClass = (path: string) =>
     pathname === path ? "mobile-menu__link mobile-menu__link--active" : "mobile-menu__link";
+  const accountLinkClass =
+    pathname === "/auth" ? "header__account-link header__account-link--active" : "header__account-link";
 
   const clearShoppingHighlight = () => {
     if (typeof window === "undefined") return;
@@ -135,14 +136,24 @@ export default function Header() {
             </Link>
           ))}
         </nav>
-        <button
-          className="header__menu-btn"
-          onClick={toggleMobileMenu}
-          type="button"
-          aria-label={t("header.aria.openMenu")}
-        >
-          <span className="header__menu-icon" />
-        </button>
+        <div className="header__actions">
+          <Link
+            href="/auth"
+            className={accountLinkClass}
+            title={t("header.nav.account")}
+            aria-label={t("header.nav.account")}
+          >
+            <span className="header__account-icon" aria-hidden="true">👤</span>
+          </Link>
+          <button
+            className="header__menu-btn"
+            onClick={toggleMobileMenu}
+            type="button"
+            aria-label={t("header.aria.openMenu")}
+          >
+            <span className="header__menu-icon" />
+          </button>
+        </div>
       </div>
 
       {isMobileMenuOpen && (
