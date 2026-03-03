@@ -1950,6 +1950,16 @@ function RecipesPageContent() {
   const isFilteredEmpty = !isLoading && hasAnyRecipes && filteredRecipes.length === 0;
   const showFirstRecipePrompt = isFirstRecipeFlow && !showFirstRecipeSuccess;
 
+  const resetAllRecipeFilters = useCallback(() => {
+    setOnlyWithPhoto(false);
+    setOnlyWithNotes(false);
+    setOnlyWithActiveProducts(false);
+    setOnlyFromPantry(false);
+    setSelectedTags([]);
+    setSelectedPersonalTagFilters([]);
+    setSearchQuery("");
+  }, []);
+
   const handleDismissGuestRegisterReminder = () => {
     setShowGuestRegisterReminder(false);
     if (typeof window !== "undefined") {
@@ -2541,22 +2551,41 @@ function RecipesPageContent() {
               )}
 
               {hasActiveFilters ? (
-                <button
-                  type="button"
-                  className="btn"
-                  onClick={() => {
-                    setOnlyWithPhoto(false);
-                    setOnlyWithNotes(false);
-                    setOnlyWithActiveProducts(false);
-                    setOnlyFromPantry(false);
-                    setSelectedTags([]);
-                    setSelectedPersonalTagFilters([]);
-                    setSearchQuery("");
-                  }}
-                >
-                  {t("recipes.filters.resetAll")}
-                </button>
-              ) : null}
+                <div className="recipes-filters-advanced__actions">
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={() => setShowAdvancedFilters(false)}
+                  >
+                    {t("recipes.filters.apply")}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={resetAllRecipeFilters}
+                  >
+                    {t("recipes.filters.reset")}
+                  </button>
+                </div>
+              ) : (
+                <div className="recipes-filters-advanced__actions">
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={() => setShowAdvancedFilters(false)}
+                  >
+                    {t("recipes.filters.apply")}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={resetAllRecipeFilters}
+                    disabled
+                  >
+                    {t("recipes.filters.reset")}
+                  </button>
+                </div>
+              )}
             </div>
           ) : null}
         </>
@@ -2727,15 +2756,7 @@ function RecipesPageContent() {
             <div style={{ marginTop: "14px" }}>
               <button
                 className="btn"
-                onClick={() => {
-                  setOnlyWithPhoto(false);
-                  setOnlyWithNotes(false);
-                  setOnlyWithActiveProducts(false);
-                  setOnlyFromPantry(false);
-                  setSelectedTags([]);
-                  setSelectedPersonalTagFilters([]);
-                  setSearchQuery("");
-                }}
+                onClick={resetAllRecipeFilters}
               >
                 {t("recipes.filters.resetAll")}
               </button>

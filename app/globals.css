@@ -4604,6 +4604,14 @@ body {
   background: var(--background-primary);
 }
 
+.recipes-filters-advanced__actions {
+  margin-top: 12px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .recipes-tag-groups {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -5074,6 +5082,15 @@ body:has(.shopping-print-page-marker) .main {
   .recipes-tag-groups {
     grid-template-columns: 1fr;
     gap: 8px;
+  }
+
+  .recipes-filters-advanced__actions {
+    justify-content: stretch;
+  }
+
+  .recipes-filters-advanced__actions .btn {
+    flex: 1 1 calc(50% - 4px);
+    justify-content: center;
   }
 
   .recipes-list-card {

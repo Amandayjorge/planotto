@@ -696,6 +696,8 @@
         "cooking": "Preparacion",
         "other": "Otros"
       },
+      "apply": "Aplicar filtros",
+      "reset": "Restablecer",
       "resetAll": "Restablecer todo",
       "tags": "Etiquetas",
       "resetTags": "Restablecer etiquetas"

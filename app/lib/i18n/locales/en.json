@@ -696,6 +696,8 @@
         "cooking": "Cooking",
         "other": "Other"
       },
+      "apply": "Apply filters",
+      "reset": "Reset",
       "resetAll": "Reset all",
       "tags": "Tags",
       "resetTags": "Reset tags"
