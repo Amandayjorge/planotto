@@ -2857,6 +2857,7 @@ function RecipesPageContent() {
                 : null;
             const canQuickAddToMenu = profileGoal === "menu" && Boolean(menuTargetRecipeId);
             const compactPersonalTags = (recipe.personalTags || []).slice(0, 3);
+            const showCompactMeta = isMineCard && compactPersonalTags.length > 0;
             const handleMainAction = () => {
               if (isPublicSourceRecipe) {
                 if (addDone) {
@@ -2895,10 +2896,9 @@ function RecipesPageContent() {
                       <div style={{ minWidth: 0 }}>
                         <h3 style={{ margin: 0 }}>{recipeCardTitle}</h3>
                         <div style={{ marginTop: "4px", fontSize: "12px", color: "var(--text-tertiary)", display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
-                          <span>{sourceLabel}</span>
+                          {!isPublicSourceRecipe ? <span>{sourceLabel}</span> : null}
                           {shouldShowAuthor ? (
                             <span>
-                              {t("recipes.card.authorLabel")}:{" "}
                               {canOpenAuthorPage ? (
                                 <Link
                                   href={`/authors/${encodeURIComponent(authorUserId || "system")}`}
@@ -3042,25 +3042,24 @@ function RecipesPageContent() {
                           </div>
                         ) : null}
                       </div>
-                      <div
-                        className="recipes-list-card__side-meta"
-                        style={{
-                          display: "flex",
-                          flexDirection: "column",
-                          alignItems: "flex-end",
-                          gap: "4px",
-                          fontSize: "13px",
-                          color: "var(--text-secondary)",
-                          flexShrink: 0,
-                        }}
-                      >
-                        <span>{t("recipes.card.servings", { count: recipe.servings || 2 })}</span>
-                        {timesCooked > 0 ? (
+                      {timesCooked > 0 ? (
+                        <div
+                          className="recipes-list-card__side-meta"
+                          style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            alignItems: "flex-end",
+                            gap: "4px",
+                            fontSize: "13px",
+                            color: "var(--text-secondary)",
+                            flexShrink: 0,
+                          }}
+                        >
                           <span style={{ fontSize: "11px", color: "var(--text-tertiary)" }}>
                             {t("recipes.card.cookedTimes", { count: timesCooked })}
                           </span>
-                        ) : null}
-                      </div>
+                        </div>
+                      ) : null}
                       {isMineCard && isSelectionMode ? (
                         <label style={{ display: "inline-flex", alignItems: "center", gap: "6px", marginLeft: "8px", fontSize: "12px", color: "var(--text-secondary)" }}>
                           <input
@@ -3094,14 +3093,13 @@ function RecipesPageContent() {
                       ) : null;
                     })()}
 
-                    <div className="recipes-list-card__compact-meta">
-                      <span>{t("recipes.card.servings", { count: recipe.servings || 2 })}</span>
-                      {isMineCard && compactPersonalTags.length > 0 ? (
+                    {showCompactMeta ? (
+                      <div className="recipes-list-card__compact-meta">
                         <span>
-                          • {t("recipes.personalTags.myTagsLabel")}: {compactPersonalTags.join(", ")}
+                          {t("recipes.personalTags.myTagsLabel")}: {compactPersonalTags.join(", ")}
                         </span>
-                      ) : null}
-                    </div>
+                      </div>
+                    ) : null}
 
                     {isMineCard ? (
                       <div className="recipes-list-card__my-tags-panel" style={{ marginTop: "10px", display: "grid", gap: "8px" }}>
