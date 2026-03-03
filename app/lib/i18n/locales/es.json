@@ -688,6 +688,14 @@
         "description": "Elige los idiomas que se mostrarán por defecto en tu biblioteca.",
         "interfaceHint": "Idioma de la interfaz (siempre incluido)"
       },
+      "tagGroups": {
+        "dietType": "Tipo de alimentacion",
+        "mealType": "Comida",
+        "complexityTime": "Complejidad y tiempo",
+        "features": "Caracteristicas",
+        "cooking": "Preparacion",
+        "other": "Otros"
+      },
       "resetAll": "Restablecer todo",
       "tags": "Etiquetas",
       "resetTags": "Restablecer etiquetas"

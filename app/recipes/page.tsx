@@ -88,6 +88,38 @@ const VISIBILITY_BADGE_META: Record<
   },
 };
 
+const RECIPE_TAG_FILTER_GROUPS: Array<{
+  id: string;
+  titleKey: string;
+  tags: string[];
+}> = [
+  {
+    id: "dietType",
+    titleKey: "recipes.filters.tagGroups.dietType",
+    tags: ["vegan", "vegetarian", "gluten_free", "lactose_free", "healthy"],
+  },
+  {
+    id: "mealType",
+    titleKey: "recipes.filters.tagGroups.mealType",
+    tags: ["breakfast", "lunch", "dinner", "snack", "dessert", "soup", "side_dish"],
+  },
+  {
+    id: "complexityTime",
+    titleKey: "recipes.filters.tagGroups.complexityTime",
+    tags: ["quick", "medium", "long", "easy", "advanced"],
+  },
+  {
+    id: "features",
+    titleKey: "recipes.filters.tagGroups.features",
+    tags: ["kids", "festive", "everyday", "diet", "freezer_friendly", "make_ahead", "next_day"],
+  },
+  {
+    id: "cooking",
+    titleKey: "recipes.filters.tagGroups.cooking",
+    tags: ["oven", "pan", "multicooker", "no_bake", "baking"],
+  },
+];
+
 function looksLikeUrl(value: string): boolean {
   return /^(https?:\/\/|www\.)/i.test(value.trim());
 }
@@ -647,6 +679,31 @@ function RecipesPageContent() {
     () => AVAILABLE_RECIPE_LANGUAGES.filter((language) => language !== uiRecipeLanguage),
     [uiRecipeLanguage]
   );
+
+  const groupedRecipeTags = useMemo(() => {
+    const available = new Set<string>(RECIPE_TAGS);
+    const used = new Set<string>();
+    const groups = RECIPE_TAG_FILTER_GROUPS.map((group) => {
+      const tags = group.tags.filter((tag) => available.has(tag));
+      tags.forEach((tag) => used.add(tag));
+      return {
+        id: group.id,
+        title: t(group.titleKey),
+        tags,
+      };
+    }).filter((group) => group.tags.length > 0);
+
+    const ungrouped = RECIPE_TAGS.filter((tag) => !used.has(tag));
+    if (ungrouped.length > 0) {
+      groups.push({
+        id: "other",
+        title: t("recipes.filters.tagGroups.other"),
+        tags: ungrouped,
+      });
+    }
+
+    return groups;
+  }, [t]);
 
   const selectedAdditionalLanguageNames = useMemo(() => {
     const effectiveAdditionalLanguages = showAllRecipeLanguages
@@ -2435,38 +2492,38 @@ function RecipesPageContent() {
                   </div>
 
                   <div style={{ marginBottom: "8px", fontWeight: 600 }}>{t("recipes.filters.tags")}</div>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
-                    {RECIPE_TAGS.map((tag) => {
-                      const checked = selectedTags.includes(tag);
-                      const tagLabel = localizeRecipeTag(tag, locale as "ru" | "en" | "es");
-                      return (
-                        <label
-                          key={tag}
-                          style={{
-                            display: "inline-flex",
-                            alignItems: "center",
-                            gap: "6px",
-                            border: "1px solid var(--border-default)",
-                            borderRadius: "999px",
-                            padding: "6px 10px",
-                            background: checked ? "var(--background-secondary)" : "var(--background-primary)",
-                            cursor: "pointer",
-                          }}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={(e) => {
-                              setSelectedTags((prev) =>
-                                e.target.checked ? [...prev, tag] : prev.filter((item) => item !== tag)
-                              );
-                            }}
-                          />
-                          <span style={{ fontSize: "13px" }}>{tagLabel}</span>
-                        </label>
-                      );
-                    })}
-                    {selectedTags.length > 0 && (
+                  <div className="recipes-tag-groups">
+                    {groupedRecipeTags.map((group) => (
+                      <section key={group.id} className="recipes-tag-group">
+                        <h4 className="recipes-tag-group__title">{group.title}</h4>
+                        <div className="recipes-tag-group__chips">
+                          {group.tags.map((tag) => {
+                            const checked = selectedTags.includes(tag);
+                            const tagLabel = localizeRecipeTag(tag, locale as "ru" | "en" | "es");
+                            return (
+                              <label
+                                key={tag}
+                                className={`recipes-tag-chip ${checked ? "recipes-tag-chip--checked" : ""}`.trim()}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={(e) => {
+                                    setSelectedTags((prev) =>
+                                      e.target.checked ? [...prev, tag] : prev.filter((item) => item !== tag)
+                                    );
+                                  }}
+                                />
+                                <span>{tagLabel}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </section>
+                    ))}
+                  </div>
+                  <div style={{ marginTop: "10px" }}>
+                    {selectedTags.length > 0 ? (
                       <button
                         type="button"
                         className="btn"
@@ -2474,7 +2531,7 @@ function RecipesPageContent() {
                       >
                         {t("recipes.filters.resetTags")}
                       </button>
-                    )}
+                    ) : null}
                   </div>
                 </>
               ) : (

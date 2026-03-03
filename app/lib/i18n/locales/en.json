@@ -688,6 +688,14 @@
         "description": "Choose which languages should appear by default in your recipe library.",
         "interfaceHint": "Interface language (always included)"
       },
+      "tagGroups": {
+        "dietType": "Diet type",
+        "mealType": "Meal type",
+        "complexityTime": "Complexity and time",
+        "features": "Features",
+        "cooking": "Cooking",
+        "other": "Other"
+      },
       "resetAll": "Reset all",
       "tags": "Tags",
       "resetTags": "Reset tags"

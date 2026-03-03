@@ -4604,6 +4604,57 @@ body {
   background: var(--background-primary);
 }
 
+.recipes-tag-groups {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.recipes-tag-group {
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+  background: var(--background-secondary);
+  padding: 8px;
+}
+
+.recipes-tag-group__title {
+  margin: 0 0 8px;
+  font-size: 13px;
+  line-height: 1.3;
+  color: var(--text-secondary);
+}
+
+.recipes-tag-group__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.recipes-tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border-default);
+  border-radius: 999px;
+  padding: 5px 9px;
+  background: var(--background-primary);
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.recipes-tag-chip input {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+}
+
+.recipes-tag-chip--checked {
+  border-color: color-mix(in srgb, var(--accent-primary) 56%, var(--border-default));
+  background: color-mix(in srgb, var(--accent-primary) 14%, var(--background-primary));
+}
+
 .recipes-card__manage-actions {
   display: flex;
   align-items: center;
@@ -5018,6 +5069,11 @@ body:has(.shopping-print-page-marker) .main {
 
   .recipes-language-modal {
     width: min(94vw, 460px);
+  }
+
+  .recipes-tag-groups {
+    grid-template-columns: 1fr;
+    gap: 8px;
   }
 
   .recipes-list-card {
