@@ -665,8 +665,13 @@
       "onlyFromPantry": "Solo de despensa",
       "languageFilter": {
         "title": "Idioma de recetas",
-        "subtitle": "Por defecto mostramos recetas en el idioma de la interfaz",
-        "showAll": "Mostrar todos los idiomas",
+        "summaryInterface": "Solo idioma de la interfaz",
+        "summaryAdditional": "Interfaz + {{languages}}",
+        "summaryAdditionalEmpty": "Agregar idiomas",
+        "summaryAll": "Todos los idiomas",
+        "optionInterface": "Solo idioma de la interfaz",
+        "optionAdditional": "Agregar idiomas",
+        "optionAll": "Todos los idiomas",
         "alsoLabel": "Mostrar tambien:",
         "languageNames": {
           "ru": "Ruso",
@@ -700,6 +705,7 @@
       "share": "Compartir",
       "sharing": "Compartiendo...",
       "exportPdf": "Exportar PDF",
+      "exportSelected": "Exportar seleccionadas ({{count}})",
       "sendLink": "Enviar enlace",
       "sendingLink": "Creando enlace...",
       "selectAtLeastOne": "Selecciona al menos una receta.",

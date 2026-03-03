@@ -664,8 +664,13 @@
       "onlyFromPantry": "Только из кладовки",
       "languageFilter": {
         "title": "Язык рецептов",
-        "subtitle": "По умолчанию показываем рецепты на языке интерфейса",
-        "showAll": "Показывать все языки",
+        "summaryInterface": "На языке интерфейса",
+        "summaryAdditional": "Интерфейс + {{languages}}",
+        "summaryAdditionalEmpty": "Добавить языки",
+        "summaryAll": "Все языки",
+        "optionInterface": "Только язык интерфейса",
+        "optionAdditional": "Добавить языки",
+        "optionAll": "Все языки",
         "alsoLabel": "Показывать также:",
         "languageNames": {
           "ru": "Русский",
@@ -699,6 +704,7 @@
       "share": "Поделиться",
       "sharing": "Публикую...",
       "exportPdf": "Экспорт PDF",
+      "exportSelected": "Экспортировать выбранные ({{count}})",
       "sendLink": "Отправить ссылку",
       "sendingLink": "Создаю ссылку...",
       "selectAtLeastOne": "Выберите хотя бы один рецепт.",

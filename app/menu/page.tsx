@@ -1528,6 +1528,9 @@ function MenuPageContent() {
   const canUsePdfExport = isPaidFeatureEnabled(planTier, "pdf_export");
   const isAnyMenuPdfExporting = isExportingMenuPdf || isExportingMenuWithRecipesPdf;
   const additionalMenusLocked = !canUseMultipleMenus && menuProfiles.length >= 1;
+  const hasMultipleMenus = menuProfiles.length > 1;
+  const activeMenuDisplayName =
+    getMenuDisplayName(menuProfiles.find((menu) => menu.id === activeMenuId)?.name || "") || defaultMenuName;
   const countMenuItems = useCallback(
     (data: Record<string, MenuItem[]>) =>
       Object.values(data || {}).reduce((sum, items) => sum + (Array.isArray(items) ? items.length : 0), 0),
@@ -4463,19 +4466,25 @@ function MenuPageContent() {
           <div className="menu-selection">
             <div className="menu-selection__control">
               <span className="menu-selection__label">{t("menu.selector.label")}</span>
-              <select
-                className="input menu-selection__select"
-                value={activeMenuId}
-                onChange={(e) => handleSelectMenuProfile(e.target.value)}
-                title={t("menu.selector.aria")}
-                aria-label={t("menu.selector.aria")}
-              >
-                {menuProfiles.map((menu) => (
-                  <option key={menu.id} value={menu.id}>
-                    {getMenuDisplayName(menu.name)}
-                  </option>
-                ))}
-              </select>
+              {hasMultipleMenus ? (
+                <select
+                  className="input menu-selection__select"
+                  value={activeMenuId}
+                  onChange={(e) => handleSelectMenuProfile(e.target.value)}
+                  title={t("menu.selector.aria")}
+                  aria-label={t("menu.selector.aria")}
+                >
+                  {menuProfiles.map((menu) => (
+                    <option key={menu.id} value={menu.id}>
+                      {getMenuDisplayName(menu.name)}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <span className="menu-selection__current" aria-label={t("menu.selector.aria")}>
+                  {activeMenuDisplayName}
+                </span>
+              )}
               <button
                 type="button"
                 className="menu-settings-toggle"
@@ -4486,18 +4495,16 @@ function MenuPageContent() {
                 ⚙
               </button>
             </div>
-            {!isActiveMenuEmpty ? (
-              <div className="menu-selection__links">
-                <button
-                  type="button"
-                  className="menu-secondary-link"
-                  onClick={() => setIsCreateMenuDialogOpen(true)}
-                  title={additionalMenusLocked ? t("subscription.locks.multipleMenus") : undefined}
-                >
-                  {t("menu.templates.newMenu")}
-                </button>
-              </div>
-            ) : null}
+            <div className="menu-selection__links">
+              <button
+                type="button"
+                className="menu-secondary-link"
+                onClick={() => setIsCreateMenuDialogOpen(true)}
+                title={additionalMenusLocked ? t("subscription.locks.multipleMenus") : undefined}
+              >
+                {t("menu.templates.newMenu")}
+              </button>
+            </div>
           </div>
 
           <div className="menu-mode">

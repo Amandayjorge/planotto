@@ -64,6 +64,7 @@ const LANGUAGE_FILTER_SELECTION_KEY = "recipes:language-filter-selection-v2";
 const AVAILABLE_RECIPE_LANGUAGES: RecipeLanguage[] = ["ru", "en", "es"];
 
 type LegacyLanguageFilterMode = "interface" | "interfaceEnglish" | "all";
+type LanguageFilterUiMode = "interface" | "additional" | "all";
 type LanguageFilterSelection = {
   showAll: boolean;
   extra: RecipeLanguage[];
@@ -305,6 +306,23 @@ function normalizeLanguageFilterSelection(
     showAll,
     extra: showAll ? [] : extra,
   };
+}
+
+function normalizeLanguageFilterUiMode(value: unknown): LanguageFilterUiMode | null {
+  if (value === "interface" || value === "additional" || value === "all") {
+    return value;
+  }
+  return null;
+}
+
+function resolveLanguageFilterUiModeFromSelection(
+  selection: LanguageFilterSelection,
+  preferredMode?: LanguageFilterUiMode | null
+): LanguageFilterUiMode {
+  if (selection.showAll) return "all";
+  if (preferredMode === "additional") return "additional";
+  if (selection.extra.length > 0) return "additional";
+  return "interface";
 }
 
 function getLanguagesForFilterSelection(
@@ -569,7 +587,10 @@ function RecipesPageContent() {
   const [sortBy, setSortBy] = useState<SortOption>("newest");
   const [showAllRecipeLanguages, setShowAllRecipeLanguages] = useState(false);
   const [selectedAdditionalLanguages, setSelectedAdditionalLanguages] = useState<RecipeLanguage[]>([]);
+  const [languageFilterUiMode, setLanguageFilterUiMode] = useState<LanguageFilterUiMode>("interface");
+  const [isLanguageFilterOpen, setIsLanguageFilterOpen] = useState(false);
   const languageFilterLoaded = useRef(false);
+  const languageFilterRef = useRef<HTMLDivElement | null>(null);
   const [onlyWithPhoto, setOnlyWithPhoto] = useState(false);
   const [onlyWithNotes, setOnlyWithNotes] = useState(false);
   const [onlyWithActiveProducts, setOnlyWithActiveProducts] = useState(false);
@@ -628,6 +649,42 @@ function RecipesPageContent() {
     [uiRecipeLanguage]
   );
 
+  const applyLanguageFilterUiMode = useCallback((mode: LanguageFilterUiMode) => {
+    setLanguageFilterUiMode(mode);
+    if (mode === "all") {
+      setShowAllRecipeLanguages(true);
+      return;
+    }
+
+    setShowAllRecipeLanguages(false);
+    if (mode === "interface") {
+      setSelectedAdditionalLanguages([]);
+    }
+  }, []);
+
+  const selectedAdditionalLanguageNames = useMemo(
+    () =>
+      selectedAdditionalLanguages
+        .map((language) => t(`recipes.filters.languageFilter.languageNames.${language}`))
+        .filter(Boolean),
+    [selectedAdditionalLanguages, t]
+  );
+
+  const languageFilterSummary = useMemo(() => {
+    if (languageFilterUiMode === "all") {
+      return t("recipes.filters.languageFilter.summaryAll");
+    }
+    if (languageFilterUiMode === "additional") {
+      if (selectedAdditionalLanguageNames.length === 0) {
+        return t("recipes.filters.languageFilter.summaryAdditionalEmpty");
+      }
+      return t("recipes.filters.languageFilter.summaryAdditional", {
+        languages: selectedAdditionalLanguageNames.join(", "),
+      });
+    }
+    return t("recipes.filters.languageFilter.summaryInterface");
+  }, [languageFilterUiMode, selectedAdditionalLanguageNames, t]);
+
   const effectivePreferredRecipeLanguages = useMemo(
     () =>
       getLanguagesForFilterSelection(
@@ -662,8 +719,12 @@ function RecipesPageContent() {
       try {
         const parsed = JSON.parse(storedSelection);
         const normalized = normalizeLanguageFilterSelection(parsed, uiRecipeLanguage);
+        const savedMode = normalizeLanguageFilterUiMode(
+          (parsed && typeof parsed === "object" ? (parsed as { mode?: unknown }).mode : null)
+        );
         setShowAllRecipeLanguages(normalized.showAll);
         setSelectedAdditionalLanguages(normalized.extra);
+        setLanguageFilterUiMode(resolveLanguageFilterUiModeFromSelection(normalized, savedMode));
         return;
       } catch {
         // ignore malformed value
@@ -675,6 +736,7 @@ function RecipesPageContent() {
       const mapped = resolveLanguageFilterSelectionFromLegacyMode(storedLegacyMode, uiRecipeLanguage);
       setShowAllRecipeLanguages(mapped.showAll);
       setSelectedAdditionalLanguages(mapped.extra);
+      setLanguageFilterUiMode(resolveLanguageFilterUiModeFromSelection(mapped));
       return;
     }
 
@@ -685,6 +747,7 @@ function RecipesPageContent() {
       const resolved = resolveLanguageFilterSelectionFromPreferredList(parsed, uiRecipeLanguage);
       setShowAllRecipeLanguages(resolved.showAll);
       setSelectedAdditionalLanguages(resolved.extra);
+      setLanguageFilterUiMode(resolveLanguageFilterUiModeFromSelection(resolved));
     } catch {
       // ignore malformed legacy value
     }
@@ -698,9 +761,10 @@ function RecipesPageContent() {
       JSON.stringify({
         showAll: showAllRecipeLanguages,
         extra: showAllRecipeLanguages ? [] : normalizedExtra,
+        mode: languageFilterUiMode,
       })
     );
-  }, [showAllRecipeLanguages, selectedAdditionalLanguages, uiRecipeLanguage]);
+  }, [showAllRecipeLanguages, selectedAdditionalLanguages, uiRecipeLanguage, languageFilterUiMode]);
 
   useEffect(() => {
     setSelectedAdditionalLanguages((prev) =>
@@ -1027,6 +1091,35 @@ function RecipesPageContent() {
   useEffect(() => {
     setIsTopbarOverflowOpen(false);
   }, [viewMode, isSelectionMode]);
+
+  useEffect(() => {
+    setIsLanguageFilterOpen(false);
+  }, [viewMode]);
+
+  useEffect(() => {
+    if (!isLanguageFilterOpen) return;
+
+    const handleOutsideClick = (event: MouseEvent) => {
+      const target = event.target as Node | null;
+      if (!languageFilterRef.current || !target) return;
+      if (!languageFilterRef.current.contains(target)) {
+        setIsLanguageFilterOpen(false);
+      }
+    };
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsLanguageFilterOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleOutsideClick);
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("mousedown", handleOutsideClick);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [isLanguageFilterOpen]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1849,10 +1942,6 @@ function RecipesPageContent() {
     await exportRecipesPdf(selectedMineRecipes);
   };
 
-  const exportSingleRecipePdf = async (recipe: RecipeModel) => {
-    await exportRecipesPdf([recipe]);
-  };
-
   const toggleRecipeSelection = (recipeId: string, checked: boolean) => {
     setSelectedRecipeIds((prev) => {
       if (checked) return { ...prev, [recipeId]: true };
@@ -1864,6 +1953,7 @@ function RecipesPageContent() {
 
   const enterSelectionMode = () => {
     setIsSelectionMode(true);
+    setSelectedRecipeIds({});
     setActionMessage("");
   };
 
@@ -2146,33 +2236,15 @@ function RecipesPageContent() {
               <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
                 <button
                   type="button"
-                  className="btn"
-                  onClick={() => {
-                    void shareSelectedRecipesPublic();
-                  }}
-                  disabled={isSharingSelection || isSendingSelectionLink || isExportingRecipesPdf}
-                >
-                  {isSharingSelection ? t("recipes.selection.sharing") : t("recipes.selection.share")}
-                </button>
-                <button
-                  type="button"
-                  className="btn"
+                  className="btn btn-primary"
                   onClick={() => {
                     void exportSelectedRecipesPdf();
                   }}
-                  disabled={isExportingRecipesPdf || isSharingSelection || isSendingSelectionLink}
+                  disabled={isExportingRecipesPdf}
                 >
-                  {isExportingRecipesPdf ? t("pdf.actions.exporting") : t("recipes.selection.exportPdf")}
-                </button>
-                <button
-                  type="button"
-                  className="btn"
-                  onClick={() => {
-                    void sendSelectedRecipesByLink();
-                  }}
-                  disabled={isSendingSelectionLink || isSharingSelection || isExportingRecipesPdf}
-                >
-                  {isSendingSelectionLink ? t("recipes.selection.sendingLink") : t("recipes.selection.sendLink")}
+                  {isExportingRecipesPdf
+                    ? t("pdf.actions.exporting")
+                    : t("recipes.selection.exportSelected", { count: selectedMineRecipes.length })}
                 </button>
                 <button type="button" className="btn" onClick={exitSelectionMode}>
                   {t("recipes.selection.cancel")}
@@ -2181,42 +2253,11 @@ function RecipesPageContent() {
             </div>
           </div>
         ) : (
-          <>
-            {selectedMineRecipes.length > 0 ? (
-              <div className="card" style={{ marginTop: "-4px", marginBottom: "12px", padding: "10px 12px" }}>
-                <div style={{ display: "flex", gap: "8px", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap" }}>
-                  <strong style={{ fontSize: "14px" }}>
-                    {t("recipes.selection.count", { count: selectedMineRecipes.length })}
-                  </strong>
-                  <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
-                    <button
-                      type="button"
-                      className="btn"
-                      onClick={() => {
-                        void exportSelectedRecipesPdf();
-                      }}
-                      disabled={isExportingRecipesPdf}
-                    >
-                      {isExportingRecipesPdf ? t("pdf.actions.exporting") : t("recipes.selection.exportPdf")}
-                    </button>
-                    <button
-                      type="button"
-                      className="btn"
-                      onClick={() => setSelectedRecipeIds({})}
-                      disabled={isExportingRecipesPdf}
-                    >
-                      {t("recipes.selection.cancel")}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ) : null}
-            <div style={{ marginTop: "-4px", marginBottom: "12px" }}>
-              <button type="button" className="recipes-nav-back-link" onClick={enterSelectionMode}>
-                {t("recipes.selection.enter")}
-              </button>
-            </div>
-          </>
+          <div style={{ marginTop: "-4px", marginBottom: "12px" }}>
+            <button type="button" className="recipes-nav-back-link" onClick={enterSelectionMode}>
+              {t("recipes.selection.exportPdf")}
+            </button>
+          </div>
         )
       ) : null}
       {viewMode === "mine" && personalTagFilterOptions.length > 0 ? (
@@ -2257,48 +2298,87 @@ function RecipesPageContent() {
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder={t("recipes.filters.searchPlaceholder")}
             />
-            <div className="recipes-language-filter">
-              <span className="recipes-language-filter__label">
-                {t("recipes.filters.languageFilter.title")}
-              </span>
-              <span className="recipes-language-filter__hint">
-                {t("recipes.filters.languageFilter.subtitle")}
-              </span>
-              <label className="recipes-language-filter__checkbox">
-                <input
-                  type="checkbox"
-                  checked={showAllRecipeLanguages}
-                  onChange={(event) => setShowAllRecipeLanguages(event.target.checked)}
-                />
-                <span>{t("recipes.filters.languageFilter.showAll")}</span>
-              </label>
-              {!showAllRecipeLanguages ? (
-                <div className="recipes-language-filter__extra">
-                  <span className="recipes-language-filter__extra-label">
-                    {t("recipes.filters.languageFilter.alsoLabel")}
-                  </span>
-                  <div className="recipes-language-filter__checkbox-group">
-                    {additionalLanguageOptions.map((language) => (
-                      <label key={language} className="recipes-language-filter__checkbox">
-                        <input
-                          type="checkbox"
-                          checked={selectedAdditionalLanguages.includes(language)}
-                          onChange={(event) => {
-                            const checked = event.target.checked;
-                            setSelectedAdditionalLanguages((prev) => {
-                              if (checked) {
-                                return normalizeStoredRecipeLanguages([...prev, language]).filter(
-                                  (item) => item !== uiRecipeLanguage
-                                );
-                              }
-                              return prev.filter((item) => item !== language);
-                            });
-                          }}
-                        />
-                        <span>{t(`recipes.filters.languageFilter.languageNames.${language}`)}</span>
-                      </label>
-                    ))}
-                  </div>
+            <div className="recipes-language-filter" ref={languageFilterRef}>
+              <button
+                type="button"
+                className="recipes-language-filter__trigger"
+                aria-expanded={isLanguageFilterOpen}
+                onClick={() => setIsLanguageFilterOpen((prev) => !prev)}
+              >
+                <span className="recipes-language-filter__trigger-title">
+                  {t("recipes.filters.languageFilter.title")}:
+                </span>
+                <span className="recipes-language-filter__trigger-value">{languageFilterSummary}</span>
+                <span className="recipes-language-filter__trigger-chevron" aria-hidden="true">
+                  {isLanguageFilterOpen ? "▴" : "▾"}
+                </span>
+              </button>
+
+              {isLanguageFilterOpen ? (
+                <div className="recipes-language-filter__panel">
+                  <button
+                    type="button"
+                    className={`recipes-language-filter__mode-option ${
+                      languageFilterUiMode === "interface" ? "recipes-language-filter__mode-option--active" : ""
+                    }`.trim()}
+                    onClick={() => {
+                      applyLanguageFilterUiMode("interface");
+                      setIsLanguageFilterOpen(false);
+                    }}
+                  >
+                    {t("recipes.filters.languageFilter.optionInterface")}
+                  </button>
+                  <button
+                    type="button"
+                    className={`recipes-language-filter__mode-option ${
+                      languageFilterUiMode === "additional" ? "recipes-language-filter__mode-option--active" : ""
+                    }`.trim()}
+                    onClick={() => applyLanguageFilterUiMode("additional")}
+                  >
+                    {t("recipes.filters.languageFilter.optionAdditional")}
+                  </button>
+                  <button
+                    type="button"
+                    className={`recipes-language-filter__mode-option ${
+                      languageFilterUiMode === "all" ? "recipes-language-filter__mode-option--active" : ""
+                    }`.trim()}
+                    onClick={() => {
+                      applyLanguageFilterUiMode("all");
+                      setIsLanguageFilterOpen(false);
+                    }}
+                  >
+                    {t("recipes.filters.languageFilter.optionAll")}
+                  </button>
+
+                  {languageFilterUiMode === "additional" ? (
+                    <div className="recipes-language-filter__extra">
+                      <span className="recipes-language-filter__extra-label">
+                        {t("recipes.filters.languageFilter.alsoLabel")}
+                      </span>
+                      <div className="recipes-language-filter__checkbox-group">
+                        {additionalLanguageOptions.map((language) => (
+                          <label key={language} className="recipes-language-filter__checkbox">
+                            <input
+                              type="checkbox"
+                              checked={selectedAdditionalLanguages.includes(language)}
+                              onChange={(event) => {
+                                const checked = event.target.checked;
+                                setSelectedAdditionalLanguages((prev) => {
+                                  if (checked) {
+                                    return normalizeStoredRecipeLanguages([...prev, language]).filter(
+                                      (item) => item !== uiRecipeLanguage
+                                    );
+                                  }
+                                  return prev.filter((item) => item !== language);
+                                });
+                              }}
+                            />
+                            <span>{t(`recipes.filters.languageFilter.languageNames.${language}`)}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
             </div>
@@ -2661,6 +2741,7 @@ function RecipesPageContent() {
                 ? existingMineRecipeId
                 : null;
             const canQuickAddToMenu = profileGoal === "menu" && Boolean(menuTargetRecipeId);
+            const compactPersonalTags = (recipe.personalTags || []).slice(0, 3);
             const handleMainAction = () => {
               if (isPublicSourceRecipe) {
                 if (addDone) {
@@ -2674,7 +2755,7 @@ function RecipesPageContent() {
             return (
               <div
                 key={recipe.id}
-                className="card"
+                className="card recipes-list-card"
                 style={{
                   textAlign: "left",
                   background: isPublicSourceRecipe && addDone
@@ -2683,13 +2764,14 @@ function RecipesPageContent() {
                   borderColor: isPublicSourceRecipe && addDone ? "rgba(135, 152, 116, 0.45)" : undefined,
                 }}
               >
-                <div style={{ display: "flex", gap: "16px", alignItems: "flex-start" }}>
+                <div className="recipes-list-card__row" style={{ display: "flex", gap: "16px", alignItems: "flex-start" }}>
                   <RecipeCardImage
                     imageUrl={cardImage || undefined}
                     label={recipeCardTitle}
                     width={84}
                     height={84}
                     radius="10px"
+                    className="recipes-list-card__image"
                     style={{ flexShrink: 0 }}
                   />
 
@@ -2838,6 +2920,7 @@ function RecipesPageContent() {
                         ) : null}
                       </div>
                       <div
+                        className="recipes-list-card__side-meta"
                         style={{
                           display: "flex",
                           flexDirection: "column",
@@ -2855,7 +2938,7 @@ function RecipesPageContent() {
                           </span>
                         ) : null}
                       </div>
-                      {isMineCard ? (
+                      {isMineCard && isSelectionMode ? (
                         <label style={{ display: "inline-flex", alignItems: "center", gap: "6px", marginLeft: "8px", fontSize: "12px", color: "var(--text-secondary)" }}>
                           <input
                             type="checkbox"
@@ -2888,8 +2971,17 @@ function RecipesPageContent() {
                       ) : null;
                     })()}
 
+                    <div className="recipes-list-card__compact-meta">
+                      <span>{t("recipes.card.servings", { count: recipe.servings || 2 })}</span>
+                      {isMineCard && compactPersonalTags.length > 0 ? (
+                        <span>
+                          • {t("recipes.personalTags.myTagsLabel")}: {compactPersonalTags.join(", ")}
+                        </span>
+                      ) : null}
+                    </div>
+
                     {isMineCard ? (
-                      <div style={{ marginTop: "10px", display: "grid", gap: "8px" }}>
+                      <div className="recipes-list-card__my-tags-panel" style={{ marginTop: "10px", display: "grid", gap: "8px" }}>
                         <div>
                           <div style={{ fontSize: "12px", color: "var(--text-secondary)", marginBottom: "6px" }}>
                             <strong>🏷 {t("recipes.personalTags.myTagsLabel")}:</strong>
@@ -2923,7 +3015,7 @@ function RecipesPageContent() {
                       </div>
                     ) : null}
 
-                    <div style={{ marginTop: "10px", display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                    <div className="recipes-list-card__actions" style={{ marginTop: "10px", display: "flex", gap: "8px", flexWrap: "wrap" }}>
                       <button
                         className={mainActionClassName}
                         onClick={handleMainAction}
@@ -2932,7 +3024,7 @@ function RecipesPageContent() {
                         {mainActionLabel}
                       </button>
                       {isPublicSourceRecipe ? (
-                        <button className="btn" onClick={() => router.push(`/recipes/${openTargetId}`)}>
+                        <button className="btn recipes-list-card__open-link-btn" onClick={() => router.push(`/recipes/${openTargetId}`)}>
                           {t("recipes.card.open")}
                         </button>
                       ) : null}
@@ -2942,17 +3034,6 @@ function RecipesPageContent() {
                           onClick={() => openMenuWithRecipe(menuTargetRecipeId as string)}
                         >
                           {t("recipes.success.addToMenu")}
-                        </button>
-                      ) : null}
-                      {isMineCard && !isSelectionMode ? (
-                        <button
-                          className="btn"
-                          onClick={() => {
-                            void exportSingleRecipePdf(recipe);
-                          }}
-                          disabled={isExportingRecipesPdf}
-                        >
-                          {isExportingRecipesPdf ? t("pdf.actions.exporting") : t("recipes.selection.exportPdf")}
                         </button>
                       ) : null}
                     </div>

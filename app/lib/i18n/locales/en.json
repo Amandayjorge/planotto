@@ -665,8 +665,13 @@
         "onlyFromPantry": "Only from pantry",
         "languageFilter": {
           "title": "Recipe language",
-          "subtitle": "By default, we show recipes in the interface language",
-          "showAll": "Show all languages",
+          "summaryInterface": "Interface language only",
+          "summaryAdditional": "Interface + {{languages}}",
+          "summaryAdditionalEmpty": "Add languages",
+          "summaryAll": "All languages",
+          "optionInterface": "Interface language only",
+          "optionAdditional": "Add languages",
+          "optionAll": "All languages",
           "alsoLabel": "Also show:",
           "languageNames": {
             "ru": "Russian",
@@ -700,6 +705,7 @@
       "share": "Share",
       "sharing": "Sharing...",
       "exportPdf": "Export PDF",
+      "exportSelected": "Export selected ({{count}})",
       "sendLink": "Send link",
       "sendingLink": "Creating link...",
       "selectAtLeastOne": "Select at least one recipe.",
