@@ -2340,65 +2340,150 @@ function RecipesPageContent() {
             <button
               type="button"
               className={`btn ${showAdvancedFilters ? "btn-primary" : ""}`}
-              onClick={() => {
-                if (!canUseAdvancedFilters) {
-                  setActionMessage(t("subscription.locks.advancedFilters"));
-                  return;
-                }
-                setShowAdvancedFilters((prev) => !prev);
-              }}
+              onClick={() => setShowAdvancedFilters((prev) => !prev)}
             >
               {t("recipes.filters.button")}{effectiveSelectedTags.length > 0 ? ` (${effectiveSelectedTags.length})` : ""}
             </button>
           </div>
 
-          {canUseAdvancedFilters ? (
-            <div className="recipes-filters-chips">
-              <button
-                type="button"
-                className={`btn ${onlyWithPhoto ? "btn-primary" : ""}`}
-                onClick={() => {
-                  setOnlyWithPhoto((prev) => !prev);
-                }}
-              >
-                {t("recipes.filters.withPhoto")}
-              </button>
-              {viewMode === "mine" ? (
-                <button
-                  type="button"
-                  className={`btn ${onlyWithNotes ? "btn-primary" : ""}`}
-                  onClick={() => setOnlyWithNotes((prev) => !prev)}
+          {showAdvancedFilters ? (
+            <div className="recipes-filters-advanced">
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "10px" }}>
+                <div className="recipes-language-filter">
+                  <button
+                    type="button"
+                    className="recipes-language-filter__trigger"
+                    aria-expanded={isLanguageFilterOpen}
+                    aria-controls="recipes-language-filter-modal"
+                    onClick={() => setIsLanguageFilterOpen(true)}
+                  >
+                    <span className="recipes-language-filter__trigger-title">
+                      {t("recipes.filters.languageFilter.title")}:
+                    </span>
+                    <span className="recipes-language-filter__trigger-value">{languageFilterSummary}</span>
+                    <span className="recipes-language-filter__trigger-chevron" aria-hidden="true">
+                      {isLanguageFilterOpen ? "▴" : "▾"}
+                    </span>
+                  </button>
+                </div>
+                <select
+                  className="input"
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as SortOption)}
+                  style={{ maxWidth: "250px" }}
                 >
-                  {t("recipes.filters.withNotes")}
-                </button>
-              ) : null}
-              <button
-                type="button"
-                className={`btn ${onlyWithActiveProducts ? "btn-primary" : ""}`}
-                onClick={() => setOnlyWithActiveProducts((prev) => !prev)}
-                disabled={activeProductNames.length === 0}
-                title={
-                  activeProductNames.length === 0
-                    ? t("recipes.filters.activeProductsDisabled")
-                    : t("recipes.filters.activeProductsTooltip")
-                }
-              >
-                {t("recipes.filters.onlyWithActiveProducts")}
-              </button>
-              <button
-                type="button"
-                className={`btn ${onlyFromPantry ? "btn-primary" : ""}`}
-                onClick={() => setOnlyFromPantry((prev) => !prev)}
-                disabled={pantryProductNames.length === 0}
-                title={
-                  pantryProductNames.length === 0
-                    ? t("recipes.filters.pantryEmpty")
-                    : t("recipes.filters.onlyFromPantryTooltip")
-                }
-              >
-                {t("recipes.filters.onlyFromPantry")}
-              </button>
-              {hasActiveFilters && (
+                  <option value="newest">{t("recipes.sort.newest")}</option>
+                  <option value="oldest">{t("recipes.sort.oldest")}</option>
+                  <option value="title_asc">{t("recipes.sort.titleAsc")}</option>
+                  <option value="title_desc">{t("recipes.sort.titleDesc")}</option>
+                  {canUseAdvancedFilters ? (
+                    <>
+                      <option value="often_cooked">{t("recipes.sort.oftenCooked")}</option>
+                      <option value="rarely_cooked">{t("recipes.sort.rarelyCooked")}</option>
+                    </>
+                  ) : null}
+                </select>
+              </div>
+
+              {canUseAdvancedFilters ? (
+                <>
+                  <div className="recipes-filters-chips" style={{ marginBottom: "10px" }}>
+                    <button
+                      type="button"
+                      className={`btn ${onlyWithPhoto ? "btn-primary" : ""}`}
+                      onClick={() => {
+                        setOnlyWithPhoto((prev) => !prev);
+                      }}
+                    >
+                      {t("recipes.filters.withPhoto")}
+                    </button>
+                    {viewMode === "mine" ? (
+                      <button
+                        type="button"
+                        className={`btn ${onlyWithNotes ? "btn-primary" : ""}`}
+                        onClick={() => setOnlyWithNotes((prev) => !prev)}
+                      >
+                        {t("recipes.filters.withNotes")}
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      className={`btn ${onlyWithActiveProducts ? "btn-primary" : ""}`}
+                      onClick={() => setOnlyWithActiveProducts((prev) => !prev)}
+                      disabled={activeProductNames.length === 0}
+                      title={
+                        activeProductNames.length === 0
+                          ? t("recipes.filters.activeProductsDisabled")
+                          : t("recipes.filters.activeProductsTooltip")
+                      }
+                    >
+                      {t("recipes.filters.onlyWithActiveProducts")}
+                    </button>
+                    <button
+                      type="button"
+                      className={`btn ${onlyFromPantry ? "btn-primary" : ""}`}
+                      onClick={() => setOnlyFromPantry((prev) => !prev)}
+                      disabled={pantryProductNames.length === 0}
+                      title={
+                        pantryProductNames.length === 0
+                          ? t("recipes.filters.pantryEmpty")
+                          : t("recipes.filters.onlyFromPantryTooltip")
+                      }
+                    >
+                      {t("recipes.filters.onlyFromPantry")}
+                    </button>
+                  </div>
+
+                  <div style={{ marginBottom: "8px", fontWeight: 600 }}>{t("recipes.filters.tags")}</div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                    {RECIPE_TAGS.map((tag) => {
+                      const checked = selectedTags.includes(tag);
+                      const tagLabel = localizeRecipeTag(tag, locale as "ru" | "en" | "es");
+                      return (
+                        <label
+                          key={tag}
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "6px",
+                            border: "1px solid var(--border-default)",
+                            borderRadius: "999px",
+                            padding: "6px 10px",
+                            background: checked ? "var(--background-secondary)" : "var(--background-primary)",
+                            cursor: "pointer",
+                          }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={(e) => {
+                              setSelectedTags((prev) =>
+                                e.target.checked ? [...prev, tag] : prev.filter((item) => item !== tag)
+                              );
+                            }}
+                          />
+                          <span style={{ fontSize: "13px" }}>{tagLabel}</span>
+                        </label>
+                      );
+                    })}
+                    {selectedTags.length > 0 && (
+                      <button
+                        type="button"
+                        className="btn"
+                        onClick={() => setSelectedTags([])}
+                      >
+                        {t("recipes.filters.resetTags")}
+                      </button>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <p className="muted" style={{ margin: "0 0 8px" }}>
+                  {t("subscription.locks.advancedFilters")}
+                </p>
+              )}
+
+              {hasActiveFilters ? (
                 <button
                   type="button"
                   className="btn"
@@ -2414,54 +2499,7 @@ function RecipesPageContent() {
                 >
                   {t("recipes.filters.resetAll")}
                 </button>
-              )}
-            </div>
-          ) : null}
-
-          {canUseAdvancedFilters && showAdvancedFilters ? (
-            <div className="recipes-filters-advanced">
-              <div style={{ marginBottom: "8px", fontWeight: 600 }}>{t("recipes.filters.tags")}</div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
-                {RECIPE_TAGS.map((tag) => {
-                  const checked = selectedTags.includes(tag);
-                  const tagLabel = localizeRecipeTag(tag, locale as "ru" | "en" | "es");
-                  return (
-                    <label
-                      key={tag}
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: "6px",
-                        border: "1px solid var(--border-default)",
-                        borderRadius: "999px",
-                        padding: "6px 10px",
-                        background: checked ? "var(--background-secondary)" : "var(--background-primary)",
-                        cursor: "pointer",
-                      }}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={(e) => {
-                          setSelectedTags((prev) =>
-                            e.target.checked ? [...prev, tag] : prev.filter((item) => item !== tag)
-                          );
-                        }}
-                      />
-                      <span style={{ fontSize: "13px" }}>{tagLabel}</span>
-                    </label>
-                  );
-                })}
-                {selectedTags.length > 0 && (
-                  <button
-                    type="button"
-                    className="btn"
-                    onClick={() => setSelectedTags([])}
-                  >
-                    {t("recipes.filters.resetTags")}
-                  </button>
-                )}
-              </div>
+              ) : null}
             </div>
           ) : null}
         </>
