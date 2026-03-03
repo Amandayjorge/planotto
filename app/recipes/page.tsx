@@ -1396,9 +1396,13 @@ function RecipesPageContent() {
     type DecoratedRow = {
       item: RecipeModel;
       index: number;
-      matchCount: number;
+      activeMatchCount: number;
+      pantryMatchedIngredients: number;
+      pantryTotalIngredients: number;
       coverageRatio: number;
+      isFullyCovered: boolean;
       dislikeCount: number;
+      priorityTier: number;
     };
 
     const decorated: DecoratedRow[] = filtered.map((item, index) => {
@@ -1408,27 +1412,41 @@ function RecipesPageContent() {
       const coverageRatio =
         totalIngredients > 0 ? matchedIngredients / totalIngredients : 0;
       const dislikeCount = recipePreferenceMatchMap.get(item.id)?.dislikeCount || 0;
+      const activeMatchCount = recipeActiveMatchMap.get(item.id)?.matchCount || 0;
+      const hasActiveMatches = activeMatchCount > 0;
+      const hasPantryMatches = matchedIngredients > 0;
+
+      let priorityTier = 3;
+      if (hasActiveMatches && hasPantryMatches) {
+        priorityTier = 0;
+      } else if (hasActiveMatches) {
+        priorityTier = 1;
+      } else if (hasPantryMatches) {
+        priorityTier = 2;
+      }
 
       return {
         item,
         index,
-        matchCount: recipeActiveMatchMap.get(item.id)?.matchCount || 0,
+        activeMatchCount,
+        pantryMatchedIngredients: matchedIngredients,
+        pantryTotalIngredients: totalIngredients,
         coverageRatio,
+        isFullyCovered: coverage?.isFullyCovered || false,
         dislikeCount,
+        priorityTier,
       };
     });
-    const matched = decorated
-      .filter((row) => row.matchCount > 0)
-      .sort(
-        (a, b) =>
-          b.matchCount - a.matchCount ||
-          a.dislikeCount - b.dislikeCount ||
-          b.coverageRatio - a.coverageRatio ||
-          a.index - b.index
-      );
-    const rest = decorated
-      .filter((row) => row.matchCount === 0)
-      .sort((a, b) => a.dislikeCount - b.dislikeCount || b.coverageRatio - a.coverageRatio || a.index - b.index);
+    const prioritized = [...decorated].sort(
+      (a, b) =>
+        a.priorityTier - b.priorityTier ||
+        b.activeMatchCount - a.activeMatchCount ||
+        Number(b.isFullyCovered) - Number(a.isFullyCovered) ||
+        b.pantryMatchedIngredients - a.pantryMatchedIngredients ||
+        b.coverageRatio - a.coverageRatio ||
+        a.dislikeCount - b.dislikeCount ||
+        a.index - b.index
+    );
 
     const prioritizeRowsByLanguage = (rows: DecoratedRow[]): DecoratedRow[] => {
       if (effectivePreferredRecipeLanguages.length <= 1) return rows;
@@ -1449,10 +1467,7 @@ function RecipesPageContent() {
       return [...ordered, ...fallback];
     };
 
-    const prioritizedMatched = prioritizeRowsByLanguage(matched);
-    const prioritizedRest = prioritizeRowsByLanguage(rest);
-
-    return [...prioritizedMatched, ...prioritizedRest].map((row) => row.item);
+    return prioritizeRowsByLanguage(prioritized).map((row) => row.item);
   }, [
     effectiveOnlyFromPantry,
     effectiveOnlyWithActiveProducts,
@@ -1480,23 +1495,22 @@ function RecipesPageContent() {
   useEffect(() => {
     let cancelled = false;
 
-    const publicAuthorIds = Array.from(
+    const authorIdsForProfiles = Array.from(
       new Set(
         recipes
-          .filter((recipe) => recipe.visibility === "public")
-        .map((recipe) => String(recipe.authorId || recipe.ownerId || "").trim())
+          .map((recipe) => String(recipe.authorId || recipe.ownerId || "").trim())
         .filter((authorId) => authorId.length > 0 && isUuidLike(authorId))
       )
     );
 
-    if (publicAuthorIds.length === 0) {
+    if (authorIdsForProfiles.length === 0) {
       setPublicAuthorProfiles({});
       return () => {
         cancelled = true;
       };
     }
 
-    listPublicAuthorProfiles(publicAuthorIds)
+    listPublicAuthorProfiles(authorIdsForProfiles)
       .then((profiles) => {
         if (cancelled) return;
         setPublicAuthorProfiles(profiles);
@@ -2674,13 +2688,17 @@ function RecipesPageContent() {
             const addDone = duplicateExists || addedNow;
             const isAdding = pendingCopyRecipeId === recipe.id;
             const isPublicRecipe = recipe.visibility === "public";
+            const ownerUserId = String(recipe.ownerId || "").trim();
             const authorUserId = String(recipe.authorId || recipe.ownerId || "").trim();
-            const authorProfile = isPublicRecipe ? publicAuthorProfiles[authorUserId] : undefined;
+            const authorProfile = publicAuthorProfiles[authorUserId];
             const authorAvatarUrl = authorProfile?.avatarUrl || (authorUserId === "system" ? "/apple-touch-icon.png" : "");
             const authorName =
               (authorProfile?.displayName || "").trim() ||
               (authorUserId === "system" ? t("recipes.card.planottoAuthor") : t("recipes.card.authorUnknown"));
-            const canOpenAuthorPage = isPublicRecipe && (authorUserId === "system" || isUuidLike(authorUserId));
+            const hasExternalAuthor = Boolean(authorUserId) && authorUserId !== ownerUserId;
+            const shouldShowAuthor =
+              Boolean(authorUserId) && (isPublicRecipe || authorUserId === "system" || hasExternalAuthor);
+            const canOpenAuthorPage = shouldShowAuthor && (authorUserId === "system" || isUuidLike(authorUserId));
             const timesCooked = Number(
               (recipe as RecipeModel & { timesCooked?: number }).timesCooked || 0
             );
@@ -2781,7 +2799,7 @@ function RecipesPageContent() {
                         <h3 style={{ margin: 0 }}>{recipeCardTitle}</h3>
                         <div style={{ marginTop: "4px", fontSize: "12px", color: "var(--text-tertiary)", display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
                           <span>{sourceLabel}</span>
-                          {isPublicRecipe ? (
+                          {shouldShowAuthor ? (
                             <span>
                               {t("recipes.card.authorLabel")}:{" "}
                               {canOpenAuthorPage ? (
@@ -2871,7 +2889,11 @@ function RecipesPageContent() {
                               onClick={() =>
                                 setOpenActiveMatchesRecipeId((prev) => (prev === recipe.id ? null : recipe.id))
                               }
-                              title={matchTooltip}
+                              title={
+                                matchTooltip ||
+                                t("recipes.card.matches", { count: matchMeta.matchCount })
+                              }
+                              aria-label={t("recipes.card.matches", { count: matchMeta.matchCount })}
                               style={{
                                 border: "1px solid color-mix(in srgb, var(--accent-primary) 45%, var(--border-default) 55%)",
                                 background: "color-mix(in srgb, var(--accent-primary) 14%, var(--background-primary) 86%)",
@@ -2881,9 +2903,13 @@ function RecipesPageContent() {
                                 padding: "1px 7px",
                                 lineHeight: 1.4,
                                 cursor: "pointer",
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "4px",
                               }}
                             >
-                              {t("recipes.card.matches", { count: matchMeta.matchCount })}
+                              <span aria-hidden="true">⚡</span>
+                              <span>{matchMeta.matchCount}</span>
                             </button>
                           ) : null}
                           {preferenceMeta.dislikeCount > 0 ? (
