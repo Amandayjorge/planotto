@@ -768,8 +768,8 @@
       "description": "Попробуйте убрать часть фильтров или изменить запрос."
     },
     "card": {
-      "sourcePublicAdded": "Из примеров • уже в моих рецептах",
-      "sourcePublic": "Из примеров",
+      "sourcePublicAdded": "Из библиотеки рецептов • уже в моих рецептах",
+      "sourcePublic": "Из библиотеки рецептов",
       "sourceMine": "Мой рецепт",
       "authorLabel": "Автор",
       "authorUnknown": "Неизвестный автор",

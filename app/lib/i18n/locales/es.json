@@ -769,8 +769,8 @@
       "description": "Intenta quitar filtros o cambiar la búsqueda."
     },
     "card": {
-      "sourcePublicAdded": "De ejemplos • ya está en mis recetas",
-      "sourcePublic": "De ejemplos",
+      "sourcePublicAdded": "De la biblioteca de recetas • ya está en mis recetas",
+      "sourcePublic": "De la biblioteca de recetas",
       "sourceMine": "Mi receta",
       "authorLabel": "Autor",
       "authorUnknown": "Autor desconocido",

@@ -769,8 +769,8 @@
       "description": "Try removing some filters or changing query."
     },
     "card": {
-      "sourcePublicAdded": "From examples • already in my recipes",
-      "sourcePublic": "From examples",
+      "sourcePublicAdded": "From recipe library • already in my recipes",
+      "sourcePublic": "From recipe library",
       "sourceMine": "My recipe",
       "authorLabel": "Author",
       "authorUnknown": "Unknown author",
