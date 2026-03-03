@@ -60,11 +60,14 @@ const PERSONAL_TAG_MAX_COUNT = 12;
 const ADD_TO_MENU_PROMPT_AUTO_CLOSE_MS = 4000;
 const LEGACY_RECIPE_LANGUAGE_PREFERENCE_KEY = "recipes:language-preference";
 const LANGUAGE_FILTER_MODE_KEY = "recipes:language-filter-mode";
+const LANGUAGE_FILTER_SELECTION_KEY = "recipes:language-filter-selection-v2";
 const AVAILABLE_RECIPE_LANGUAGES: RecipeLanguage[] = ["ru", "en", "es"];
 
-type LanguageFilterMode = "interface" | "interfaceEnglish" | "all";
-const DEFAULT_LANGUAGE_FILTER_MODE: LanguageFilterMode = "interface";
-const LANGUAGE_FILTER_OPTIONS: LanguageFilterMode[] = ["interface", "interfaceEnglish", "all"];
+type LegacyLanguageFilterMode = "interface" | "interfaceEnglish" | "all";
+type LanguageFilterSelection = {
+  showAll: boolean;
+  extra: RecipeLanguage[];
+};
 
 const VISIBILITY_BADGE_META: Record<
   Exclude<RecipeVisibility, "private">,
@@ -230,8 +233,12 @@ function normalizePreferredRecipeLanguages(
   return [interfaceLanguage, ...normalized.filter((language) => language !== interfaceLanguage)];
 }
 
-function isLanguageFilterMode(value: unknown): value is LanguageFilterMode {
-  return typeof value === "string" && LANGUAGE_FILTER_OPTIONS.includes(value as LanguageFilterMode);
+function isLegacyLanguageFilterMode(value: unknown): value is LegacyLanguageFilterMode {
+  return (
+    value === "interface" ||
+    value === "interfaceEnglish" ||
+    value === "all"
+  );
 }
 
 function normalizeStoredRecipeLanguages(raw: unknown): RecipeLanguage[] {
@@ -249,42 +256,72 @@ function normalizeStoredRecipeLanguages(raw: unknown): RecipeLanguage[] {
   return normalized;
 }
 
-function resolveLanguageFilterModeFromPreferredList(
+function resolveLanguageFilterSelectionFromPreferredList(
   raw: unknown,
   interfaceLanguage: RecipeLanguage
-): LanguageFilterMode {
+): LanguageFilterSelection {
   const normalized = normalizeStoredRecipeLanguages(raw);
-  const unique = new Set<RecipeLanguage>(normalized);
-  if (!unique.has(interfaceLanguage)) {
-    unique.add(interfaceLanguage);
-  }
+  const extra = normalized.filter((language) => language !== interfaceLanguage);
+  const showAll = AVAILABLE_RECIPE_LANGUAGES
+    .filter((language) => language !== interfaceLanguage)
+    .every((language) => extra.includes(language));
 
-  const hasExtra = Array.from(unique).some((language) => {
-    return language !== interfaceLanguage && language !== "en";
-  });
-
-  if (hasExtra) {
-    return "all";
-  }
-
-  if (unique.has("en")) {
-    return "interfaceEnglish";
-  }
-
-  return "interface";
+  return {
+    showAll,
+    extra: showAll ? [] : extra,
+  };
 }
 
-function getLanguagesForFilterMode(mode: LanguageFilterMode, interfaceLanguage: RecipeLanguage): RecipeLanguage[] {
-  if (mode === "interfaceEnglish") {
-    return normalizePreferredRecipeLanguages([interfaceLanguage, "en"], interfaceLanguage);
-  }
+function resolveLanguageFilterSelectionFromLegacyMode(
+  mode: LegacyLanguageFilterMode,
+  interfaceLanguage: RecipeLanguage
+): LanguageFilterSelection {
   if (mode === "all") {
+    return { showAll: true, extra: [] };
+  }
+
+  if (mode === "interfaceEnglish") {
+    return {
+      showAll: false,
+      extra: interfaceLanguage === "en" ? [] : ["en"],
+    };
+  }
+
+  return { showAll: false, extra: [] };
+}
+
+function normalizeLanguageFilterSelection(
+  raw: unknown,
+  interfaceLanguage: RecipeLanguage
+): LanguageFilterSelection {
+  const typed = (raw && typeof raw === "object" ? raw : null) as
+    | { showAll?: unknown; extra?: unknown }
+    | null;
+  const showAll = typed?.showAll === true;
+  const extra = normalizeStoredRecipeLanguages(typed?.extra).filter(
+    (language) => language !== interfaceLanguage
+  );
+  return {
+    showAll,
+    extra: showAll ? [] : extra,
+  };
+}
+
+function getLanguagesForFilterSelection(
+  selection: LanguageFilterSelection,
+  interfaceLanguage: RecipeLanguage
+): RecipeLanguage[] {
+  if (selection.showAll) {
     return normalizePreferredRecipeLanguages(
       [interfaceLanguage, ...AVAILABLE_RECIPE_LANGUAGES.filter((language) => language !== interfaceLanguage)],
       interfaceLanguage
     );
   }
-  return [interfaceLanguage];
+
+  return normalizePreferredRecipeLanguages(
+    [interfaceLanguage, ...selection.extra],
+    interfaceLanguage
+  );
 }
 
 function loadActiveProductNamesForCurrentRange(): string[] {
@@ -530,7 +567,8 @@ function RecipesPageContent() {
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<SortOption>("newest");
-  const [languageFilterMode, setLanguageFilterMode] = useState<LanguageFilterMode>(DEFAULT_LANGUAGE_FILTER_MODE);
+  const [showAllRecipeLanguages, setShowAllRecipeLanguages] = useState(false);
+  const [selectedAdditionalLanguages, setSelectedAdditionalLanguages] = useState<RecipeLanguage[]>([]);
   const languageFilterLoaded = useRef(false);
   const [onlyWithPhoto, setOnlyWithPhoto] = useState(false);
   const [onlyWithNotes, setOnlyWithNotes] = useState(false);
@@ -585,9 +623,21 @@ function RecipesPageContent() {
     return false;
   };
 
+  const additionalLanguageOptions = useMemo(
+    () => AVAILABLE_RECIPE_LANGUAGES.filter((language) => language !== uiRecipeLanguage),
+    [uiRecipeLanguage]
+  );
+
   const effectivePreferredRecipeLanguages = useMemo(
-    () => getLanguagesForFilterMode(languageFilterMode, uiRecipeLanguage),
-    [languageFilterMode, uiRecipeLanguage]
+    () =>
+      getLanguagesForFilterSelection(
+        {
+          showAll: showAllRecipeLanguages,
+          extra: selectedAdditionalLanguages,
+        },
+        uiRecipeLanguage
+      ),
+    [showAllRecipeLanguages, selectedAdditionalLanguages, uiRecipeLanguage]
   );
 
   const getPreferredRecipeLanguage = useCallback(
@@ -596,27 +646,45 @@ function RecipesPageContent() {
     [effectivePreferredRecipeLanguages]
   );
 
-  const passesPreferredLanguages = (recipe: RecipeModel): boolean => {
-    if (languageFilterMode === "all") return true;
-    return effectivePreferredRecipeLanguages.some((language) => hasLanguageVariant(recipe, language));
-  };
+  const passesPreferredLanguages = useCallback(
+    (recipe: RecipeModel): boolean =>
+      effectivePreferredRecipeLanguages.some((language) => hasLanguageVariant(recipe, language)),
+    [effectivePreferredRecipeLanguages]
+  );
 
   const importedForUser = useRef<string | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined" || languageFilterLoaded.current) return;
     languageFilterLoaded.current = true;
-    const stored = window.localStorage.getItem(LANGUAGE_FILTER_MODE_KEY);
-    if (isLanguageFilterMode(stored)) {
-      setLanguageFilterMode(stored);
+    const storedSelection = window.localStorage.getItem(LANGUAGE_FILTER_SELECTION_KEY);
+    if (storedSelection) {
+      try {
+        const parsed = JSON.parse(storedSelection);
+        const normalized = normalizeLanguageFilterSelection(parsed, uiRecipeLanguage);
+        setShowAllRecipeLanguages(normalized.showAll);
+        setSelectedAdditionalLanguages(normalized.extra);
+        return;
+      } catch {
+        // ignore malformed value
+      }
+    }
+
+    const storedLegacyMode = window.localStorage.getItem(LANGUAGE_FILTER_MODE_KEY);
+    if (isLegacyLanguageFilterMode(storedLegacyMode)) {
+      const mapped = resolveLanguageFilterSelectionFromLegacyMode(storedLegacyMode, uiRecipeLanguage);
+      setShowAllRecipeLanguages(mapped.showAll);
+      setSelectedAdditionalLanguages(mapped.extra);
       return;
     }
+
     const legacy = window.localStorage.getItem(LEGACY_RECIPE_LANGUAGE_PREFERENCE_KEY);
     if (!legacy) return;
     try {
       const parsed = JSON.parse(legacy);
-      const mode = resolveLanguageFilterModeFromPreferredList(parsed, uiRecipeLanguage);
-      setLanguageFilterMode(mode);
+      const resolved = resolveLanguageFilterSelectionFromPreferredList(parsed, uiRecipeLanguage);
+      setShowAllRecipeLanguages(resolved.showAll);
+      setSelectedAdditionalLanguages(resolved.extra);
     } catch {
       // ignore malformed legacy value
     }
@@ -624,8 +692,23 @@ function RecipesPageContent() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    window.localStorage.setItem(LANGUAGE_FILTER_MODE_KEY, languageFilterMode);
-  }, [languageFilterMode]);
+    const normalizedExtra = selectedAdditionalLanguages.filter((language) => language !== uiRecipeLanguage);
+    window.localStorage.setItem(
+      LANGUAGE_FILTER_SELECTION_KEY,
+      JSON.stringify({
+        showAll: showAllRecipeLanguages,
+        extra: showAllRecipeLanguages ? [] : normalizedExtra,
+      })
+    );
+  }, [showAllRecipeLanguages, selectedAdditionalLanguages, uiRecipeLanguage]);
+
+  useEffect(() => {
+    setSelectedAdditionalLanguages((prev) =>
+      prev.filter(
+        (language) => language !== uiRecipeLanguage && AVAILABLE_RECIPE_LANGUAGES.includes(language)
+      )
+    );
+  }, [uiRecipeLanguage]);
 
   useEffect(() => {
     if (canUseAdvancedFilters) return;
@@ -2098,11 +2181,42 @@ function RecipesPageContent() {
             </div>
           </div>
         ) : (
-          <div style={{ marginTop: "-4px", marginBottom: "12px" }}>
-            <button type="button" className="recipes-nav-back-link" onClick={enterSelectionMode}>
-              {t("recipes.selection.enter")}
-            </button>
-          </div>
+          <>
+            {selectedMineRecipes.length > 0 ? (
+              <div className="card" style={{ marginTop: "-4px", marginBottom: "12px", padding: "10px 12px" }}>
+                <div style={{ display: "flex", gap: "8px", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap" }}>
+                  <strong style={{ fontSize: "14px" }}>
+                    {t("recipes.selection.count", { count: selectedMineRecipes.length })}
+                  </strong>
+                  <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+                    <button
+                      type="button"
+                      className="btn"
+                      onClick={() => {
+                        void exportSelectedRecipesPdf();
+                      }}
+                      disabled={isExportingRecipesPdf}
+                    >
+                      {isExportingRecipesPdf ? t("pdf.actions.exporting") : t("recipes.selection.exportPdf")}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn"
+                      onClick={() => setSelectedRecipeIds({})}
+                      disabled={isExportingRecipesPdf}
+                    >
+                      {t("recipes.selection.cancel")}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+            <div style={{ marginTop: "-4px", marginBottom: "12px" }}>
+              <button type="button" className="recipes-nav-back-link" onClick={enterSelectionMode}>
+                {t("recipes.selection.enter")}
+              </button>
+            </div>
+          </>
         )
       ) : null}
       {viewMode === "mine" && personalTagFilterOptions.length > 0 ? (
@@ -2145,26 +2259,48 @@ function RecipesPageContent() {
             />
             <div className="recipes-language-filter">
               <span className="recipes-language-filter__label">
-                {t("recipes.filters.languageFilter.label")}
+                {t("recipes.filters.languageFilter.title")}
               </span>
-              <div className="recipes-language-filter__options">
-                {LANGUAGE_FILTER_OPTIONS.map((mode) => (
-                  <button
-                    key={mode}
-                    type="button"
-                    className={[
-                      "recipes-language-filter__option",
-                      languageFilterMode === mode && "recipes-language-filter__option--active",
-                    ]
-                      .filter(Boolean)
-                      .join(" ")}
-                    aria-pressed={languageFilterMode === mode}
-                    onClick={() => setLanguageFilterMode(mode)}
-                  >
-                    <span>{t(`recipes.filters.languageFilter.${mode}`)}</span>
-                  </button>
-                ))}
-              </div>
+              <span className="recipes-language-filter__hint">
+                {t("recipes.filters.languageFilter.subtitle")}
+              </span>
+              <label className="recipes-language-filter__checkbox">
+                <input
+                  type="checkbox"
+                  checked={showAllRecipeLanguages}
+                  onChange={(event) => setShowAllRecipeLanguages(event.target.checked)}
+                />
+                <span>{t("recipes.filters.languageFilter.showAll")}</span>
+              </label>
+              {!showAllRecipeLanguages ? (
+                <div className="recipes-language-filter__extra">
+                  <span className="recipes-language-filter__extra-label">
+                    {t("recipes.filters.languageFilter.alsoLabel")}
+                  </span>
+                  <div className="recipes-language-filter__checkbox-group">
+                    {additionalLanguageOptions.map((language) => (
+                      <label key={language} className="recipes-language-filter__checkbox">
+                        <input
+                          type="checkbox"
+                          checked={selectedAdditionalLanguages.includes(language)}
+                          onChange={(event) => {
+                            const checked = event.target.checked;
+                            setSelectedAdditionalLanguages((prev) => {
+                              if (checked) {
+                                return normalizeStoredRecipeLanguages([...prev, language]).filter(
+                                  (item) => item !== uiRecipeLanguage
+                                );
+                              }
+                              return prev.filter((item) => item !== language);
+                            });
+                          }}
+                        />
+                        <span>{t(`recipes.filters.languageFilter.languageNames.${language}`)}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
             </div>
             <select
               className="input"
@@ -2460,6 +2596,7 @@ function RecipesPageContent() {
             const isPublicRecipe = recipe.visibility === "public";
             const authorUserId = String(recipe.authorId || recipe.ownerId || "").trim();
             const authorProfile = isPublicRecipe ? publicAuthorProfiles[authorUserId] : undefined;
+            const authorAvatarUrl = authorProfile?.avatarUrl || (authorUserId === "system" ? "/apple-touch-icon.png" : "");
             const authorName =
               (authorProfile?.displayName || "").trim() ||
               (authorUserId === "system" ? t("recipes.card.planottoAuthor") : t("recipes.card.authorUnknown"));
@@ -2570,10 +2707,30 @@ function RecipesPageContent() {
                                   href={`/authors/${encodeURIComponent(authorUserId || "system")}`}
                                   className="recipes-card__author-link"
                                 >
-                                  {authorName}
+                                  <span className="recipes-card__author">
+                                    {authorAvatarUrl ? (
+                                      <img
+                                        src={authorAvatarUrl}
+                                        alt=""
+                                        aria-hidden="true"
+                                        className="recipes-card__author-avatar"
+                                      />
+                                    ) : null}
+                                    <span>{authorName}</span>
+                                  </span>
                                 </Link>
                               ) : (
-                                <span>{authorName}</span>
+                                <span className="recipes-card__author">
+                                  {authorAvatarUrl ? (
+                                    <img
+                                      src={authorAvatarUrl}
+                                      alt=""
+                                      aria-hidden="true"
+                                      className="recipes-card__author-avatar"
+                                    />
+                                  ) : null}
+                                  <span>{authorName}</span>
+                                </span>
                               )}
                             </span>
                           ) : null}
@@ -2698,7 +2855,7 @@ function RecipesPageContent() {
                           </span>
                         ) : null}
                       </div>
-                      {isMineCard && isSelectionMode ? (
+                      {isMineCard ? (
                         <label style={{ display: "inline-flex", alignItems: "center", gap: "6px", marginLeft: "8px", fontSize: "12px", color: "var(--text-secondary)" }}>
                           <input
                             type="checkbox"

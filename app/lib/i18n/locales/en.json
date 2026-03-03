@@ -664,10 +664,15 @@
         "onlyFromPantryTooltip": "Show only recipes that can be made from pantry",
         "onlyFromPantry": "Only from pantry",
         "languageFilter": {
-          "label": "Language",
-          "interface": "Interface language only",
-          "interfaceEnglish": "Interface + English",
-          "all": "All languages"
+          "title": "Recipe language",
+          "subtitle": "By default, we show recipes in the interface language",
+          "showAll": "Show all languages",
+          "alsoLabel": "Also show:",
+          "languageNames": {
+            "ru": "Russian",
+            "en": "English",
+            "es": "Spanish"
+          }
         },
         "languagePreference": {
         "label": "Recipe languages",

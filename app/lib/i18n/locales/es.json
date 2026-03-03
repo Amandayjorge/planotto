@@ -664,10 +664,15 @@
       "onlyFromPantryTooltip": "Mostrar solo recetas posibles con despensa",
       "onlyFromPantry": "Solo de despensa",
       "languageFilter": {
-        "label": "Idioma",
-        "interface": "Solo el idioma de la interfaz",
-        "interfaceEnglish": "Interfaz + inglés",
-        "all": "Todos los idiomas"
+        "title": "Idioma de recetas",
+        "subtitle": "Por defecto mostramos recetas en el idioma de la interfaz",
+        "showAll": "Mostrar todos los idiomas",
+        "alsoLabel": "Mostrar tambien:",
+        "languageNames": {
+          "ru": "Ruso",
+          "en": "Ingles",
+          "es": "Espanol"
+        }
       },
       "languagePreference": {
         "label": "Idiomas de recetas",

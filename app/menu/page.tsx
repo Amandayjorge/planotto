@@ -1541,7 +1541,7 @@ function MenuPageContent() {
       return countMenuItems(sourceMealData) === 0;
     });
   }, [activeMenuId, countMenuItems, mealData, menuProfiles]);
-  const shouldShowMenuTemplatesPanel = allMenusEmpty || showMenuTemplatesPanel;
+  const shouldShowMenuTemplatesPanel = showMenuTemplatesPanel;
   const visibleActiveProductsCount = activeProducts.length;
   const shouldEnableActiveProductsSearch = activeProducts.length >= 8;
   const shouldShowActiveProductsSearch = shouldEnableActiveProductsSearch && expandedActiveProductNoteId === null;
@@ -4486,23 +4486,18 @@ function MenuPageContent() {
                 ⚙
               </button>
             </div>
-            <div className="menu-selection__links">
-              <button
-                type="button"
-                className="menu-secondary-link"
-                onClick={() => setIsCreateMenuDialogOpen(true)}
-                title={additionalMenusLocked ? t("subscription.locks.multipleMenus") : undefined}
-              >
-                {t("menu.templates.newMenu")}
-              </button>
-              <button
-                type="button"
-                className="menu-secondary-link"
-                onClick={() => setShowMenuTemplatesPanel((prev) => !prev)}
-              >
-                {t("menu.templates.button")}
-              </button>
-            </div>
+            {!isActiveMenuEmpty ? (
+              <div className="menu-selection__links">
+                <button
+                  type="button"
+                  className="menu-secondary-link"
+                  onClick={() => setIsCreateMenuDialogOpen(true)}
+                  title={additionalMenusLocked ? t("subscription.locks.multipleMenus") : undefined}
+                >
+                  {t("menu.templates.newMenu")}
+                </button>
+              </div>
+            ) : null}
           </div>
 
           <div className="menu-mode">
@@ -4556,15 +4551,13 @@ function MenuPageContent() {
               <h2 className="menu-templates-panel__title">{t("menu.templates.startWithExample")}</h2>
               <p className="menu-templates-panel__description">{t("menu.templates.panelDescription")}</p>
             </div>
-            {!allMenusEmpty && (
-              <button
-                type="button"
-                className="menu-first-onboarding__skip"
-                onClick={() => setShowMenuTemplatesPanel(false)}
-              >
-                {t("menu.actions.close")}
-              </button>
-            )}
+            <button
+              type="button"
+              className="menu-first-onboarding__skip"
+              onClick={() => setShowMenuTemplatesPanel(false)}
+            >
+              {t("menu.actions.close")}
+            </button>
           </div>
           <div className="menu-templates-grid">
             {demoMenuTemplates.map((template) => (

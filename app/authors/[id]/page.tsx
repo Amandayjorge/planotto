@@ -98,6 +98,7 @@ export default function AuthorPage() {
   const authorName =
     (author?.displayName || "").trim()
     || (authorId === "system" ? t("recipes.card.planottoAuthor") : t("recipes.card.authorUnknown"));
+  const authorAvatarUrl = author?.avatarUrl || (authorId === "system" ? "/apple-touch-icon.png" : "");
   const authorInitial = authorName.charAt(0).toUpperCase() || "A";
   const recipeCount = Math.max(author?.recipeCount || 0, recipes.length);
 
@@ -128,9 +129,9 @@ export default function AuthorPage() {
           {t("recipes.authors.backToRecipes")}
         </button>
         <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
-          {author?.avatarUrl ? (
+          {authorAvatarUrl ? (
             <img
-              src={author.avatarUrl}
+              src={authorAvatarUrl}
               alt={t("recipes.authors.avatarAlt")}
               style={{
                 width: "64px",
