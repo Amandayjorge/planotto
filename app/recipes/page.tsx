@@ -51,6 +51,7 @@ const FIRST_RECIPE_SUCCESS_SHOWN_KEY = "recipes:first-success-shown";
 const FIRST_RECIPE_SUCCESS_PENDING_KEY = "recipes:first-success-pending";
 const FIRST_RECIPE_CREATE_FLOW_KEY = "recipes:first-create-flow";
 const GUEST_RECIPES_REMINDER_DISMISSED_KEY = "recipes:guest-register-reminder-dismissed";
+const RECIPE_MARKERS_HINT_SEEN_KEY = "recipes:marker-hint-seen";
 const GUEST_RECIPES_REMINDER_THRESHOLD = 3;
 const MENU_RANGE_STATE_KEY = "selectedMenuRange";
 const MENU_ADD_TO_MENU_PROMPT_KEY = "menuAddToMenuPromptEnabled";
@@ -646,8 +647,10 @@ function RecipesPageContent() {
   const [showGuestRegisterReminder, setShowGuestRegisterReminder] = useState(false);
   const [activeProductNames, setActiveProductNames] = useState<string[]>([]);
   const [pantryProductNames, setPantryProductNames] = useState<string[]>([]);
-  const [openActiveMatchesRecipeId, setOpenActiveMatchesRecipeId] = useState<string | null>(null);
-  const [openDislikeRecipeId, setOpenDislikeRecipeId] = useState<string | null>(null);
+  const [openMarkerTooltipId, setOpenMarkerTooltipId] = useState<string | null>(null);
+  const [isMarkerTooltipPinned, setIsMarkerTooltipPinned] = useState(false);
+  const [canHoverMarkers, setCanHoverMarkers] = useState(false);
+  const [showRecipeMarkersHint, setShowRecipeMarkersHint] = useState(false);
   const [selectedRecipeIds, setSelectedRecipeIds] = useState<Record<string, boolean>>({});
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [isSharingSelection, setIsSharingSelection] = useState(false);
@@ -1170,6 +1173,58 @@ function RecipesPageContent() {
       document.removeEventListener("keydown", handleEscape);
     };
   }, [isLanguageFilterOpen]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mediaQuery = window.matchMedia("(hover: hover) and (pointer: fine)");
+    const update = () => setCanHoverMarkers(mediaQuery.matches);
+    update();
+
+    if (typeof mediaQuery.addEventListener === "function") {
+      mediaQuery.addEventListener("change", update);
+      return () => mediaQuery.removeEventListener("change", update);
+    }
+
+    mediaQuery.addListener(update);
+    return () => mediaQuery.removeListener(update);
+  }, []);
+
+  useEffect(() => {
+    if (!isMarkerTooltipPinned) return;
+
+    const handleOutsidePointer = (event: MouseEvent | TouchEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest(".recipes-marker")) return;
+      setOpenMarkerTooltipId(null);
+      setIsMarkerTooltipPinned(false);
+    };
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setOpenMarkerTooltipId(null);
+      setIsMarkerTooltipPinned(false);
+    };
+
+    document.addEventListener("mousedown", handleOutsidePointer);
+    document.addEventListener("touchstart", handleOutsidePointer, { passive: true });
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("mousedown", handleOutsidePointer);
+      document.removeEventListener("touchstart", handleOutsidePointer);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [isMarkerTooltipPinned]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (isLoading || recipes.length === 0) return;
+    if (window.localStorage.getItem(RECIPE_MARKERS_HINT_SEEN_KEY) === "1") return;
+
+    setShowRecipeMarkersHint(true);
+    window.localStorage.setItem(RECIPE_MARKERS_HINT_SEEN_KEY, "1");
+    const timeoutId = window.setTimeout(() => setShowRecipeMarkersHint(false), 5200);
+    return () => window.clearTimeout(timeoutId);
+  }, [isLoading, recipes.length]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1949,6 +2004,16 @@ function RecipesPageContent() {
   const isEmptyState = !isLoading && !hasAnyRecipes;
   const isFilteredEmpty = !isLoading && hasAnyRecipes && filteredRecipes.length === 0;
   const showFirstRecipePrompt = isFirstRecipeFlow && !showFirstRecipeSuccess;
+  const hasAnyVisibleRecipeMarkers = useMemo(
+    () =>
+      filteredRecipes.some((recipe) => {
+        const pantryTotal = recipePantryCoverageMap.get(recipe.id)?.totalIngredients || 0;
+        const activeMatches = recipeActiveMatchMap.get(recipe.id)?.matchCount || 0;
+        const dislikeCount = recipePreferenceMatchMap.get(recipe.id)?.dislikeCount || 0;
+        return pantryTotal > 0 || activeMatches > 0 || dislikeCount > 0;
+      }),
+    [filteredRecipes, recipeActiveMatchMap, recipePantryCoverageMap, recipePreferenceMatchMap]
+  );
 
   const resetAllRecipeFilters = useCallback(() => {
     setOnlyWithPhoto(false);
@@ -1959,6 +2024,35 @@ function RecipesPageContent() {
     setSelectedPersonalTagFilters([]);
     setSearchQuery("");
   }, []);
+
+  const markerTooltipIdFor = useCallback(
+    (recipeId: string, marker: "pantry" | "active" | "dislike"): string => `${recipeId}:${marker}`,
+    []
+  );
+
+  const openMarkerTooltipByHover = useCallback(
+    (tooltipId: string) => {
+      if (!canHoverMarkers || isMarkerTooltipPinned) return;
+      setOpenMarkerTooltipId(tooltipId);
+    },
+    [canHoverMarkers, isMarkerTooltipPinned]
+  );
+
+  const closeMarkerTooltipByHover = useCallback(
+    (tooltipId: string) => {
+      if (!canHoverMarkers || isMarkerTooltipPinned) return;
+      setOpenMarkerTooltipId((prev) => (prev === tooltipId ? null : prev));
+    },
+    [canHoverMarkers, isMarkerTooltipPinned]
+  );
+
+  const toggleMarkerTooltipByTap = useCallback((tooltipId: string) => {
+    setOpenMarkerTooltipId((prev) => {
+      const shouldClose = prev === tooltipId && isMarkerTooltipPinned;
+      setIsMarkerTooltipPinned(!shouldClose);
+      return shouldClose ? null : tooltipId;
+    });
+  }, [isMarkerTooltipPinned]);
 
   const handleDismissGuestRegisterReminder = () => {
     setShowGuestRegisterReminder(false);
@@ -2413,6 +2507,20 @@ function RecipesPageContent() {
             </button>
           </div>
 
+          {showRecipeMarkersHint && hasAnyVisibleRecipeMarkers ? (
+            <div className="recipes-markers-hint" role="status" aria-live="polite">
+              <span>{t("recipes.card.markersHint")}</span>
+              <button
+                type="button"
+                className="recipes-markers-hint__close"
+                onClick={() => setShowRecipeMarkersHint(false)}
+                aria-label={t("recipes.addToMenuPrompt.closeAria")}
+              >
+                ×
+              </button>
+            </div>
+          ) : null}
+
           {showAdvancedFilters ? (
             <div className="recipes-filters-advanced">
               <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "10px" }}>
@@ -2822,20 +2930,15 @@ function RecipesPageContent() {
               pantryMeta.totalIngredients > 0
                 ? `${pantryMeta.matchedIngredients}/${pantryMeta.totalIngredients}`
                 : "";
-            const matchTooltip =
-              matchMeta.matchCount > 0
-                ? t("recipes.card.matchTooltip", {
-                    names: matchMeta.topMatches.join(", "),
-                    extra: matchMeta.extraMatches > 0 ? ` (+${matchMeta.extraMatches})` : "",
-                  })
-                : "";
-            const dislikeTooltip =
-              preferenceMeta.dislikeCount > 0
-                ? t("recipes.card.dislikeTooltip", {
-                    names: preferenceMeta.topDislikes.join(", "),
-                    extra: preferenceMeta.extraDislikes > 0 ? ` (+${preferenceMeta.extraDislikes})` : "",
-                  })
-                : "";
+            const pantryMarkerTooltipId = markerTooltipIdFor(recipe.id, "pantry");
+            const activeMarkerId = markerTooltipIdFor(recipe.id, "active");
+            const dislikeMarkerTooltipId = markerTooltipIdFor(recipe.id, "dislike");
+            const pantryMarkerTooltipText = t("recipes.card.markerPantryTooltip", {
+              matched: pantryMeta.matchedIngredients,
+              total: pantryMeta.totalIngredients,
+            });
+            const activeMarkerTooltipText = t("recipes.card.markerActiveTooltip");
+            const dislikeMarkerTooltipText = t("recipes.card.markerDislikeTooltip");
             const mainActionLabel = isPublicSourceRecipe
               ? addDone
                 ? t("recipes.card.alreadyMine")
@@ -2957,90 +3060,70 @@ function RecipesPageContent() {
                           ) : null}
                           {pantryCoverageText ? (
                             <span
-                              title={t("recipes.card.pantryCoverageTitle", {
-                                matched: pantryMeta.matchedIngredients,
-                                total: pantryMeta.totalIngredients,
-                              })}
-                              style={{
-                                display: "inline-flex",
-                                alignItems: "center",
-                                gap: "4px",
-                                border: "1px solid var(--border-default)",
-                                borderRadius: "999px",
-                                padding: "1px 7px",
-                                color: "var(--text-secondary)",
-                                fontSize: "11px",
-                                background: "var(--background-secondary)",
-                              }}
+                              className={`recipes-marker ${showRecipeMarkersHint ? "recipes-marker--hint" : ""}`.trim()}
+                              onMouseEnter={() => openMarkerTooltipByHover(pantryMarkerTooltipId)}
+                              onMouseLeave={() => closeMarkerTooltipByHover(pantryMarkerTooltipId)}
                             >
-                              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                                <path d="M3 10.5L12 3l9 7.5V21H3V10.5z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
-                                <path d="M9 21v-6h6v6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-                              </svg>
-                              <span>{pantryCoverageText}</span>
+                              <button
+                                type="button"
+                                className="recipes-marker__button"
+                                onClick={() => toggleMarkerTooltipByTap(pantryMarkerTooltipId)}
+                                aria-label={pantryMarkerTooltipText}
+                                aria-expanded={openMarkerTooltipId === pantryMarkerTooltipId}
+                              >
+                                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                  <path d="M3 10.5L12 3l9 7.5V21H3V10.5z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+                                  <path d="M9 21v-6h6v6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                                </svg>
+                                <span>{pantryCoverageText}</span>
+                              </button>
+                              {openMarkerTooltipId === pantryMarkerTooltipId ? (
+                                <span className="recipes-marker__tooltip">{pantryMarkerTooltipText}</span>
+                              ) : null}
                             </span>
                           ) : null}
                           {matchMeta.matchCount > 0 ? (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setOpenActiveMatchesRecipeId((prev) => (prev === recipe.id ? null : recipe.id))
-                              }
-                              title={
-                                matchTooltip ||
-                                t("recipes.card.matches", { count: matchMeta.matchCount })
-                              }
-                              aria-label={t("recipes.card.matches", { count: matchMeta.matchCount })}
-                              style={{
-                                border: "1px solid color-mix(in srgb, var(--accent-primary) 45%, var(--border-default) 55%)",
-                                background: "color-mix(in srgb, var(--accent-primary) 14%, var(--background-primary) 86%)",
-                                color: "var(--text-primary)",
-                                borderRadius: "999px",
-                                fontSize: "11px",
-                                padding: "1px 7px",
-                                lineHeight: 1.4,
-                                cursor: "pointer",
-                                display: "inline-flex",
-                                alignItems: "center",
-                                gap: "4px",
-                              }}
+                            <span
+                              className={`recipes-marker ${showRecipeMarkersHint ? "recipes-marker--hint" : ""}`.trim()}
+                              onMouseEnter={() => openMarkerTooltipByHover(activeMarkerId)}
+                              onMouseLeave={() => closeMarkerTooltipByHover(activeMarkerId)}
                             >
-                              <span aria-hidden="true">⚡</span>
-                              <span>{matchMeta.matchCount}</span>
-                            </button>
+                              <button
+                                type="button"
+                                className="recipes-marker__button recipes-marker__button--active"
+                                onClick={() => toggleMarkerTooltipByTap(activeMarkerId)}
+                                aria-label={activeMarkerTooltipText}
+                                aria-expanded={openMarkerTooltipId === activeMarkerId}
+                              >
+                                <span aria-hidden="true">⚡</span>
+                                <span>{matchMeta.matchCount}</span>
+                              </button>
+                              {openMarkerTooltipId === activeMarkerId ? (
+                                <span className="recipes-marker__tooltip">{activeMarkerTooltipText}</span>
+                              ) : null}
+                            </span>
                           ) : null}
                           {preferenceMeta.dislikeCount > 0 ? (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setOpenDislikeRecipeId((prev) => (prev === recipe.id ? null : recipe.id))
-                              }
-                              title={dislikeTooltip}
-                              style={{
-                                border: "1px solid color-mix(in srgb, var(--border-default) 82%, #8e8e8e 18%)",
-                                background: "color-mix(in srgb, var(--background-secondary) 88%, #8e8e8e 12%)",
-                                color: "var(--text-secondary)",
-                                borderRadius: "999px",
-                                fontSize: "11px",
-                                padding: "1px 7px",
-                                lineHeight: 1.4,
-                                cursor: "pointer",
-                              }}
+                            <span
+                              className={`recipes-marker ${showRecipeMarkersHint ? "recipes-marker--hint" : ""}`.trim()}
+                              onMouseEnter={() => openMarkerTooltipByHover(dislikeMarkerTooltipId)}
+                              onMouseLeave={() => closeMarkerTooltipByHover(dislikeMarkerTooltipId)}
                             >
-                              {t("recipes.card.dislikeBadge")}
-                            </button>
+                              <button
+                                type="button"
+                                className="recipes-marker__button"
+                                onClick={() => toggleMarkerTooltipByTap(dislikeMarkerTooltipId)}
+                                aria-label={dislikeMarkerTooltipText}
+                                aria-expanded={openMarkerTooltipId === dislikeMarkerTooltipId}
+                              >
+                                <span aria-hidden="true">🚫</span>
+                              </button>
+                              {openMarkerTooltipId === dislikeMarkerTooltipId ? (
+                                <span className="recipes-marker__tooltip">{dislikeMarkerTooltipText}</span>
+                              ) : null}
+                            </span>
                           ) : null}
                         </div>
-                        {openActiveMatchesRecipeId === recipe.id && matchTooltip ? (
-                          <div style={{ marginTop: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
-                            {matchTooltip}
-                          </div>
-                        ) : null}
-                        {openDislikeRecipeId === recipe.id && dislikeTooltip ? (
-                          <div style={{ marginTop: "4px", fontSize: "12px", color: "var(--text-secondary)" }}>
-                            {t("recipes.card.dislikeHint")}
-                          </div>
-                        ) : null}
                       </div>
                       {timesCooked > 0 ? (
                         <div
